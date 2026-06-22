@@ -228,6 +228,7 @@ document.addEventListener('keydown', function(event) {
     // 🌐 ลิงก์ Apps Script
     const WEBHOOK_URL = "";
     const STAGING_MODE = true;
+    window.BIGC_ORDER_STAGING_MODE = STAGING_MODE;
 </script>
 
 <script>
@@ -339,6 +340,7 @@ document.addEventListener('keydown', function(event) {
     window.doc = doc;
     
     // โหลดการเปลี่ยนแปลงเมนูแบบเงียบๆ เบื้องหลัง
+    if (!window.BIGC_ORDER_STAGING_MODE) {
     onSnapshot(doc(db, "system_settings", "master_database"), (docSnap) => {
         if (docSnap.exists()) {
             const dbData = docSnap.data() || {};
@@ -356,6 +358,7 @@ document.addEventListener('keydown', function(event) {
             if(document.getElementById('manage-modal').style.display === 'flex' && window.renderManageList) window.renderManageList();
         }
     });
+    }
 </script>
 
 <script>
