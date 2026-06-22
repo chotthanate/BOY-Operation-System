@@ -81,6 +81,18 @@ function doPost(e) {
       case 'syncCloud':
         result = { status: 'success', message: 'ข้อมูล Database ถูกอ่านจาก BOY_Master โดยตรงแล้ว' };
         break;
+      case 'bigcExpenseLoadData':
+        result = handleBigcExpenseLoadData_(payload.date);
+        break;
+      case 'bigcExpenseAutoSave':
+        result = handleBigcExpenseAutoSave_(payload.date, payload.data);
+        break;
+      case 'bigcExpenseSubmit':
+        result = handleBigcExpenseSubmit_(payload.date, payload.data);
+        break;
+      case 'bigcExpenseUnlockDate':
+        result = handleBigcExpenseUnlockDate_(payload.date);
+        break;
       default:
         result = { status: 'error', message: 'Action ไม่ถูกต้อง: ' + action };
     }
@@ -210,6 +222,10 @@ function propKey_(prefix, date) {
   return prefix + ':' + CONFIG.branchName + ':' + dateKey_(date);
 }
 
+function scopedPropKey_(prefix, scope, date) {
+  return prefix + ':' + scope + ':' + dateKey_(date);
+}
+
 function makeId_(prefix, date, suffix) {
   return [
     prefix,
@@ -234,6 +250,10 @@ function rowDateMatches_(rowDate, targetDate) {
 
 function isTawanaBranch_(value) {
   return normalizeText_(value) === CONFIG.branchName;
+}
+
+function isBranch_(value, branchName) {
+  return normalizeText_(value) === branchName;
 }
 
 function getUnitRows_() {
@@ -655,6 +675,120 @@ function snapshotHasData_(snapshot) {
   if (snapshot.transfer && !isBlank_(snapshot.transfer.v)) return true;
   if (snapshot.other && (!isBlank_(snapshot.other.v) || !isBlank_(snapshot.other.n))) return true;
   return Array.isArray(snapshot.exp) && snapshot.exp.length > 0;
+}
+
+function handleBigcExpenseLoadData_(date) {
+  const scope = 'BigCExpense';
+  const branchName = 'BigC';
+  const key = dateKey_(date);
+  const expenseRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12);
+  const snapshot = buildExpenseSnapshotForBranch_(key, branchName, expenseRows);
+  const hasSheetData = Array.isArray(snapshot.exp) && snapshot.exp.length > 0;
+  const submitted = hasSheetData ||
+    PropertiesService.getScriptProperties().getProperty(scopedPropKey_('submitted', scope, key)) === 'true';
+  const draftText = PropertiesService.getScriptProperties().getProperty(scopedPropKey_('draft', scope, key));
+
+  return {
+    status: 'success',
+    draft: hasSheetData ? JSON.stringify(snapshot) : (draftText || '{}'),
+    submitted: submitted
+  };
+}
+
+function handleBigcExpenseAutoSave_(date, data) {
+  const key = dateKey_(date);
+  PropertiesService.getScriptProperties().setProperty(
+    scopedPropKey_('draft', 'BigCExpense', key),
+    JSON.stringify(data || {})
+  );
+  return { status: 'success' };
+}
+
+function handleBigcExpenseUnlockDate_(date) {
+  const key = dateKey_(date);
+  PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('submitted', 'BigCExpense', key));
+  return { status: 'success' };
+}
+
+function handleBigcExpenseSubmit_(date, data) {
+  const scriptLock = lock_();
+  scriptLock.waitLock(30000);
+  try {
+    const txId = Utilities.getUuid().slice(0, 8);
+    replaceExpenseRowsForBranch_(date, data || {}, {
+      branchName: 'BigC',
+      sourceName: 'BOY Operation System:BigC Expense',
+      idPrefix: 'BIGC-EXP',
+      txId: txId
+    });
+    const key = dateKey_(date);
+    PropertiesService.getScriptProperties().setProperty(scopedPropKey_('submitted', 'BigCExpense', key), 'true');
+    PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCExpense', key));
+    return { status: 'Success' };
+  } finally {
+    scriptLock.releaseLock();
+  }
+}
+
+function buildExpenseSnapshotForBranch_(dateKey, branchName, expenseRows) {
+  const snapshot = { exp: [] };
+  expenseRows.slice(1).forEach(function(row) {
+    if (!rowDateMatches_(row[0], dateKey) || !isBranch_(row[1], branchName)) return;
+    snapshot.exp.push({
+      i: row[2] || '',
+      u: row[3] || '',
+      q: row[4] || '',
+      p: row[6] || '',
+      m: row[7] || '',
+      t: row[8] || '',
+      n: row[9] || ''
+    });
+  });
+  return snapshot;
+}
+
+function replaceExpenseRowsForBranch_(date, data, options) {
+  const branchName = options.branchName;
+  const sourceName = options.sourceName;
+  const idPrefix = options.idPrefix;
+  const txId = options.txId || Utilities.getUuid().slice(0, 8);
+  const sh = sheet_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses);
+  deleteRowsByPredicate_(sh, function(row) {
+    return rowDateMatches_(row[0], date) && isBranch_(row[1], branchName);
+  });
+
+  const dateObj = parseDate_(date);
+  const rows = [];
+  const expenses = Array.isArray(data.exp) ? data.exp : [];
+  const metaByName = getDatabaseRowMap_();
+
+  expenses.forEach(function(item, index) {
+    const name = normalizeText_(item.i);
+    const qty = toNumber_(item.q);
+    const unit = normalizeText_(item.u);
+    const amount = toNumber_(item.p);
+    const note = normalizeText_(item.n);
+    if (!name && qty === 0 && !unit && amount === 0 && !note) return;
+
+    const unitPrice = qty ? amount / qty : '';
+    const meta = metaByName[name] || {};
+    rows.push([
+      dateObj,
+      branchName,
+      name,
+      unit,
+      qty || '',
+      unitPrice === '' ? '' : unitPrice,
+      amount || '',
+      normalizeText_(item.m) || meta.mainType || '',
+      normalizeText_(item.t) || meta.subType || '',
+      note,
+      makeId_(idPrefix, dateObj, String(index + 1) + '-' + txId),
+      sourceName
+    ]);
+  });
+
+  appendRows_(sh, rows);
 }
 
 function handleSaveMultipleLeaves_(date, leaves) {

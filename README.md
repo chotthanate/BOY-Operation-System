@@ -6,7 +6,8 @@ Staging repo for the next BOY business workflow.
 
 - `index.html` - staging menu
 - `tawana.html` - Tawana page connected to the new BOY Operation System Apps Script
-- `bigc.html` - copied from the current BOY-order-v2 page, still in staging mode
+- `bigc.html` - BigC expense-only page, connected to `BOY_Transactions > รายจ่าย`
+- `bigc-order.html` - copied from the current BOY-order-v2 order/receive/return page, still in staging mode
 
 ## Safety
 
@@ -17,7 +18,7 @@ Staging repo for the next BOY business workflow.
 - BOY_Costing
 - BOY_Reports
 
-`bigc.html` still blocks write actions until the BigC backend is connected.
+`bigc-order.html` still blocks write actions until the BigC order/receive/return backend is connected.
 
 ## Apps Script
 

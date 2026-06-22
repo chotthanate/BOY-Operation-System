@@ -11,6 +11,7 @@
       --muted: #5f6f7f;
       --line: #d8e1ea;
       --green: #1b8f5a;
+      --yellow: #f2b705;
       --orange: #d96c1f;
       --paper: #f7fafc;
     }
@@ -40,22 +41,27 @@
     a strong { display: block; margin-bottom: 5px; font-size: 18px; }
     a span { display: block; color: var(--muted); line-height: 1.45; font-size: 14px; }
     .tawana { border-left: 5px solid var(--green); }
-    .bigc { border-left: 5px solid var(--orange); }
+    .bigc { border-left: 5px solid var(--yellow); }
+    .bigc-order { border-left: 5px solid var(--orange); }
     .disabled { opacity: .68; pointer-events: none; }
   </style>
 </head>
 <body>
   <main>
     <h1>BOY Operation System</h1>
-    <p>พื้นที่ทดสอบระบบใหม่ ยังไม่เชื่อมการบันทึกจริงจนกว่า Apps Script ใหม่จะพร้อม</p>
+    <p>ระบบใหม่แบบแยกหน้าตามงาน เพื่อกันข้อมูลรายจ่าย รายรับ และรายการเบิกของปนกัน</p>
     <section class="grid">
       <a class="tawana" href="tawana.html">
-        <strong>Tawana</strong>
-        <span>ต้นแบบหน้าลงรายรับ/รายจ่ายจาก TAWANA_ACC เดิม</span>
+        <strong>ทาวน่า</strong>
+        <span>ลงรายรับ รายจ่าย และงานพนักงานของสาขา 1</span>
       </a>
       <a class="bigc" href="bigc.html">
         <strong>BigC</strong>
-        <span>ต้นแบบหน้าสั่งของ รับของ และคืนของจาก BOY-order-v2 เดิม</span>
+        <span>ลงรายจ่าย BigC เท่านั้น บันทึกเข้า BOY_Transactions > รายจ่าย</span>
+      </a>
+      <a class="bigc-order" href="bigc-order.html">
+        <strong>รายการเบิกของ BigC</strong>
+        <span>แยกไว้สำหรับสั่งของ รับของ ปิดยอดคืนของ และรายรับ BigC</span>
       </a>
       <a class="disabled" href="#">
         <strong>Reports</strong>
