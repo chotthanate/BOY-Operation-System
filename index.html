@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BOY Operation System</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #14213d;
+      --muted: #5f6f7f;
+      --line: #d8e1ea;
+      --green: #1b8f5a;
+      --orange: #d96c1f;
+      --paper: #f7fafc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, "Noto Sans Thai", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+    }
+    main { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; }
+    p { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
+    .grid { display: grid; gap: 12px; }
+    a {
+      display: block;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: white;
+      color: inherit;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(28, 46, 74, 0.08);
+    }
+    a strong { display: block; margin-bottom: 5px; font-size: 18px; }
+    a span { display: block; color: var(--muted); line-height: 1.45; font-size: 14px; }
+    .tawana { border-left: 5px solid var(--green); }
+    .bigc { border-left: 5px solid var(--orange); }
+    .disabled { opacity: .68; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>BOY Operation System</h1>
+    <p>พื้นที่ทดสอบระบบใหม่ ยังไม่เชื่อมการบันทึกจริงจนกว่า Apps Script ใหม่จะพร้อม</p>
+    <section class="grid">
+      <a class="tawana" href="tawana.html">
+        <strong>Tawana</strong>
+        <span>ต้นแบบหน้าลงรายรับ/รายจ่ายจาก TAWANA_ACC เดิม</span>
+      </a>
+      <a class="bigc" href="bigc.html">
+        <strong>BigC</strong>
+        <span>ต้นแบบหน้าสั่งของ รับของ และคืนของจาก BOY-order-v2 เดิม</span>
+      </a>
+      <a class="disabled" href="#">
+        <strong>Reports</strong>
+        <span>รอเชื่อม BOY_Reports</span>
+      </a>
+      <a class="disabled" href="#">
+        <strong>Admin</strong>
+        <span>รอเชื่อม BOY_Master</span>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

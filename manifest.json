@@ -1,0 +1,32 @@
+{
+  "name": "BOY Operation System",
+  "short_name": "BOY Ops",
+  "description": "Staging app for BOY operations",
+  "id": "/BOY-Operation-System/",
+  "start_url": "/BOY-Operation-System/index.html",
+  "scope": "/BOY-Operation-System/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7fafc",
+  "theme_color": "#1b8f5a",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

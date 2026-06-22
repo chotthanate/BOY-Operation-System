@@ -1,0 +1,1278 @@
+﻿<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#2ecc71">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BOY POS">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+  <title>BOY Juice POS & HR</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box !important; }
+    :root { --primary: #2ecc71; --bg: #f2f2f7; --danger: #ff3b30; }
+    html { min-height: 100%; background: var(--bg); }
+    html, body { overflow-x: hidden; max-width: 100%; touch-action: pan-y; }
+    body { font-family: -apple-system, sans-serif; background: var(--bg); margin: 0; min-height: 100vh; padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) calc(120px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); }
+    @supports (min-height: 100dvh) { body { min-height: 100dvh; } }
+    @media (display-mode: standalone), (display-mode: fullscreen) {
+      html, body { width: 100%; min-width: 100%; }
+    }
+    
+    .card { background: white; padding: 15px; border-radius: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 12px; width: 100%; position: relative; }
+    h3 { margin: 0 0 10px 0; font-size: 1rem; color: #333; border-left: 4px solid var(--primary); padding-left: 8px; }
+    
+    input, select { border: 1px solid #ccc; padding: 12px; border-radius: 10px; font-size: 16px; width: 100%; outline: none; background: white; }
+    input:focus, select:focus { border-color: var(--primary); background: #f9fffb; }
+    input::placeholder { color: #d1d1d1; font-weight: normal; }
+    
+    #mainDate { display: block; width: 100% !important; max-width: 100% !important; text-align: center; font-weight: bold; color: var(--primary); border: 1px solid #ccc; padding: 12px; border-radius: 10px; -webkit-appearance: none; appearance: none; background: white; }
+    
+    .settings-btn { position: absolute; top: 15px; right: 15px; font-size: 24px; cursor: pointer; z-index: 100; transition: transform 0.3s; }
+    .settings-btn:active { transform: rotate(90deg); }
+    
+    .locked-date-btn { display: block; width: 100% !important; box-sizing: border-box !important; margin: 0 auto 15px auto !important; text-align: center; font-weight: bold; font-size: 1.1rem; color: white; background: var(--primary); border: none; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(46, 204, 113, 0.2); }
+    .locked-date-btn::-webkit-calendar-picker-indicator { filter: invert(1); }
+    
+    .input-group { display: flex; gap: 10px; margin-bottom: 10px; background: #f9f9f9; padding: 10px; border-radius: 12px; align-items: center; border: 1px solid #eee; }
+    .input-group span { font-size: 1.2rem; min-width: 30px; text-align: center; }
+    .hidden { display: none !important; }
+    
+    .swipe-wrapper { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 8px; scroll-behavior: smooth; }
+    .swipe-wrapper::-webkit-scrollbar { display: none; }
+    .exp-row { min-width: 100%; scroll-snap-align: start; display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.2fr; gap: 5px; }
+    .stock-unit-hint { grid-column: 1 / -1; display: none; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 1px solid #b7e8c9; border-radius: 10px; background: #f0fff5; color: #14733b; font-size: 0.78rem; font-weight: 800; }
+    .stock-unit-hint.active { display: flex; }
+    .stock-unit-hint small { color: #667085; }
+    .delete-action { min-width: 75px; margin-left: 8px; background: var(--danger); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9rem; scroll-snap-align: end; cursor: pointer; }
+    
+    .btn-main { width: 100%; padding: 15px; border-radius: 14px; font-size: 1rem; font-weight: bold; border: none; margin-top: 10px; cursor: pointer; }
+    .btn-submit { background: var(--primary); color: white; position: fixed; bottom: calc(15px + env(safe-area-inset-bottom)); left: max(10px, env(safe-area-inset-left)); width: calc(50% - 15px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 999; }
+    .btn-hr { background: #007aff; color: white; position: fixed; bottom: calc(15px + env(safe-area-inset-bottom)); right: max(10px, env(safe-area-inset-right)); width: calc(50% - 15px); box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 999; }
+    
+    .autocomplete-items { position: absolute; z-index: 10005 !important; background-color: #fff; border: 1px solid #ccc; border-radius: 12px; max-height: 250px; overflow-y: auto; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+    .autocomplete-items div { padding: 14px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 16px; color: #333; }
+    .autocomplete-items div:active { background-color: #e8f5e9; }
+    
+    .full-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+    .overlay-card { background: white; width: 90%; max-height: 90vh; overflow-y: auto; padding: 25px; border-radius: 25px; text-align: center; color: #333; box-sizing: border-box; }
+    
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 15px; margin-bottom: 15px; text-align: left;}
+    th { background: #f2f2f7; padding: 10px 5px; border-bottom: 2px solid #ddd; }
+    td { padding: 10px 5px; border-bottom: 1px solid #eee; }
+    .db-manager { margin-top: 12px; text-align: left; border: 1px solid #e4e7ec; border-radius: 14px; padding: 12px; background: #fbfbfd; }
+    .db-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .db-form .full { grid-column: 1 / -1; }
+    .db-checks { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; font-size: 0.9rem; }
+    .db-checks label { display: inline-flex; gap: 6px; align-items: center; }
+    .db-checks input { width: auto; }
+    .db-list { display: grid; gap: 8px; margin-top: 12px; max-height: 360px; overflow: auto; }
+    .db-row { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; border: 1px solid #e4e7ec; border-radius: 10px; padding: 9px; background: white; }
+    .db-row.inactive { opacity: 0.55; }
+    .db-row .name { font-weight: 800; color: #333; }
+    .db-row .meta { font-size: 0.78rem; color: #667085; margin-top: 3px; }
+    .db-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--primary); }
+    .db-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .mini-btn { border: none; border-radius: 8px; padding: 8px 10px; font-weight: 800; cursor: pointer; }
+    .mini-primary { background: var(--primary); color: white; }
+    .mini-secondary { background: #eef2f7; color: #344054; }
+    .mini-danger { background: #fff1f0; color: var(--danger); }
+    @media (max-width: 540px) { .db-form { grid-template-columns: 1fr; } .db-row { grid-template-columns: auto 1fr; } .db-actions { grid-column: 1 / -1; justify-content: stretch; } .db-actions .mini-btn { flex: 1; } }
+
+    #loadingOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: transparent; z-index: 99999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+    .fruit-loader { font-size: 70px; animation: breathe 1.2s infinite ease-in-out alternate; text-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+    @keyframes breathe { 0% { transform: scale(0.85); opacity: 0.7; } 100% { transform: scale(1.15); opacity: 1; } }
+
+    /* สไตล์สำหรับกล่องบันทึกการลา */
+    .leave-box { border: 1px solid #eee; padding: 12px; border-radius: 12px; margin-bottom: 10px; background: #fafafa; }
+    .radio-group { display: flex; align-items: center; gap: 15px; margin-top: 8px; font-size: 15px; }
+    .radio-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #333; }
+    .radio-group input[type="radio"] { width: 20px; height: 20px; accent-color: var(--primary); }
+    .saved-leave-area { margin-top: 14px; text-align: left; border-top: 1px solid #eee; padding-top: 12px; }
+    .saved-leave-title { font-size: 0.9rem; font-weight: bold; color: #333; margin-bottom: 8px; }
+    .saved-leave-empty { font-size: 0.85rem; color: #888; background: #f8f8f8; padding: 10px; border-radius: 10px; text-align: center; }
+    .saved-leave-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; background: #f8f8f8; border: 1px solid #eee; border-radius: 10px; padding: 10px; margin-bottom: 8px; }
+    .saved-leave-name { font-weight: bold; color: #333; }
+    .saved-leave-meta { font-size: 0.8rem; color: #666; margin-top: 3px; }
+    .btn-cancel-leave { border: none; background: #fff1f0; color: var(--danger); border-radius: 10px; padding: 9px 10px; font-weight: bold; cursor: pointer; }
+
+    body { padding-top: calc(58px + env(safe-area-inset-top)) !important; }
+    .app-switcher-toggle {
+      position: fixed;
+      top: max(10px, env(safe-area-inset-top));
+      left: max(10px, env(safe-area-inset-left));
+      z-index: 10032;
+      width: 42px;
+      height: 42px;
+      border: none;
+      border-radius: 14px;
+      background: #fff;
+      color: #1f2933;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.16);
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .app-switcher-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10030;
+      background: rgba(0,0,0,0.38);
+      backdrop-filter: blur(2px);
+    }
+    .app-switcher-panel {
+      position: fixed;
+      top: calc(62px + env(safe-area-inset-top));
+      left: max(10px, env(safe-area-inset-left));
+      z-index: 10031;
+      width: min(82vw, 280px);
+      background: #fff;
+      border-radius: 18px;
+      padding: 12px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.22);
+    }
+    .app-switcher-title { padding: 8px 10px 10px; color: #667085; font-size: 0.85rem; font-weight: 800; }
+    .app-switcher-panel a {
+      display: block;
+      padding: 13px 12px;
+      border-radius: 12px;
+      color: #1f2933;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .app-switcher-panel a.active { background: #e8f5e9; color: var(--primary); }
+    .app-switcher-panel a + a { margin-top: 4px; }
+    .app-switcher-hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <button class="app-switcher-toggle" type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูระบบ">☰</button>
+  <div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
+  <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
+    <div class="app-switcher-title">เลือกใช้งาน</div>
+    <a href="./index.html" class="active">ทาวน่า</a>
+    <a href="./grill.html">เนื้อย่าง</a>
+    <a href="./bigc.html">BigC</a>
+    <a href="./stock.html">สต็อก</a>
+    <a href="./other-expenses.html">ค่าใช้จ่ายอื่นๆ</a>
+    <a href="./dashboard.html">Dashboard (ยังไม่เสร็จ)</a>
+  </nav>
+
+  <div class="card" style="z-index: 950;">
+    <div class="settings-btn" onclick="toggleSettings()">⚙️</div>
+    <h3>📅 วันที่</h3>
+    <input type="date" id="mainDate" onchange="loadData()">
+  </div>
+
+  <div id="formArea" style="position: relative;">
+    <div class="card">
+      <h3>💰 รายรับ</h3>
+      <div class="input-group">
+        <span>💵</span><input type="number" inputmode="decimal" id="val-cash" placeholder="ระบุยอดเงินสด" onchange="doSync()">
+      </div>
+      <div class="input-group">
+        <span>📱</span><input type="number" inputmode="decimal" id="val-transfer" placeholder="ระบุยอดโอน" onchange="doSync()">
+      </div>
+      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:8px; margin-top:5px;">
+        <input type="text" id="otherIncomeNote" placeholder="รายได้อื่น (ระบุ)" onchange="doSync()">
+        <input type="number" inputmode="decimal" id="otherIncomeVal" placeholder="บาท" onchange="doSync()">
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💸 รายจ่าย</h3>
+      <div id="expenseList"></div>
+      <button class="btn-main" style="background: none; border: 1px dashed #aaa; color: #666;" onclick="addRow()">+ เพิ่มบรรทัดรายจ่าย</button>
+      <button class="btn-main" style="background: #fff; border: 1px solid #ddd; color: var(--danger); margin-top: 5px;" onclick="clearAllData()">🗑️ ล้างข้อมูลทั้งหมด</button>
+    </div>
+
+    <div class="card">
+      <h3>🏖️ บันทึกการลาพนักงาน</h3>
+      <div id="leaveList"></div>
+      <button class="btn-main" style="background: none; border: 1px dashed #007aff; color: #007aff;" onclick="addLeaveRow()">+ เพิ่มบรรทัดการลา</button>
+      <button class="btn-main" style="background: #e8f5e9; color: var(--primary); border: 1px solid var(--primary); margin-top: 10px; padding: 15px;" onclick="saveMultipleLeaves()">
+        📌 บันทึกข้อมูลการลา
+      </button>
+      <div class="saved-leave-area">
+        <div class="saved-leave-title">รายการลาที่บันทึกแล้วของวันที่เลือก</div>
+        <div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-main btn-submit" id="btnSubmit" onclick="submitToSheet()">🚀 ส่งยอดสรุปชีท</button>
+  <button class="btn-main btn-hr" onclick="openSalaryDashboard()">📊 สรุปเงินเดือน</button>
+
+  <div id="settingsOverlay" class="full-overlay hidden">
+    <div class="overlay-card">
+      <h2 style="margin-top:0;">⚙️ ตั้งค่าระบบ</h2>
+      <h3 style="text-align: left; margin-top: 20px;">👥 จัดการรายชื่อพนักงาน</h3>
+      <textarea id="staffListInput" style="width:100%; height:80px; padding:10px; border-radius:10px; border:1px solid #ccc; font-family:inherit;" placeholder="ปู, นัน, สั้น, หยก..."></textarea>
+      <button onclick="saveStaffList()" style="width:100%; padding:10px; border-radius:10px; border:none; background:#007aff; color:white; font-weight:bold; margin-bottom:20px; margin-top: 5px;">
+        💾 บันทึกรายชื่อพนักงาน
+      </button>
+
+      <h3 style="text-align: left;">📦 จัดการรายการสินค้า</h3>
+      <button onclick="pushSync()" style="width:100%; padding:15px; border-radius:15px; border:1px solid var(--primary); background:#ebfaf0; color:var(--primary); font-weight:bold; margin-bottom:12px;">
+        🔄 อัปเดตรายการสินค้า
+      </button>
+      <button onclick="toggleDatabaseManager()" style="width:100%; padding:15px; border-radius:15px; border:1px solid #007aff; background:#eef6ff; color:#007aff; font-weight:bold; margin-bottom:12px;">
+        🧾 แก้ Database / ซิงค์สต็อก
+      </button>
+
+      <div id="databaseManager" class="db-manager hidden">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+          <strong>Database รายการสินค้า</strong>
+          <button class="mini-btn mini-secondary" type="button" onclick="clearDatabaseForm()">เพิ่มรายการใหม่</button>
+        </div>
+        <div class="db-form">
+          <input id="dbRowNumber" type="hidden">
+          <input id="dbName" class="full" type="text" placeholder="ชื่อรายการ">
+          <input id="dbMainType" type="text" placeholder="ประเภทหลัก">
+          <input id="dbSubType" type="text" placeholder="ประเภทย่อย">
+          <input id="dbBaseUnit" type="text" placeholder="หน่วยฐาน เช่น ขวด">
+          <input id="dbPrimaryUnit" type="text" placeholder="หน่วยหลัก เช่น ลัง">
+          <input id="dbConversionRate" type="number" min="1" step="1" inputmode="numeric" placeholder="1 หน่วยหลัก = กี่หน่วยฐาน">
+          <input id="dbUnitDetail" class="full" type="text" placeholder="รายละเอียดหน่วย เช่น 1 แถว = 50 ใบ">
+          <div class="db-checks full">
+            <label><input id="dbUseStock" type="checkbox"> ใช้กับสต็อก</label>
+            <label><input id="dbActive" type="checkbox" checked> เปิดใช้งาน</label>
+          </div>
+          <button class="btn-main mini-primary full" type="button" onclick="saveDatabaseItem()">บันทึก Database</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr auto; gap:8px; margin-top:12px;">
+          <input id="dbSearch" type="search" placeholder="ค้นหารายการ / ประเภท / หน่วย" oninput="renderDatabaseRows()">
+          <button class="mini-btn mini-primary" type="button" onclick="syncSelectedDatabaseToStock()">ซิงค์ที่เลือก</button>
+        </div>
+        <div id="dbStatus" style="font-size:0.82rem; color:#667085; margin-top:8px;">ยังไม่ได้โหลด Database</div>
+        <div id="databaseRows" class="db-list"></div>
+      </div>
+
+      <button onclick="toggleSettings()" style="width:100%; padding:12px; border:none; background:#eee; border-radius:12px; font-weight:bold; color:#666; margin-top: 10px;">
+        ปิดหน้าต่าง
+      </button>
+    </div>
+  </div>
+
+  <div id="salaryOverlay" class="full-overlay hidden">
+    <div class="overlay-card" style="padding: 15px;">
+      <h2 style="margin: 0; color: #007aff;">📊 สรุปเงินเดือน</h2>
+      <p id="salaryMonthText" style="color: #666; margin: 5px 0 10px 0; font-size: 0.9rem;"></p>
+      <div style="display:grid; grid-template-columns: 1fr 95px; gap: 8px; margin-bottom: 10px;">
+        <select id="salaryMonthSelect" onchange="loadSalaryDashboard()"></select>
+        <input type="number" id="salaryYearInput" onchange="loadSalaryDashboard()" style="text-align:center;" min="2024" max="2100">
+      </div>
+      
+      <div id="salaryTableArea" style="overflow-x: auto;"></div>
+      
+      <div style="background: #f8f8f8; padding: 10px; border-radius: 10px; font-size: 0.8rem; text-align: left; color: #666; margin-bottom: 15px;">
+        * ค่าแรง 400/วัน | หักลา 40/ชม. <br>
+        * โควต้าพิเศษ 2 วัน (800 บ.) หักออกทันทีที่มีการลา
+      </div>
+
+      <button class="btn-main" style="background: var(--primary); color: white; margin-top: 0;" onclick="postSalariesToExpenses()">
+        ⬇️ ดึงยอดลงรายจ่ายวันสิ้นเดือน
+      </button>
+      <button class="btn-main" style="background: #eee; color: #666;" onclick="document.getElementById('salaryOverlay').classList.add('hidden')">
+        ปิดหน้าต่าง
+      </button>
+    </div>
+  </div>
+
+  <div id="lockedOverlay" class="full-overlay hidden">
+    <div class="overlay-card">
+      <div style="font-size: 60px; margin-bottom: 5px;">✅</div>
+      <h2 style="margin: 0 0 5px 0; color: var(--primary);">ส่งข้อมูลแล้ว</h2>
+      <p style="color: #666; margin: 0 0 20px 0; font-size: 0.95rem;">เลือกวันที่เพื่อทำรายการอื่น</p>
+      <input type="date" id="lockedDate" class="locked-date-btn" onchange="syncDateFromLock()">
+      <button onclick="unlockEditMode()" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; background: #f8f8f8; color: #666; font-size: 1rem; font-weight: bold; cursor: pointer;">
+        ✏️ แก้ไขข้อมูลของวันนี้
+      </button>
+    </div>
+  </div>
+
+  <div id="successOverlay" class="full-overlay hidden">
+    <div class="overlay-card">
+      <div style="font-size: 60px; margin-bottom: 10px;">✅</div>
+      <h2 style="margin: 0; color: var(--primary);">ส่งข้อมูลสำเร็จ!</h2>
+      <p style="color: #666; margin: 15px 0 25px 0;">ระบบอัปเดตยอดใน Google Sheets <br>ของวันที่ <strong id="displayDateText" style="color: #333;"></strong> เรียบร้อย</p>
+      <button onclick="goToNextDay()" style="width: 100%; padding: 15px; border-radius: 12px; border: none; background: var(--primary); color: white; font-weight: bold; font-size: 1.1rem; margin-bottom: 10px;">
+        📅 ทำรายการวันถัดไป
+      </button>
+      <button onclick="unlockScreen()" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid #ddd; background: #f8f8f8; color: #666; font-size: 0.9rem; font-weight: bold;">
+        ↩️ กลับไปแก้ไขข้อมูล
+      </button>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="hidden">
+    <div class="fruit-loader" id="fruitIcon">🍉</div>
+  </div>
+
+  <script>
+    // Staging copy: keep backend disabled until BOY_Transactions/BOY_Master Apps Script is ready.
+    const WEB_APP_URL = "";
+    const STAGING_MODE = true;
+
+    var timer;
+    var appStarted = false;
+    var itemDict = {}; 
+    var itemMetaDict = {};
+    var databaseRows = [];
+    var expenseRowCounter = 0;
+    var isLoadingData = false;
+    var loadDataSeq = 0;
+    var staffList = ["ปู", "นัน", "สั้น", "หยก", "หน่อย", "ปา", "โดนัท"]; 
+    var currentSalaryData = [];
+    var currentSalaryPeriod = null;
+    var leaveRowCounter = 0; // ตัวนับบรรทัดของกล่องการลา
+
+    function closeAppSwitcher() {
+      document.getElementById('appSwitcherBackdrop').classList.add('app-switcher-hidden');
+      document.getElementById('appSwitcherPanel').classList.add('app-switcher-hidden');
+    }
+
+    function toggleAppSwitcher() {
+      document.getElementById('appSwitcherBackdrop').classList.toggle('app-switcher-hidden');
+      document.getElementById('appSwitcherPanel').classList.toggle('app-switcher-hidden');
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape') closeAppSwitcher();
+    });
+
+    // --- ระบบเชื่อมต่อ API ---
+    async function apiCall(action, data = {}) {
+      if (STAGING_MODE || !WEB_APP_URL) {
+        const writeActions = new Set([
+          'submit', 'unlockDate', 'autoSave', 'saveMultipleLeaves',
+          'cancelLeaveRecord', 'syncCloud', 'database_saveItem',
+          'database_setActive', 'database_syncToStock'
+        ]);
+        if (writeActions.has(action)) {
+          throw new Error('หน้า staging ยังไม่ได้ต่อ Apps Script ใหม่ จึงไม่บันทึกข้อมูล');
+        }
+        if (action === 'loadData') return { draft: '{}', submitted: false };
+        if (action === 'getLeavesByDate') return { status: 'success', leaves: [] };
+        if (action === 'calculateSalary') return [];
+        if (action === 'database_getRows') return { status: 'success', rows: [] };
+        if (action === 'shared_loadDB') return { status: 'success', database: { categories: {}, itemMeta: {} } };
+        if (action === 'pullItems') return {};
+        return { status: 'success' };
+      }
+      try {
+        const response = await fetch(WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: action, ...data })
+        });
+        
+        const textResponse = await response.text(); 
+        
+        try {
+          return JSON.parse(textResponse);
+        } catch (parseErr) {
+          // 🚨 ถ้าแปลงเป็น JSON ไม่ได้ ให้โชว์หน้าเว็บหรือข้อความที่ Google ส่งมาตรงๆ เลย!
+          alert("🚨 Google เตะสกัด! ข้อความที่ตอบกลับมาคือ:\n\n" + textResponse.substring(0, 200));
+          throw new Error("หลังบ้านตอบกลับผิดปกติ");
+        }
+      } catch (err) { 
+        console.error("API Error:", err); 
+        throw err; 
+      }
+    }
+
+    function toggleSettings() { document.getElementById('settingsOverlay').classList.toggle('hidden'); }
+
+    function setDbStatus(text) {
+      var el = document.getElementById('dbStatus');
+      if (el) el.textContent = text;
+    }
+
+    async function toggleDatabaseManager() {
+      var manager = document.getElementById('databaseManager');
+      manager.classList.toggle('hidden');
+      if (!manager.classList.contains('hidden') && databaseRows.length === 0) {
+        await loadDatabaseRows();
+      }
+    }
+
+    function clearDatabaseForm() {
+      document.getElementById('dbRowNumber').value = '';
+      document.getElementById('dbName').value = '';
+      document.getElementById('dbMainType').value = '';
+      document.getElementById('dbSubType').value = '';
+      document.getElementById('dbBaseUnit').value = '';
+      document.getElementById('dbPrimaryUnit').value = '';
+      document.getElementById('dbConversionRate').value = '';
+      document.getElementById('dbUnitDetail').value = '';
+      document.getElementById('dbUseStock').checked = false;
+      document.getElementById('dbActive').checked = true;
+      document.getElementById('dbName').focus();
+    }
+
+    function fillDatabaseForm(rowNumber) {
+      var row = databaseRows.find(function(item) { return String(item.rowNumber) === String(rowNumber); });
+      if (!row) return;
+      document.getElementById('dbRowNumber').value = row.rowNumber;
+      document.getElementById('dbName').value = row.name || '';
+      document.getElementById('dbMainType').value = row.mainType || '';
+      document.getElementById('dbSubType').value = row.subType || '';
+      document.getElementById('dbBaseUnit').value = row.baseUnit || row.unit || '';
+      document.getElementById('dbPrimaryUnit').value = row.primaryUnit || '';
+      document.getElementById('dbConversionRate').value = row.conversionRate || '';
+      document.getElementById('dbUnitDetail').value = row.unitDetail || '';
+      document.getElementById('dbUseStock').checked = !!row.useStock;
+      document.getElementById('dbActive').checked = row.active !== false;
+      document.getElementById('dbName').focus();
+    }
+
+    async function loadDatabaseRows() {
+      setDbStatus('กำลังโหลด Database...');
+      try {
+        var result = await apiCall('database_getRows');
+        if (result.status === 'error') throw new Error(result.message || 'โหลด Database ไม่สำเร็จ');
+        databaseRows = result.rows || [];
+        renderDatabaseRows();
+        setDbStatus('โหลดแล้ว ' + databaseRows.length + ' รายการ');
+      } catch (e) {
+        setDbStatus('โหลด Database ไม่สำเร็จ: ' + e.message);
+      }
+    }
+
+    function renderDatabaseRows() {
+      var list = document.getElementById('databaseRows');
+      if (!list) return;
+      var query = (document.getElementById('dbSearch').value || '').trim().toLowerCase();
+      var rows = databaseRows.filter(function(row) {
+        if (!query) return true;
+        return [row.name, row.mainType, row.subType, row.baseUnit, row.primaryUnit, row.unitDetail].join(' ').toLowerCase().indexOf(query) > -1;
+      });
+      if (rows.length === 0) {
+        list.innerHTML = '<div class="saved-leave-empty">ไม่พบรายการ</div>';
+        return;
+      }
+      list.innerHTML = rows.map(function(row) {
+        var unitText = row.primaryUnit
+          ? (row.primaryUnit + ' = ' + (row.conversionRate || 1) + ' ' + (row.baseUnit || row.unit || ''))
+          : (row.baseUnit || row.unit || '-');
+        var detailText = row.unitDetail ? (' · ' + row.unitDetail) : '';
+        return `
+          <div class="db-row ${row.active === false ? 'inactive' : ''}">
+            <input type="checkbox" class="db-sync-check" value="${escapeHtml(row.rowNumber)}" ${row.useStock && row.active !== false ? '' : 'disabled'}>
+            <div>
+              <div class="name">${escapeHtml(row.name)}</div>
+              <div class="meta">${escapeHtml(row.mainType || '-')} / ${escapeHtml(row.subType || '-')} · ${escapeHtml(unitText)}${escapeHtml(detailText)} · ${row.useStock ? 'ใช้กับสต็อก' : 'ไม่เข้าสต็อก'}${row.active === false ? ' · ปิดใช้งาน' : ''}</div>
+            </div>
+            <div class="db-actions">
+              <button class="mini-btn mini-secondary" type="button" onclick="fillDatabaseForm('${escapeHtml(row.rowNumber)}')">แก้</button>
+              <button class="mini-btn mini-danger" type="button" onclick="setDatabaseActive('${escapeHtml(row.rowNumber)}', ${row.active === false ? 'true' : 'false'})">${row.active === false ? 'เปิด' : 'ปิด'}</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function saveDatabaseItem() {
+      var item = {
+        rowNumber: document.getElementById('dbRowNumber').value,
+        name: document.getElementById('dbName').value.trim(),
+        mainType: document.getElementById('dbMainType').value.trim(),
+        subType: document.getElementById('dbSubType').value.trim(),
+        baseUnit: document.getElementById('dbBaseUnit').value.trim(),
+        primaryUnit: document.getElementById('dbPrimaryUnit').value.trim(),
+        conversionRate: document.getElementById('dbConversionRate').value || 1,
+        unitDetail: document.getElementById('dbUnitDetail').value.trim(),
+        useStock: document.getElementById('dbUseStock').checked,
+        active: document.getElementById('dbActive').checked
+      };
+      if (!item.name) return alert('กรุณากรอกชื่อรายการ');
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        var result = await apiCall('database_saveItem', { item: item });
+        if (result.status === 'error') throw new Error(result.message || 'บันทึก Database ไม่สำเร็จ');
+        databaseRows = result.rows || [];
+        renderDatabaseRows();
+        clearDatabaseForm();
+        await pullItems();
+        setDbStatus('บันทึก Database แล้ว');
+      } catch (e) {
+        alert('บันทึก Database ไม่สำเร็จ: ' + e.message);
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    async function setDatabaseActive(rowNumber, active) {
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        var result = await apiCall('database_setActive', { rowNumber: rowNumber, active: active });
+        if (result.status === 'error') throw new Error(result.message || 'อัปเดตสถานะไม่สำเร็จ');
+        databaseRows = result.rows || [];
+        renderDatabaseRows();
+        await pullItems();
+        setDbStatus('อัปเดตสถานะแล้ว');
+      } catch (e) {
+        alert('อัปเดตสถานะไม่สำเร็จ: ' + e.message);
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    async function syncSelectedDatabaseToStock() {
+      var selected = Array.from(document.querySelectorAll('.db-sync-check:checked')).map(function(input) { return input.value; });
+      if (selected.length === 0) return alert('กรุณาเลือกรายการที่จะซิงค์เข้า StockMaster');
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        var result = await apiCall('database_syncToStock', { rowNumbers: selected });
+        if (result.status === 'error') throw new Error(result.message || 'ซิงค์ StockMaster ไม่สำเร็จ');
+        setDbStatus('ซิงค์เข้า StockMaster แล้ว ' + (result.synced || 0) + ' รายการ');
+        alert('ซิงค์เข้า StockMaster แล้ว ' + (result.synced || 0) + ' รายการ');
+      } catch (e) {
+        alert('ซิงค์ StockMaster ไม่สำเร็จ: ' + e.message);
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    // ==========================================
+    // 🏖️ ระบบจัดการการลา (ใหม่)
+    // ==========================================
+    function saveStaffList() {
+      const val = document.getElementById('staffListInput').value;
+      staffList = val.split(',').map(s => s.trim()).filter(s => s !== '');
+      localStorage.setItem('BOY_STAFF', JSON.stringify(staffList));
+      alert("✅ บันทึกรายชื่อพนักงานเรียบร้อย");
+    }
+
+    function clearLeaveList() {
+      document.getElementById('leaveList').innerHTML = '';
+      addLeaveRow(); // แปะบรรทัดแรกไว้ให้เลย
+    }
+
+    function addLeaveRow() {
+      leaveRowCounter++;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'leave-box';
+      wrapper.innerHTML = `
+        <div style="display: flex; gap: 8px; align-items: center; position: relative;">
+          <input type="text" class="hr-name" placeholder="ชื่อพนักงาน" oninput="showStaffSuggestions(this)" autocomplete="off" style="flex: 1;">
+          <button onclick="this.parentElement.parentElement.remove()" style="background: var(--danger); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold;">ลบ</button>
+        </div>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="leaveType_${leaveRowCounter}" value="Full Day" checked onchange="toggleLeaveHours(this)">
+            ลาเต็มวัน
+          </label>
+          <label>
+            <input type="radio" name="leaveType_${leaveRowCounter}" value="Hourly" onchange="toggleLeaveHours(this)">
+            รายชั่วโมง
+          </label>
+          <input type="number" class="hr-hours hidden" placeholder="ชม." style="width: 70px; padding: 8px; margin-left: auto;">
+        </div>
+      `;
+      document.getElementById('leaveList').appendChild(wrapper);
+    }
+
+    function toggleLeaveHours(radioBtn) {
+      const row = radioBtn.closest('.leave-box');
+      const hrInput = row.querySelector('.hr-hours');
+      if(radioBtn.value === 'Hourly') {
+        hrInput.classList.remove('hidden');
+        setTimeout(() => hrInput.focus(), 50);
+      } else {
+        hrInput.classList.add('hidden');
+        hrInput.value = '';
+      }
+    }
+
+    function showStaffSuggestions(inp) {
+      var val = inp.value.trim();
+      closeAllLists();
+      if (!val) return;
+      var a = document.createElement("DIV");
+      a.setAttribute("class", "autocomplete-items");
+      var rect = inp.getBoundingClientRect();
+      a.style.top = (rect.bottom + window.scrollY) + "px";
+      a.style.left = (rect.left + window.scrollX) + "px";
+      a.style.width = rect.width + "px";
+      document.body.appendChild(a); 
+      
+      var count = 0;
+      for (var i = 0; i < staffList.length; i++) {
+        var staffName = staffList[i];
+        if (staffName.toLowerCase().indexOf(val.toLowerCase()) > -1) {
+          var b = document.createElement("DIV");
+          var matchIdx = staffName.toLowerCase().indexOf(val.toLowerCase());
+          b.innerHTML = staffName.substring(0, matchIdx) + "<strong><span style='color: #007aff;'>" + staffName.substring(matchIdx, matchIdx + val.length) + "</span></strong>" + staffName.substring(matchIdx + val.length);
+          b.innerHTML += "<input type='hidden' value='" + staffName + "'>";
+          b.addEventListener("click", function(e) {
+            inp.value = this.getElementsByTagName("input")[0].value;
+            closeAllLists();
+          });
+          a.appendChild(b);
+          if(++count > 5) break; 
+        }
+      }
+    }
+
+    async function saveMultipleLeaves() {
+      var date = document.getElementById('mainDate').value;
+      if (!date) return alert("กรุณาเลือกวันที่ด้านบนก่อนครับ");
+
+      var rows = document.getElementById('leaveList').children;
+      var leavesToSave = [];
+
+      for(let i=0; i<rows.length; i++) {
+        let name = rows[i].querySelector('.hr-name').value.trim();
+        let type = rows[i].querySelector('input[type="radio"]:checked').value;
+        let hours = rows[i].querySelector('.hr-hours').value || 0;
+        
+        if (name) {
+          if (type === 'Hourly' && hours <= 0) {
+            return alert("ระบุจำนวนชั่วโมงที่ลาให้ครบถ้วนด้วยครับ (สำหรับคนที่เลือกลารายชั่วโมง)");
+          }
+          leavesToSave.push({ name: name, type: type, hours: hours });
+        }
+      }
+
+      if (leavesToSave.length === 0) return alert("ไม่มีข้อมูลให้บันทึก (กรุณาใส่ชื่อพนักงานอย่างน้อย 1 คน)");
+
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        await apiCall('saveMultipleLeaves', { date: date, leaves: leavesToSave });
+        alert(`✅ บันทึกการลา ${leavesToSave.length} รายการ เรียบร้อยแล้ว`);
+        clearLeaveList(); // บันทึกเสร็จให้ล้างช่องทิ้ง ป้องกันส่งซ้ำ
+        await refreshSavedLeaves();
+      } catch (e) {
+        alert("❌ บันทึกไม่สำเร็จ สาเหตุ: " + e.message);
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    function escapeHtml(value) {
+      return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function getLeaveTypeText(type, hours) {
+      if (type === 'Hourly') return `รายชั่วโมง ${hours || 0} ชม.`;
+      return 'ลาเต็มวัน';
+    }
+
+    function renderSavedLeaves(leaves) {
+      const list = document.getElementById('savedLeaveList');
+      if (!list) return;
+
+      if (!leaves || leaves.length === 0) {
+        list.className = 'saved-leave-empty';
+        list.innerHTML = 'ยังไม่มีรายการลาในวันที่เลือก';
+        return;
+      }
+
+      list.className = '';
+      list.innerHTML = leaves.map(function(leave) {
+        const typeText = getLeaveTypeText(leave.type, leave.hours);
+        return `
+          <div class="saved-leave-item">
+            <div>
+              <div class="saved-leave-name">${escapeHtml(leave.name)}</div>
+              <div class="saved-leave-meta">${escapeHtml(typeText)}</div>
+            </div>
+            <button class="btn-cancel-leave" data-row="${escapeHtml(leave.rowNumber)}" data-name="${escapeHtml(leave.name)}">ยกเลิก</button>
+          </div>
+        `;
+      }).join('');
+
+      list.querySelectorAll('.btn-cancel-leave').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          cancelSavedLeave(this.dataset.row, this.dataset.name);
+        });
+      });
+    }
+
+    async function refreshSavedLeaves(targetDate) {
+      const date = targetDate || document.getElementById('mainDate').value;
+      const list = document.getElementById('savedLeaveList');
+      if (!list) return;
+      if (!date) {
+        renderSavedLeaves([]);
+        return;
+      }
+
+      list.className = 'saved-leave-empty';
+      list.innerHTML = 'กำลังโหลดรายการลา...';
+
+      try {
+        const res = await apiCall('getLeavesByDate', { date: date });
+        if (res.status === 'error') throw new Error(res.message || 'โหลดรายการลาไม่สำเร็จ');
+        if (targetDate && document.getElementById('mainDate').value !== targetDate) return;
+        renderSavedLeaves(res.leaves || []);
+      } catch (e) {
+        list.className = 'saved-leave-empty';
+        list.innerHTML = 'โหลดรายการลาที่บันทึกแล้วไม่สำเร็จ';
+        console.error('Load leaves error:', e);
+      }
+    }
+
+    async function cancelSavedLeave(rowNumber, staffName) {
+      const date = document.getElementById('mainDate').value;
+      if (!date) return alert("กรุณาเลือกวันที่ก่อนครับ");
+      if (!confirm(`ยืนยันยกเลิกการลาของ ${staffName} ในวันที่เลือกหรือไม่?`)) return;
+
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        const res = await apiCall('cancelLeaveRecord', { rowNumber: rowNumber, date: date });
+        if (res.status === 'error') throw new Error(res.message || 'ยกเลิกไม่สำเร็จ');
+        await refreshSavedLeaves();
+        alert("✅ ยกเลิกรายการลาเรียบร้อยแล้ว");
+      } catch (e) {
+        alert("❌ ยกเลิกไม่สำเร็จ สาเหตุ: " + e.message);
+      }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    // ==========================================
+    // 📊 ระบบ Dashboard เงินเดือน
+    // ==========================================
+    const salaryMonthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+    function setupSalarySelectors(month, year) {
+      const monthSelect = document.getElementById('salaryMonthSelect');
+      const yearInput = document.getElementById('salaryYearInput');
+      if (monthSelect && monthSelect.options.length === 0) {
+        salaryMonthNames.forEach((name, index) => {
+          const opt = document.createElement('option');
+          opt.value = String(index + 1);
+          opt.textContent = name;
+          monthSelect.appendChild(opt);
+        });
+      }
+      if (monthSelect) monthSelect.value = String(month);
+      if (yearInput) yearInput.value = year;
+    }
+
+    function getSelectedSalaryPeriod() {
+      const month = parseInt(document.getElementById('salaryMonthSelect').value, 10);
+      const year = parseInt(document.getElementById('salaryYearInput').value, 10);
+      if (!month || month < 1 || month > 12 || !year) return null;
+      return { month, year };
+    }
+
+    function formatDateValue(year, month, day) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+
+    function getSalaryMonthEndDate(period) {
+      const lastDay = new Date(period.year, period.month, 0).getDate();
+      return formatDateValue(period.year, period.month, lastDay);
+    }
+
+    async function loadSalaryDashboard() {
+      const period = getSelectedSalaryPeriod();
+      if (!period) return alert("เลือกเดือนและปีให้ถูกต้องก่อนครับ");
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+
+      try {
+        var data = await apiCall('calculateSalary', { month: period.month, year: period.year, staffList: staffList });
+        currentSalaryData = data;
+        currentSalaryPeriod = period;
+        
+        var html = `<table><tr><th>ชื่อ</th><th>วันทำงาน</th><th>ลาเต็มวัน</th><th>ลา(ชม.)</th><th>เงินพิเศษ</th><th>รวมรับ</th></tr>`;
+        data.forEach(s => {
+          html += `<tr>
+            <td><strong>${s.name}</strong></td>
+            <td>${s.workedDays}</td>
+            <td style="color:var(--danger)">${s.fullLeaves || 0}</td>
+            <td style="color:var(--danger)">${s.leaveHours}</td>
+            <td>${s.bonusPay.toLocaleString()}</td>
+            <td style="color:var(--primary); font-weight:bold;">${s.totalNet.toLocaleString()}</td>
+          </tr>`;
+        });
+        html += `</table>`;
+        
+        document.getElementById('salaryMonthText').innerText = `ข้อมูลเดือน ${salaryMonthNames[period.month - 1]} ${period.year} | ลงรายจ่ายวันที่ ${getSalaryMonthEndDate(period)}`;
+        document.getElementById('salaryTableArea').innerHTML = html;
+      } catch (e) { alert("❌ ดึงข้อมูลไม่สำเร็จ สาเหตุ: " + e.message); }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    async function openSalaryDashboard() {
+      var dateVal = document.getElementById('mainDate').value;
+      var now = dateVal ? new Date(dateVal) : new Date();
+      var month = now.getMonth() + 1;
+      var year = now.getFullYear();
+      setupSalarySelectors(month, year);
+      document.getElementById('salaryOverlay').classList.remove('hidden');
+      await loadSalaryDashboard();
+    }
+
+    function isSalaryExpenseRowName(name) {
+      var value = String(name || '').trim();
+      return value.indexOf('เงินเดือน ') === 0 || value.indexOf('เงินพิเศษ ') === 0 || value.indexOf('โบนัส ') === 0;
+    }
+
+    function removeExistingSalaryExpenseRows() {
+      var wrappers = Array.from(document.querySelectorAll('.swipe-wrapper'));
+      wrappers.forEach(wrapper => {
+        var itemInput = wrapper.querySelector('.exp-row .i');
+        if (itemInput && isSalaryExpenseRowName(itemInput.value)) wrapper.remove();
+      });
+    }
+
+    async function postSalariesToExpenses() {
+      const period = currentSalaryPeriod || getSelectedSalaryPeriod();
+      if (!period) return alert("เลือกเดือนและปีให้ถูกต้องก่อนครับ");
+      const salaryDate = getSalaryMonthEndDate(period);
+      if (!confirm(`ระบบจะดึงยอดเงินเดือนเดือน ${salaryMonthNames[period.month - 1]} ${period.year}\nไปใส่ในรายจ่ายวันที่ ${salaryDate}\nยืนยันหรือไม่?`)) return;
+      
+      document.getElementById('salaryOverlay').classList.add('hidden');
+      document.getElementById('mainDate').value = salaryDate;
+      await loadData();
+      if (!document.getElementById('lockedOverlay').classList.contains('hidden')) {
+        return alert("วันสิ้นเดือนนี้ถูกล็อกไว้แล้ว ถ้าต้องการแก้รายจ่ายให้กดปลดล็อกวันที่ก่อนครับ");
+      }
+
+      removeExistingSalaryExpenseRows();
+
+      currentSalaryData.forEach(s => {
+        if(s.basePay > 0) {
+           let netBase = s.basePay - s.hourDeduction;
+           addRow(`เงินเดือน ${s.name}`, 1, "คน", netBase);
+        }
+        if (s.bonusPay > 0) {
+           addRow(`เงินพิเศษ ${s.name}`, 1, "คน", s.bonusPay);
+        }
+      });
+      
+      doSync(); 
+      alert(`✅ ดึงยอดเงินเดือนลงรายจ่ายวันที่ ${salaryDate} เรียบร้อยแล้ว\nตรวจสอบและกดปุ่ม '🚀 ส่งยอดสรุปชีท' ด้านล่างได้เลยครับ`);
+    }
+
+    // ==========================================
+    // 🛒 ระบบ POS เดิม
+    // ==========================================
+    async function pushSync() {
+      if(!confirm("ต้องการซิงค์ข้อมูลใหม่จากไฟล์ Database ใช่ไหม?")) return;
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      try {
+        const res = await apiCall('syncCloud');
+        if (res.status && res.status.indexOf("Error") > -1) { alert(res.status); } 
+        else { alert("✅ อัปเดตข้อมูลเข้า Cloud สำเร็จ!"); await pullItems(); }
+      } catch (e) { alert("❌ ซิงค์ไม่สำเร็จ สาเหตุ: " + e.message); }
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    function parseSharedItemName(displayName) {
+      var text = String(displayName || '').trim();
+      var match = text.match(/^(.*)\s+\(([^()]*)\)$/);
+      if (!match) return { name: text, unit: '' };
+      return { name: match[1].trim(), unit: match[2].trim() };
+    }
+
+    function applyItemDict(formattedDict, metaDict) {
+      if (!formattedDict || Object.keys(formattedDict).length === 0) return false;
+      localStorage.setItem('BOY_JUICE_ITEMS', JSON.stringify(formattedDict));
+      itemDict = formattedDict;
+      if (metaDict !== undefined) {
+        itemMetaDict = metaDict || {};
+        localStorage.setItem('BOY_JUICE_ITEM_META', JSON.stringify(itemMetaDict));
+      }
+      return true;
+    }
+
+    function uniqueUnitOptions(options) {
+      var seen = {};
+      var result = [];
+      (options || []).forEach(function(unit) {
+        var clean = String(unit || '').trim();
+        if (clean && !seen[clean]) {
+          seen[clean] = true;
+          result.push(clean);
+        }
+      });
+      return result;
+    }
+
+    function setItemMeta(metaDict, name, unit, metaSource, subType) {
+      var cleanName = String(name || '').trim();
+      var cleanUnit = String(unit || '').trim();
+      if (!cleanName) return;
+      var source = (typeof metaSource === 'string' || arguments.length > 4)
+        ? { mainType: metaSource, subType: subType }
+        : (metaSource || {});
+      var baseUnit = String(source.baseUnit || source.unit || cleanUnit || '').trim();
+      var primaryUnit = String(source.primaryUnit || '').trim();
+      var conversionRate = Number(source.conversionRate || source.conversion || 1);
+      if (!isFinite(conversionRate) || conversionRate <= 0) conversionRate = 1;
+      var unitOptions = uniqueUnitOptions(source.unitOptions || [baseUnit, primaryUnit, cleanUnit]);
+      var meta = {
+        mainType: String(source.mainType || '').trim(),
+        subType: String(source.subType || '').trim(),
+        unit: baseUnit || cleanUnit,
+        baseUnit: baseUnit || cleanUnit,
+        primaryUnit: primaryUnit,
+        conversionRate: conversionRate,
+        unitDetail: String(source.unitDetail || '').trim(),
+        unitOptions: unitOptions,
+        useStock: source.useStock === true || String(source.useStock || '').toUpperCase() === 'TRUE',
+        active: source.active !== false && String(source.active || 'TRUE').toUpperCase() !== 'FALSE'
+      };
+      metaDict[cleanName] = meta;
+      unitOptions.forEach(function(option) {
+        metaDict[cleanName + '||' + option] = meta;
+      });
+    }
+
+    function getExpenseMeta(name, unit) {
+      var cleanName = String(name || '').trim();
+      var cleanUnit = String(unit || '').trim();
+      return itemMetaDict[cleanName + '||' + cleanUnit] || itemMetaDict[cleanName] || {};
+    }
+
+    function getUnitOptionsForItem(name, currentUnit) {
+      var meta = getExpenseMeta(name, currentUnit);
+      var fallbackUnit = itemDict[String(name || '').trim()] || currentUnit;
+      return uniqueUnitOptions((meta.unitOptions || []).concat([fallbackUnit]));
+    }
+
+    function updateUnitOptions(wrapper, preferredUnit) {
+      if (!wrapper) return;
+      var itemInput = wrapper.querySelector('.i');
+      var unitInput = wrapper.querySelector('.u');
+      var hint = wrapper.querySelector('.stock-unit-hint');
+      if (!itemInput || !unitInput) return;
+
+      var options = getUnitOptionsForItem(itemInput.value, preferredUnit || unitInput.value);
+      var listId = unitInput.getAttribute('list');
+      var datalist = listId ? document.getElementById(listId) : null;
+      if (datalist) {
+        datalist.innerHTML = options.map(function(option) {
+          return '<option value="' + escapeHtml(option) + '"></option>';
+        }).join('');
+      }
+
+      if (!unitInput.value && options.length > 0) unitInput.value = options[0];
+
+      var meta = getExpenseMeta(itemInput.value, unitInput.value);
+      if (hint) {
+        if (meta.useStock && meta.primaryUnit && meta.baseUnit && meta.conversionRate > 1) {
+          hint.textContent = 'สต็อก: 1 ' + meta.primaryUnit + ' = ' + meta.conversionRate + ' ' + meta.baseUnit + (meta.unitDetail ? ' · ' + meta.unitDetail : '');
+          hint.classList.add('active');
+        } else if (meta.useStock && meta.baseUnit) {
+          hint.textContent = 'สต็อก: คิดเป็นหน่วยฐาน ' + meta.baseUnit + (meta.unitDetail ? ' · ' + meta.unitDetail : '');
+          hint.classList.add('active');
+        } else {
+          hint.textContent = '';
+          hint.classList.remove('active');
+        }
+      }
+    }
+
+    function refreshAllUnitOptions() {
+      document.querySelectorAll('.swipe-wrapper').forEach(function(wrapper) {
+        updateUnitOptions(wrapper);
+      });
+    }
+
+    async function pullItems() {
+      try {
+        const sharedData = await apiCall('shared_loadDB');
+        const categories = sharedData && sharedData.database && sharedData.database.categories;
+        if (categories) {
+          var sharedDict = {};
+          var sharedMeta = {};
+          var itemMeta = sharedData.database.itemMeta || {};
+          Object.keys(categories).forEach(function(category) {
+            (categories[category] || []).forEach(function(displayName) {
+              var parsed = parseSharedItemName(displayName);
+              if (parsed.name) sharedDict[parsed.name] = parsed.unit;
+              var meta = itemMeta[displayName] || itemMeta[parsed.name] || {};
+              setItemMeta(sharedMeta, parsed.name, parsed.unit, meta);
+            });
+          });
+          if (applyItemDict(sharedDict, sharedMeta)) {
+            refreshAllUnitOptions();
+            return;
+          }
+        }
+      } catch(e) { console.log("Shared Items Error", e); }
+
+      try {
+        const rawData = await apiCall('pullItems');
+        if (rawData) {
+          var formattedDict = {};
+          if (Array.isArray(rawData)) {
+            rawData.forEach(function(item) { formattedDict[item.n] = item.u; });
+          } else { formattedDict = rawData; }
+          applyItemDict(formattedDict, {});
+          refreshAllUnitOptions();
+        }
+      } catch(e) { console.log("Pull Items Error", e); }
+    }
+
+    function initApp() {
+      if (appStarted) return;
+      appStarted = true;
+      
+      var savedItems = localStorage.getItem('BOY_JUICE_ITEMS');
+      if (savedItems) { itemDict = JSON.parse(savedItems); }
+      var savedMeta = localStorage.getItem('BOY_JUICE_ITEM_META');
+      if (savedMeta) { itemMetaDict = JSON.parse(savedMeta); }
+
+      var savedStaff = localStorage.getItem('BOY_STAFF');
+      if (savedStaff) { staffList = JSON.parse(savedStaff); }
+      document.getElementById('staffListInput').value = staffList.join(', ');
+
+      var today = new Date();
+      document.getElementById('mainDate').value = today.toISOString().split('T')[0];
+      loadData().finally(function() {
+        setTimeout(pullItems, 0);
+      });
+    }
+
+    function showSuggestions(inp) {
+      var val = inp.value.trim();
+      closeAllLists();
+      var a = document.createElement("DIV");
+      a.setAttribute("class", "autocomplete-items");
+      var rect = inp.getBoundingClientRect();
+      a.style.top = (rect.bottom + window.scrollY) + "px";
+      a.style.left = (rect.left + window.scrollX) + "px";
+      a.style.width = rect.width + "px";
+      document.body.appendChild(a); 
+      var count = 0;
+      for (var key in itemDict) {
+        if (!val || key.toLowerCase().indexOf(val.toLowerCase()) > -1) {
+          var b = document.createElement("DIV");
+          if (val) {
+            var matchIdx = key.toLowerCase().indexOf(val.toLowerCase());
+            b.innerHTML = key.substring(0, matchIdx) + "<strong><span style='color: #2ecc71;'>" + key.substring(matchIdx, matchIdx + val.length) + "</span></strong>" + key.substring(matchIdx + val.length);
+          } else { b.innerHTML = key; }
+          b.innerHTML += "<input type='hidden' value='" + key + "'>";
+          b.addEventListener("click", function(e) {
+            inp.value = this.getElementsByTagName("input")[0].value;
+            closeAllLists();
+            checkAutoFill(inp);
+            var row = inp.closest('.exp-row');
+            var qInput = row.querySelector('.q');
+            if(qInput) qInput.focus();
+          });
+          a.appendChild(b);
+          if(++count > 15) break; 
+        }
+      }
+      if(count === 0) closeAllLists();
+    }
+
+    function closeAllLists(elmnt) {
+      var x = document.getElementsByClassName("autocomplete-items");
+      for (var i = 0; i < x.length; i++) { if (elmnt != x[i]) { x[i].parentNode.removeChild(x[i]); } }
+    }
+
+    document.addEventListener("click", function (e) { 
+      if(!e.target.classList.contains('i') && !e.target.classList.contains('hr-name')) { closeAllLists(); } 
+    });
+
+    function checkAutoFill(inputEl) {
+      var val = inputEl.value.trim();
+      if (itemDict[val]) { 
+        var row = inputEl.closest('.exp-row');
+        var unitInput = row.querySelector('.u');
+        if (!unitInput.value) { unitInput.value = itemDict[val]; }
+      }
+      updateUnitOptions(inputEl.closest('.swipe-wrapper'));
+      doSync(); 
+    }
+
+    function addRow(i, q, u, p) {
+      if(!i) i = ''; if(!q) q = ''; if(!u) u = ''; if(!p) p = '';
+      expenseRowCounter++;
+      var unitListId = 'unitOptions_' + expenseRowCounter;
+      var wrapper = document.createElement('div');
+      wrapper.className = 'swipe-wrapper';
+      wrapper.innerHTML = 
+        '<div class="exp-row">' +
+          '<input type="text" class="i" placeholder="รายการ" value="'+escapeHtml(i)+'" oninput="showSuggestions(this)" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)" autocomplete="off">' +
+          '<input type="text" class="q" placeholder="จำนวน" value="'+escapeHtml(q)+'" onchange="doSync()" onkeydown="nav(event, 1)">' +
+          '<input type="text" class="u" placeholder="หน่วย" value="'+escapeHtml(u)+'" list="'+unitListId+'" onchange="updateUnitOptions(this.closest(\'.swipe-wrapper\')); doSync()" onkeydown="nav(event, 2)">' +
+          '<datalist id="'+unitListId+'"></datalist>' +
+          '<input type="text" class="p" placeholder="บาท" value="'+escapeHtml(p)+'" onchange="doSync()" onkeydown="nav(event, 3)">' +
+          '<div class="stock-unit-hint"></div>' +
+        '</div>' +
+        '<div class="delete-action" onclick="removeRow(this)">ลบ</div>';
+      document.getElementById('expenseList').appendChild(wrapper);
+      wrapper.querySelector('.i').addEventListener('input', function() {
+        updateUnitOptions(wrapper);
+      });
+      wrapper.querySelector('.u').addEventListener('focus', function() {
+        updateUnitOptions(wrapper);
+      });
+      updateUnitOptions(wrapper, u);
+      return wrapper;
+    }
+
+    function removeRow(btn) { btn.parentElement.remove(); doSync(); }
+
+    function clearAllData() {
+      if(confirm("❗ ต้องการล้างข้อมูลทั้งหมด?")) {
+        document.getElementById('expenseList').innerHTML = '';
+        document.getElementById('val-cash').value = '';
+        document.getElementById('val-transfer').value = '';
+        document.getElementById('otherIncomeVal').value = '';
+        document.getElementById('otherIncomeNote').value = '';
+        for(var i=0; i<4; i++) addRow();
+        doSync();
+      }
+    }
+
+    function syncDateFromLock() {
+      var lDate = document.getElementById('lockedDate').value;
+      if(lDate) { document.getElementById('mainDate').value = lDate; document.getElementById('lockedOverlay').classList.add('hidden'); loadData(); }
+    }
+
+    function collectFormDataSnapshot() {
+      var exp = [];
+      var wrappers = document.querySelectorAll('.swipe-wrapper');
+      for(var w=0; w<wrappers.length; w++) {
+        var ins = wrappers[w].querySelectorAll('.exp-row input:not([type="hidden"])');
+        if (ins[0].value || ins[1].value || ins[2].value || ins[3].value) {
+          var itemName = ins[0].value.trim();
+          var unit = ins[2].value.trim();
+          var meta = getExpenseMeta(itemName, unit);
+          exp.push({
+            i: ins[0].value,
+            q: ins[1].value,
+            u: ins[2].value,
+            p: ins[3].value,
+            m: meta.mainType || '',
+            t: meta.subType || ''
+          });
+        }
+      }
+      return {
+        cash: { v: document.getElementById('val-cash').value, s: true },
+        transfer: { v: document.getElementById('val-transfer').value, s: true },
+        other: { v: document.getElementById('otherIncomeVal').value, n: document.getElementById('otherIncomeNote').value },
+        exp: exp
+      };
+    }
+
+    async function submitToSheet() {
+      var date = document.getElementById('mainDate').value;
+      if(!date) return alert("กรุณาระบุวันที่");
+      clearTimeout(timer);
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      var data = collectFormDataSnapshot();
+      try {
+        const res = await apiCall('submit', { date: date, data: data });
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        if(res.status === "Success") {
+          const dObj = new Date(date);
+          const thMonths = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+          document.getElementById('displayDateText').innerText = `${dObj.getDate()} ${thMonths[dObj.getMonth()]} ${dObj.getFullYear().toString().slice(-2)}`;
+          document.getElementById('successOverlay').classList.remove('hidden');
+          if (res.stockWarnings && res.stockWarnings.length > 0) {
+            setTimeout(function() {
+              alert("แจ้งเตือนสต็อก:\n- " + res.stockWarnings.join("\n- "));
+            }, 150);
+          }
+        } else { alert("แจ้งเตือนจากระบบ: " + res.status); }
+      } catch (err) { document.getElementById('loadingOverlay').classList.add('hidden'); alert("❌ ส่งไม่สำเร็จ สาเหตุ: " + err.message); }
+    }
+
+    function goToNextDay() {
+      var dateInput = document.getElementById('mainDate');
+      var d = new Date(dateInput.value); d.setDate(d.getDate() + 1);
+      dateInput.value = d.toISOString().split('T')[0];
+      document.getElementById('successOverlay').classList.add('hidden'); loadData();
+    }
+
+    function unlockScreen() { document.getElementById('successOverlay').classList.add('hidden'); unlockEditMode(); }
+    async function unlockEditMode() {
+      document.getElementById('lockedOverlay').classList.add('hidden');
+      document.getElementById('btnSubmit').style.display = 'block';
+      await apiCall('unlockDate', { date: document.getElementById('mainDate').value });
+    }
+
+    function nav(e, idx) {
+      if (e.keyCode === 13) {
+        e.preventDefault(); closeAllLists();
+        var currentRow = e.target.closest('.exp-row'); 
+        var inputs = currentRow.querySelectorAll('input:not([type="hidden"])');
+        if (idx < 3) { inputs[idx+1].focus(); } 
+        else {
+          var nextWrapper = currentRow.parentElement.nextElementSibling;
+          if (nextWrapper) { nextWrapper.querySelector('.i').focus(); } else { addRow().querySelector('.i').focus(); }
+        }
+      }
+    }
+
+    function doSync() {
+      if (isLoadingData) return;
+      clearTimeout(timer);
+      var date = document.getElementById('mainDate').value;
+      if(!date) return;
+      var data = collectFormDataSnapshot();
+      timer = setTimeout(async function() {
+        apiCall('autoSave', { date: date, data: data });
+      }, 500);
+    }
+
+    async function loadData() {
+      var date = document.getElementById('mainDate').value;
+      if(!date) return;
+      var requestId = ++loadDataSeq;
+      clearTimeout(timer);
+      isLoadingData = true;
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      var fruits = ['🍉', '🍍', '🍓', '🍊', '🍇'];
+      document.getElementById('fruitIcon').innerText = fruits[Math.floor(Math.random() * fruits.length)];
+
+      try {
+        const parsed = await apiCall('loadData', { date: date });
+        if (requestId !== loadDataSeq || document.getElementById('mainDate').value !== date) return;
+        var d = {}; try { d = JSON.parse(parsed.draft || '{}'); } catch(e) {}
+        
+        // ล้างข้อมูลหน้าจอและโหลดใหม่
+        document.getElementById('expenseList').innerHTML = '';
+        clearLeaveList(); // เคลียร์ช่องให้สะอาดทุกครั้งที่เปลี่ยนวัน
+        refreshSavedLeaves(date);
+        if (requestId !== loadDataSeq || document.getElementById('mainDate').value !== date) return;
+
+        document.getElementById('val-cash').value = (d.cash) ? d.cash.v : '';
+        document.getElementById('val-transfer').value = (d.transfer) ? d.transfer.v : '';
+        document.getElementById('otherIncomeVal').value = (d.other) ? d.other.v : '';
+        document.getElementById('otherIncomeNote').value = (d.other) ? d.other.n : '';
+        if (d.exp && d.exp.length > 0) {
+          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p); }
+          addRow(); 
+        } else { for(var i=0; i<4; i++) addRow(); }
+        if (parsed.submitted) {
+          document.getElementById('lockedDate').value = date; 
+          document.getElementById('lockedOverlay').classList.remove('hidden');
+          document.getElementById('btnSubmit').style.display = 'none';
+        } else {
+          document.getElementById('lockedOverlay').classList.add('hidden');
+          document.getElementById('btnSubmit').style.display = 'block';
+        }
+      } catch (err) { alert("❌ ดึงข้อมูลไม่สำเร็จ สาเหตุ: " + err.message); }
+      finally {
+        if (requestId === loadDataSeq) {
+          isLoadingData = false;
+          document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+      }
+    }
+    
+    window.onload = initApp;
+  </script>
+</body>
+</html>
