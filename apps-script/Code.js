@@ -12,8 +12,10 @@ const CONFIG = {
     units: 'หน่วยและการแปลง',
     income: 'รายรับ',
     expenses: 'รายจ่าย',
+    withdrawals: 'รายการเบิกของ',
     leave: 'การลาพนักงาน',
-    salary: 'สรุปเงินเดือน'
+    salary: 'สรุปเงินเดือน',
+    bigcOrderMenu: 'เมนูเบิกของ BigC'
   }
 };
 
@@ -93,6 +95,27 @@ function doPost(e) {
       case 'bigcExpenseUnlockDate':
         result = handleBigcExpenseUnlockDate_(payload.date);
         break;
+      case 'bigcOrderLoadDB':
+        result = handleBigcOrderLoadDb_();
+        break;
+      case 'bigcOrderLoadDraft':
+        result = handleBigcOrderLoadDraft_();
+        break;
+      case 'bigcOrderAutoSave':
+        result = handleBigcOrderAutoSave_(payload.draftData || {});
+        break;
+      case 'bigcOrderSaveDB':
+        result = handleBigcOrderSaveDb_(payload.database || {});
+        break;
+      case 'bigcOrderSubmitOrder':
+        result = handleBigcOrderSubmitOrder_(payload.qtyData || {}, payload.categories || {});
+        break;
+      case 'bigcOrderReceive':
+        result = handleBigcOrderReceive_(payload.qtyData || {});
+        break;
+      case 'bigcOrderReturn':
+        result = handleBigcOrderReturn_(payload.qtyData || {}, payload.cash, payload.transfer);
+        break;
       default:
         result = { status: 'error', message: 'Action ไม่ถูกต้อง: ' + action };
     }
@@ -127,6 +150,16 @@ function ss_(spreadsheetId) {
 function sheet_(spreadsheetId, sheetName) {
   const sh = ss_(spreadsheetId).getSheetByName(sheetName);
   if (!sh) throw new Error('ไม่พบชีท: ' + sheetName);
+  return sh;
+}
+
+function ensureSheet_(spreadsheetId, sheetName, headers) {
+  const ss = ss_(spreadsheetId);
+  let sh = ss.getSheetByName(sheetName);
+  if (!sh) sh = ss.insertSheet(sheetName);
+  if (headers && headers.length && sh.getLastRow() === 0) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
   return sh;
 }
 
@@ -789,6 +822,322 @@ function replaceExpenseRowsForBranch_(date, data, options) {
   });
 
   appendRows_(sh, rows);
+}
+
+function handleBigcOrderLoadDb_() {
+  const savedMenu = readBigcOrderMenu_();
+  return {
+    status: 'success',
+    database: savedMenu || buildBigcOrderDatabaseFromMaster_()
+  };
+}
+
+function handleBigcOrderLoadDraft_() {
+  const key = dateKey_(now_());
+  const draftText = PropertiesService.getScriptProperties().getProperty(scopedPropKey_('draft', 'BigCOrder', key));
+  return {
+    status: 'success',
+    draft: draftText ? JSON.parse(draftText) : {}
+  };
+}
+
+function handleBigcOrderAutoSave_(draftData) {
+  const key = dateKey_(draftData.date || now_());
+  PropertiesService.getScriptProperties().setProperty(
+    scopedPropKey_('draft', 'BigCOrder', key),
+    JSON.stringify(draftData || {})
+  );
+  return { status: 'success' };
+}
+
+function handleBigcOrderSaveDb_(database) {
+  const headers = ['หมวดหมู่', 'รายการที่แสดง', 'รายการในชีท', 'ชั่งน้ำหนัก', 'ลำดับ', 'เปิดใช้งาน', 'อัปเดตเมื่อ'];
+  const sh = ensureSheet_(CONFIG.spreadsheets.master, CONFIG.sheets.bigcOrderMenu, headers);
+  const categories = database.categories || {};
+  const weightSet = {};
+  (database.weightItems || []).forEach(function(item) {
+    weightSet[normalizeText_(item)] = true;
+  });
+  const mappings = database.itemMappings || {};
+  const updatedAt = normalizeText_(database.updatedAt) || new Date().toISOString();
+  const rows = [];
+
+  Object.keys(categories).forEach(function(category) {
+    (categories[category] || []).forEach(function(item, index) {
+      const displayItem = normalizeText_(item);
+      if (!displayItem) return;
+      rows.push([
+        category,
+        displayItem,
+        mappings[displayItem] || '',
+        !!weightSet[displayItem],
+        index + 1,
+        true,
+        updatedAt
+      ]);
+    });
+  });
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  appendRows_(sh, rows);
+
+  return {
+    status: 'success',
+    database: readBigcOrderMenu_() || database
+  };
+}
+
+function handleBigcOrderSubmitOrder_(qtyData, categories) {
+  const key = dateKey_(now_());
+  const orderData = {
+    qtyData: qtyData || {},
+    categories: categories || {},
+    timestamp: new Date().toISOString()
+  };
+  PropertiesService.getScriptProperties().setProperty(
+    scopedPropKey_('order', 'BigCOrder', key),
+    JSON.stringify(orderData)
+  );
+  return { status: 'success', saved: Object.keys(qtyData || {}).length };
+}
+
+function handleBigcOrderReceive_(qtyData) {
+  const scriptLock = lock_();
+  scriptLock.waitLock(30000);
+  try {
+    const count = replaceBigcWithdrawalRows_(now_(), qtyData, {
+      sign: 1,
+      note: 'รับสินค้าเข้า BigC',
+      sourceName: 'BOY Operation System:BigC Receive',
+      idPrefix: 'BIGC-WITHDRAW'
+    });
+    const key = dateKey_(now_());
+    PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
+    return { status: 'success', saved: count };
+  } finally {
+    scriptLock.releaseLock();
+  }
+}
+
+function handleBigcOrderReturn_(qtyData, cash, transfer) {
+  const scriptLock = lock_();
+  scriptLock.waitLock(30000);
+  try {
+    const dateObj = now_();
+    const returned = replaceBigcWithdrawalRows_(dateObj, qtyData, {
+      sign: -1,
+      note: 'คืนของให้สาขา 1',
+      sourceName: 'BOY Operation System:BigC Return',
+      idPrefix: 'BIGC-RETURN'
+    });
+    const incomeRows = replaceBigcOrderIncomeRows_(dateObj, cash, transfer);
+    const key = dateKey_(dateObj);
+    PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
+    return { status: 'success', saved: returned, incomeRows: incomeRows };
+  } finally {
+    scriptLock.releaseLock();
+  }
+}
+
+function readBigcOrderMenu_() {
+  const ss = ss_(CONFIG.spreadsheets.master);
+  const sh = ss.getSheetByName(CONFIG.sheets.bigcOrderMenu);
+  if (!sh || sh.getLastRow() < 2) return null;
+
+  const values = sh.getRange(1, 1, sh.getLastRow(), 7).getValues();
+  const categories = {};
+  const weightItems = [];
+  const itemMappings = {};
+  let updatedAt = '';
+
+  values.slice(1).forEach(function(row) {
+    const category = normalizeText_(row[0]);
+    const item = normalizeText_(row[1]);
+    if (!category || !item) return;
+    if (toBool_(row[5], true) === false) return;
+
+    if (!categories[category]) categories[category] = [];
+    categories[category].push(item);
+    if (toBool_(row[3], false)) weightItems.push(item);
+
+    const sheetItem = normalizeText_(row[2]);
+    if (sheetItem && sheetItem !== item) itemMappings[item] = sheetItem;
+    if (row[6]) updatedAt = row[6] instanceof Date ? row[6].toISOString() : normalizeText_(row[6]);
+  });
+
+  return {
+    categories: categories,
+    weightItems: weightItems,
+    itemMappings: itemMappings,
+    updatedAt: updatedAt || new Date().toISOString()
+  };
+}
+
+function buildBigcOrderDatabaseFromMaster_() {
+  const rows = getDatabaseRows_().filter(function(row) {
+    return row.active !== false && row.useStock === true;
+  });
+  const unitRowsByName = getUnitRows_();
+  const categories = {};
+  const weightItems = [];
+
+  rows.forEach(function(row) {
+    const withdrawUnits = (unitRowsByName[row.name] || []).filter(function(unit) {
+      return unit.useWithdraw;
+    });
+    const units = withdrawUnits.length ? withdrawUnits : [{
+      unit: row.baseUnit || row.unit || '',
+      factor: 1
+    }];
+
+    units.forEach(function(unitRow) {
+      const unit = normalizeText_(unitRow.unit);
+      const displayName = unit ? row.name + ' (' + unit + ')' : row.name;
+      const category = mapBigcOrderCategory_(row.mainType, row.subType, row.name);
+      if (!categories[category]) categories[category] = [];
+      if (categories[category].indexOf(displayName) === -1) categories[category].push(displayName);
+      if (isWeightUnit_(unit) && weightItems.indexOf(displayName) === -1) weightItems.push(displayName);
+    });
+  });
+
+  Object.keys(categories).forEach(function(category) {
+    categories[category].sort(function(a, b) {
+      return a.localeCompare(b, 'th');
+    });
+  });
+
+  return {
+    categories: categories,
+    weightItems: weightItems,
+    itemMappings: {},
+    updatedAt: new Date().toISOString()
+  };
+}
+
+function mapBigcOrderCategory_(mainType, subType, name) {
+  const main = normalizeText_(mainType);
+  const sub = normalizeText_(subType);
+  const itemName = normalizeText_(name);
+  const text = main + ' ' + sub + ' ' + itemName;
+
+  if (text.indexOf('บรรจุ') !== -1) return '📦 บรรจุภัณฑ์';
+  if (text.indexOf('อบแห้ง') !== -1 || text.indexOf('ฝาแดง') !== -1 || text.indexOf('ฝาเขียว') !== -1 || text.indexOf('ฝาชมพู') !== -1 || text.indexOf('ฝาม่วง') !== -1) return '🥫 ผลไม้อบแห้งกระปุก';
+  if (text.indexOf('ขนม') !== -1) return '🍬 ขนม';
+  if (text.indexOf('แช่แข็ง') !== -1) return '❄️ ผลไม้แช่แข็ง';
+  if (text.indexOf('ท็อป') !== -1) return '🍪 ท็อปปิ้ง';
+  if (text.indexOf('ผง') !== -1) return '☕ ผง';
+  if (text.indexOf('ผลไม้') !== -1) return '🍉 ผลไม้ (ใส่กล่อง)';
+  return '🥛 อื่นๆ';
+}
+
+function isWeightUnit_(unit) {
+  const text = normalizeText_(unit).toLowerCase();
+  return text.indexOf('กิโล') !== -1 || text === 'kg' || text.indexOf('กก') !== -1;
+}
+
+function replaceBigcWithdrawalRows_(date, qtyData, options) {
+  const dateObj = parseDate_(date);
+  const sh = sheet_(CONFIG.spreadsheets.transactions, CONFIG.sheets.withdrawals);
+  const sourceName = options.sourceName;
+  const idPrefix = options.idPrefix;
+  const sign = Number(options.sign || 1);
+  const note = normalizeText_(options.note);
+  const txId = Utilities.getUuid().slice(0, 8);
+  const metaByName = getDatabaseRowMap_();
+
+  deleteRowsByPredicate_(sh, function(row) {
+    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], 'BigC') && normalizeText_(row[10]) === sourceName;
+  });
+
+  const rows = [];
+  Object.keys(qtyData || {}).forEach(function(rawName, index) {
+    const qty = toNumber_(qtyData[rawName]);
+    if (qty === 0) return;
+
+    const resolved = resolveBigcOrderItem_(rawName, metaByName);
+    const meta = metaByName[resolved.name] || {};
+    rows.push([
+      dateObj,
+      'BigC',
+      resolved.name,
+      resolved.unit,
+      qty * sign,
+      '',
+      '',
+      meta.mainType || '',
+      note,
+      makeId_(idPrefix, dateObj, String(index + 1) + '-' + txId),
+      sourceName
+    ]);
+  });
+
+  appendRows_(sh, rows);
+  return rows.length;
+}
+
+function resolveBigcOrderItem_(rawName, metaByName) {
+  const original = normalizeText_(rawName);
+  if (metaByName[original]) {
+    return {
+      name: original,
+      unit: getDefaultUnitForItem_(original)
+    };
+  }
+
+  const parsed = parseBigcOrderDisplayItem_(original);
+  if (metaByName[parsed.name]) return parsed;
+  return parsed.name ? parsed : { name: original, unit: '' };
+}
+
+function parseBigcOrderDisplayItem_(rawName) {
+  const text = normalizeText_(rawName);
+  const match = text.match(/^(.*)\s+\(([^()]*)\)$/);
+  if (!match) return { name: text, unit: '' };
+  return {
+    name: normalizeText_(match[1]),
+    unit: normalizeText_(match[2])
+  };
+}
+
+function getDefaultUnitForItem_(name) {
+  const units = getUnitRows_()[name] || [];
+  const base = findBaseUnit_(units);
+  return base ? base.unit : '';
+}
+
+function replaceBigcOrderIncomeRows_(date, cash, transfer) {
+  const dateObj = parseDate_(date);
+  const sh = sheet_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income);
+  const sourceName = 'BOY Operation System:BigC Order';
+  const txId = Utilities.getUuid().slice(0, 8);
+  const createdAt = now_();
+
+  deleteRowsByPredicate_(sh, function(row) {
+    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], 'BigC') && normalizeText_(row[8]) === sourceName;
+  });
+
+  const rows = [];
+  addBigcIncomeRow_(rows, dateObj, 'เงินสด', cash, 'CASH', txId, createdAt, sourceName);
+  addBigcIncomeRow_(rows, dateObj, 'เงินโอน', transfer, 'TRANSFER', txId, createdAt, sourceName);
+  appendRows_(sh, rows);
+  return rows.length;
+}
+
+function addBigcIncomeRow_(rows, dateObj, subChannel, amount, suffix, txId, createdAt, sourceName) {
+  const amountNumber = toNumber_(amount);
+  if (amountNumber === 0) return;
+  rows.push([
+    dateObj,
+    'BigC',
+    'หน้าร้าน',
+    subChannel,
+    amountNumber,
+    '',
+    makeId_('BIGC-INC', dateObj, suffix + '-' + txId),
+    createdAt,
+    sourceName
+  ]);
 }
 
 function handleSaveMultipleLeaves_(date, leaves) {

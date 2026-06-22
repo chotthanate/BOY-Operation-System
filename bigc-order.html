@@ -226,9 +226,11 @@ document.addEventListener('keydown', function(event) {
 
 <script>
     // 🌐 ลิงก์ Apps Script
-    const WEBHOOK_URL = "";
-    const STAGING_MODE = true;
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
+    const STAGING_MODE = false;
+    const ENABLE_FIREBASE_SYNC = false;
     window.BIGC_ORDER_STAGING_MODE = STAGING_MODE;
+    window.BIGC_ORDER_ENABLE_FIREBASE_SYNC = ENABLE_FIREBASE_SYNC;
 </script>
 
 <script>
@@ -288,6 +290,7 @@ document.addEventListener('keydown', function(event) {
         if (!options.force && window.databaseUpdatedAt > 0 && incomingTimestamp === 0) return false;
         if (!options.force && incomingTimestamp > 0 && incomingTimestamp < window.databaseUpdatedAt) return false;
 
+        window.categoryOrder = Array.from(new Set([...(window.categoryOrder || []), ...Object.keys(categories)]));
         window.activeCategories = categories;
         window.weightItems = incoming.weightItems || [];
         window.itemMappings = incoming.itemMappings || {};
@@ -340,7 +343,7 @@ document.addEventListener('keydown', function(event) {
     window.doc = doc;
     
     // โหลดการเปลี่ยนแปลงเมนูแบบเงียบๆ เบื้องหลัง
-    if (!window.BIGC_ORDER_STAGING_MODE) {
+    if (!window.BIGC_ORDER_STAGING_MODE && window.BIGC_ORDER_ENABLE_FIREBASE_SYNC) {
     onSnapshot(doc(db, "system_settings", "master_database"), (docSnap) => {
         if (docSnap.exists()) {
             const dbData = docSnap.data() || {};
@@ -376,7 +379,16 @@ document.addEventListener('keydown', function(event) {
             if (action === 'autoSave') return { status: 'success' };
             return { status: 'success' };
         }
-        payload.action = action;
+        const actionMap = {
+            loadDB: 'bigcOrderLoadDB',
+            loadDraft: 'bigcOrderLoadDraft',
+            autoSave: 'bigcOrderAutoSave',
+            saveDB: 'bigcOrderSaveDB',
+            order: 'bigcOrderSubmitOrder',
+            receive: 'bigcOrderReceive',
+            return: 'bigcOrderReturn'
+        };
+        payload.action = actionMap[action] || action;
         try {
             const res = await fetch(WEBHOOK_URL, {
                 method: 'POST',
