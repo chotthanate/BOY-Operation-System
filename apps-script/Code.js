@@ -13,6 +13,7 @@ const CONFIG = {
     income: 'รายรับ',
     expenses: 'รายจ่าย',
     withdrawals: 'รายการเบิกของ',
+    dailyCache: 'แคชรายวัน',
     leave: 'การลาพนักงาน',
     salary: 'สรุปเงินเดือน',
     bigcOrderMenu: 'เมนูเบิกของ BigC'
@@ -239,6 +240,16 @@ function dateKey_(value) {
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
 
+function todayKey_() {
+  return Utilities.formatDate(now_(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
+function relativeDateKey_(dayOffset) {
+  const d = now_();
+  d.setDate(d.getDate() + Number(dayOffset || 0));
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
+
 function monthKey_(year, month) {
   return String(year) + '-' + String(month).padStart(2, '0');
 }
@@ -287,6 +298,55 @@ function isTawanaBranch_(value) {
 
 function isBranch_(value, branchName) {
   return normalizeText_(value) === branchName;
+}
+
+function dailyCacheSheet_() {
+  const headers = ['วันที่', 'สาขา', 'ข้อมูล JSON', 'ส่งยอดแล้ว', 'อัปเดตเมื่อ'];
+  const sh = ensureSheet_(CONFIG.spreadsheets.transactions, CONFIG.sheets.dailyCache, headers);
+  try {
+    if (!sh.isSheetHidden()) sh.hideSheet();
+  } catch (err) {
+    // Hiding the cache sheet is cosmetic; the cache still works if hiding fails.
+  }
+  return sh;
+}
+
+function getDailyCache_(date, branchName) {
+  const ss = ss_(CONFIG.spreadsheets.transactions);
+  const sh = ss.getSheetByName(CONFIG.sheets.dailyCache);
+  if (!sh || sh.getLastRow() < 2) return null;
+
+  const key = dateKey_(date);
+  const branch = normalizeText_(branchName);
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, 5).getValues();
+  for (let i = values.length - 1; i >= 0; i--) {
+    const row = values[i];
+    if (rowDateMatches_(row[0], key) && normalizeText_(row[1]) === branch) {
+      return {
+        rowNumber: i + 2,
+        draft: normalizeText_(row[2]) || '{}',
+        submitted: toBool_(row[3], false),
+        updatedAt: row[4] || ''
+      };
+    }
+  }
+  return null;
+}
+
+function upsertDailyCache_(date, branchName, data, submitted) {
+  const sh = dailyCacheSheet_();
+  const key = dateKey_(date);
+  const branch = normalizeText_(branchName);
+  const dateObj = parseDate_(key);
+  const draftText = JSON.stringify(data || {});
+  const rowValues = [[dateObj, branch, draftText, !!submitted, now_()]];
+  const existing = getDailyCache_(key, branch);
+
+  if (existing) {
+    sh.getRange(existing.rowNumber, 1, 1, rowValues[0].length).setValues(rowValues);
+  } else {
+    appendRows_(sh, rowValues);
+  }
 }
 
 function getUnitRows_() {
@@ -513,19 +573,51 @@ function upsertUnitForItem_(name, subType, unit, factor, useBuy, useWithdraw, no
 
 function handleLoadData_(date) {
   const key = dateKey_(date);
+  const props = PropertiesService.getScriptProperties();
+  const draftText = props.getProperty(propKey_('draft', key));
+  const propSubmitted = props.getProperty(propKey_('submitted', key)) === 'true';
+  const cached = getDailyCache_(key, CONFIG.branchName);
+
+  if (cached) {
+    return {
+      status: 'success',
+      draft: draftText || cached.draft || '{}',
+      submitted: propSubmitted || cached.submitted
+    };
+  }
+
+  if (draftText && !propSubmitted) {
+    return {
+      status: 'success',
+      draft: draftText,
+      submitted: false
+    };
+  }
+
+  if (!propSubmitted && key >= relativeDateKey_(-2)) {
+    return {
+      status: 'success',
+      draft: '{}',
+      submitted: false
+    };
+  }
+
   const incomeRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income, 9);
   const expenseRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12);
-  const submitted = hasSubmittedRowsFromData_(key, incomeRows, expenseRows) ||
-    PropertiesService.getScriptProperties().getProperty(propKey_('submitted', key)) === 'true';
+  const submitted = hasSubmittedRowsFromData_(key, incomeRows, expenseRows) || propSubmitted;
   const sheetSnapshot = buildSnapshotFromRows_(key, incomeRows, expenseRows);
-  const draftText = PropertiesService.getScriptProperties().getProperty(propKey_('draft', key));
   const hasSheetData = snapshotHasData_(sheetSnapshot);
-
-  return {
+  const result = {
     status: 'success',
     draft: hasSheetData ? JSON.stringify(sheetSnapshot) : (draftText || '{}'),
     submitted: submitted
   };
+
+  if (hasSheetData || submitted) {
+    upsertDailyCache_(key, CONFIG.branchName, sheetSnapshot, submitted);
+  }
+
+  return result;
 }
 
 function handleAutoSave_(date, data) {
@@ -537,6 +629,16 @@ function handleAutoSave_(date, data) {
 function handleUnlockDate_(date) {
   const key = dateKey_(date);
   PropertiesService.getScriptProperties().deleteProperty(propKey_('submitted', key));
+  const cached = getDailyCache_(key, CONFIG.branchName);
+  if (cached) {
+    let data = {};
+    try {
+      data = JSON.parse(cached.draft || '{}');
+    } catch (err) {
+      data = {};
+    }
+    upsertDailyCache_(key, CONFIG.branchName, data, false);
+  }
   return { status: 'success' };
 }
 
@@ -548,6 +650,7 @@ function handleSubmit_(date, data) {
     replaceIncomeRows_(date, data || {}, txId);
     replaceExpenseRows_(date, data || {}, txId);
     const key = dateKey_(date);
+    upsertDailyCache_(key, CONFIG.branchName, data || {}, true);
     PropertiesService.getScriptProperties().setProperty(propKey_('submitted', key), 'true');
     PropertiesService.getScriptProperties().deleteProperty(propKey_('draft', key));
     return { status: 'Success', stockWarnings: [] };
