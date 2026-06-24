@@ -51,9 +51,6 @@
     .exp-main-type, .exp-sub-type { min-height: 40px; padding: 8px; font-size: 0.86rem; }
     .exp-main-type { grid-column: 1 / 3; }
     .exp-sub-type { grid-column: 3 / 5; }
-    .stock-unit-hint { grid-column: 1 / -1; display: none; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 1px solid #b7e8c9; border-radius: 10px; background: #f0fff5; color: #14733b; font-size: 0.78rem; font-weight: 800; }
-    .stock-unit-hint.active { display: flex; }
-    .stock-unit-hint small { color: #667085; }
     .delete-action { min-width: 75px; margin-left: 20px; background: var(--danger); color: white; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9rem; scroll-snap-align: end; cursor: pointer; }
     
     .btn-main { width: 100%; padding: 15px; border-radius: 14px; font-size: 1rem; font-weight: bold; border: none; margin-top: 10px; cursor: pointer; }
@@ -1039,7 +1036,6 @@
       if (!wrapper) return;
       var itemInput = wrapper.querySelector('.i');
       var unitInput = wrapper.querySelector('.u');
-      var hint = wrapper.querySelector('.stock-unit-hint');
       if (!itemInput || !unitInput) return;
 
       var options = getUnitOptionsForItem(itemInput.value, preferredUnit || unitInput.value);
@@ -1052,20 +1048,6 @@
       }
 
       if (!unitInput.value && options.length > 0) unitInput.value = options[0];
-
-      var meta = getExpenseMeta(itemInput.value, unitInput.value);
-      if (hint) {
-        if (meta.useStock && meta.primaryUnit && meta.baseUnit && meta.conversionRate > 1) {
-          hint.textContent = 'สต็อก: 1 ' + meta.primaryUnit + ' = ' + meta.conversionRate + ' ' + meta.baseUnit + (meta.unitDetail ? ' · ' + meta.unitDetail : '');
-          hint.classList.add('active');
-        } else if (meta.useStock && meta.baseUnit) {
-          hint.textContent = 'สต็อก: คิดเป็นหน่วยฐาน ' + meta.baseUnit + (meta.unitDetail ? ' · ' + meta.unitDetail : '');
-          hint.classList.add('active');
-        } else {
-          hint.textContent = '';
-          hint.classList.remove('active');
-        }
-      }
     }
 
     function syncCategoryFromItem(wrapper) {
@@ -1222,7 +1204,6 @@
           '<input type="text" class="p" placeholder="บาท" value="'+escapeHtml(p)+'" onchange="doSync()" onkeydown="nav(event, 3)">' +
           '<select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); doSync()"></select>' +
           '<select class="exp-sub-type" onchange="doSync()"></select>' +
-          '<div class="stock-unit-hint"></div>' +
         '</div>' +
         '<div class="delete-action" onclick="removeRow(this)">ลบ</div>';
       document.getElementById('expenseList').appendChild(wrapper);
