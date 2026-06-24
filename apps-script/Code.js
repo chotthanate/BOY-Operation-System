@@ -10,6 +10,7 @@ const CONFIG = {
   sheets: {
     database: 'Database',
     units: 'หน่วยและการแปลง',
+    expenseCategories: 'ประเภทค่าใช้จ่าย',
     income: 'รายรับ',
     expenses: 'รายจ่าย',
     withdrawals: 'รายการเบิกของ',
@@ -109,13 +110,13 @@ function doPost(e) {
         result = handleBigcOrderSaveDb_(payload.database || {});
         break;
       case 'bigcOrderSubmitOrder':
-        result = handleBigcOrderSubmitOrder_(payload.qtyData || {}, payload.categories || {});
+        result = handleBigcOrderSubmitOrder_(payload.date, payload.qtyData || {}, payload.categories || {});
         break;
       case 'bigcOrderReceive':
-        result = handleBigcOrderReceive_(payload.qtyData || {});
+        result = handleBigcOrderReceive_(payload.date, payload.qtyData || {});
         break;
       case 'bigcOrderReturn':
-        result = handleBigcOrderReturn_(payload.qtyData || {}, payload.cash, payload.transfer);
+        result = handleBigcOrderReturn_(payload.date, payload.qtyData || {}, payload.cash, payload.transfer);
         break;
       default:
         result = { status: 'error', message: 'Action ไม่ถูกต้อง: ' + action };
@@ -426,6 +427,58 @@ function getDatabaseRows_() {
   return output;
 }
 
+function getExpenseCategories_() {
+  const rows = values_(CONFIG.spreadsheets.master, CONFIG.sheets.expenseCategories);
+  const categoryRows = [];
+  const mainSeen = {};
+  const mainTypes = [];
+  const subTypesByMain = {};
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const mainType = normalizeText_(row[0]);
+    const subType = normalizeText_(row[1]);
+    if (!mainType || !subType) continue;
+    if (!toBool_(row[3], true)) continue;
+
+    const usage = normalizeText_(row[2]);
+    if (usage && usage.indexOf('รายจ่าย') === -1) continue;
+
+    const item = {
+      mainType: mainType,
+      subType: subType,
+      usage: usage,
+      active: true,
+      sortOrder: toNumber_(row[4]) || 9999,
+      note: normalizeText_(row[5])
+    };
+    categoryRows.push(item);
+  }
+
+  categoryRows.sort(function(a, b) {
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    if (a.mainType !== b.mainType) return a.mainType.localeCompare(b.mainType, 'th');
+    return a.subType.localeCompare(b.subType, 'th');
+  });
+
+  categoryRows.forEach(function(row) {
+    if (!mainSeen[row.mainType]) {
+      mainSeen[row.mainType] = true;
+      mainTypes.push(row.mainType);
+    }
+    if (!subTypesByMain[row.mainType]) subTypesByMain[row.mainType] = [];
+    if (subTypesByMain[row.mainType].indexOf(row.subType) === -1) {
+      subTypesByMain[row.mainType].push(row.subType);
+    }
+  });
+
+  return {
+    rows: categoryRows,
+    mainTypes: mainTypes,
+    subTypesByMain: subTypesByMain
+  };
+}
+
 function findBaseUnit_(units) {
   if (!units || units.length === 0) return null;
   return units.find(function(unit) {
@@ -480,7 +533,8 @@ function handleSharedLoadDb_() {
     status: 'success',
     database: {
       categories: categories,
-      itemMeta: itemMeta
+      itemMeta: itemMeta,
+      expenseCategories: getExpenseCategories_()
     }
   };
 }
@@ -991,9 +1045,11 @@ function handleBigcOrderSaveDb_(database) {
   };
 }
 
-function handleBigcOrderSubmitOrder_(qtyData, categories) {
-  const key = dateKey_(now_());
+function handleBigcOrderSubmitOrder_(date, qtyData, categories) {
+  const dateObj = date ? parseDate_(date) : now_();
+  const key = dateKey_(dateObj);
   const orderData = {
+    date: key,
     qtyData: qtyData || {},
     categories: categories || {},
     timestamp: new Date().toISOString()
@@ -1005,17 +1061,18 @@ function handleBigcOrderSubmitOrder_(qtyData, categories) {
   return { status: 'success', saved: Object.keys(qtyData || {}).length };
 }
 
-function handleBigcOrderReceive_(qtyData) {
+function handleBigcOrderReceive_(date, qtyData) {
   const scriptLock = lock_();
   scriptLock.waitLock(30000);
   try {
-    const count = replaceBigcWithdrawalRows_(now_(), qtyData, {
+    const dateObj = date ? parseDate_(date) : now_();
+    const count = replaceBigcWithdrawalRows_(dateObj, qtyData, {
       sign: 1,
       note: 'รับสินค้าเข้า BigC',
       sourceName: 'BOY Operation System:BigC Receive',
       idPrefix: 'BIGC-WITHDRAW'
     });
-    const key = dateKey_(now_());
+    const key = dateKey_(dateObj);
     PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
     return { status: 'success', saved: count };
   } finally {
@@ -1023,11 +1080,11 @@ function handleBigcOrderReceive_(qtyData) {
   }
 }
 
-function handleBigcOrderReturn_(qtyData, cash, transfer) {
+function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
   const scriptLock = lock_();
   scriptLock.waitLock(30000);
   try {
-    const dateObj = now_();
+    const dateObj = date ? parseDate_(date) : now_();
     const returned = replaceBigcWithdrawalRows_(dateObj, qtyData, {
       sign: -1,
       note: 'คืนของให้สาขา 1',

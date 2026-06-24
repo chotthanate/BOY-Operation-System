@@ -46,6 +46,9 @@
     .swipe-wrapper { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 8px; scroll-behavior: smooth; }
     .swipe-wrapper::-webkit-scrollbar { display: none; }
     .exp-row { min-width: 100%; scroll-snap-align: start; display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.2fr; gap: 5px; }
+    .exp-main-type, .exp-sub-type { min-height: 40px; padding: 8px; font-size: 0.86rem; }
+    .exp-main-type { grid-column: 1 / 3; }
+    .exp-sub-type { grid-column: 3 / 5; }
     .stock-unit-hint { grid-column: 1 / -1; display: none; justify-content: space-between; gap: 8px; padding: 7px 9px; border: 1px solid #b7e8c9; border-radius: 10px; background: #f0fff5; color: #14733b; font-size: 0.78rem; font-weight: 800; }
     .stock-unit-hint.active { display: flex; }
     .stock-unit-hint small { color: #667085; }
@@ -325,6 +328,7 @@
     var appStarted = false;
     var itemDict = {}; 
     var itemMetaDict = {};
+    var expenseCategories = { rows: [], mainTypes: [], subTypesByMain: {} };
     var databaseRows = [];
     var expenseRowCounter = 0;
     var isLoadingData = false;
@@ -902,6 +906,86 @@
       return result;
     }
 
+    function normalizeExpenseCategories(source) {
+      var incoming = source || {};
+      var rows = Array.isArray(incoming.rows) ? incoming.rows : [];
+      var mainTypes = Array.isArray(incoming.mainTypes) ? incoming.mainTypes.slice() : [];
+      var subTypesByMain = incoming.subTypesByMain || {};
+
+      if ((!mainTypes.length || !Object.keys(subTypesByMain).length) && rows.length) {
+        var mainSeen = {};
+        subTypesByMain = {};
+        rows.slice().sort(function(a, b) {
+          var ao = Number(a.sortOrder || 9999);
+          var bo = Number(b.sortOrder || 9999);
+          if (ao !== bo) return ao - bo;
+          return String(a.subType || '').localeCompare(String(b.subType || ''), 'th');
+        }).forEach(function(row) {
+          var mainType = String(row.mainType || '').trim();
+          var subType = String(row.subType || '').trim();
+          if (!mainType || !subType) return;
+          if (!mainSeen[mainType]) {
+            mainSeen[mainType] = true;
+            mainTypes.push(mainType);
+          }
+          if (!subTypesByMain[mainType]) subTypesByMain[mainType] = [];
+          if (subTypesByMain[mainType].indexOf(subType) === -1) subTypesByMain[mainType].push(subType);
+        });
+      }
+
+      return { rows: rows, mainTypes: mainTypes, subTypesByMain: subTypesByMain };
+    }
+
+    function applyExpenseCategories(source) {
+      expenseCategories = normalizeExpenseCategories(source);
+      localStorage.setItem('BOY_EXPENSE_CATEGORIES', JSON.stringify(expenseCategories));
+      refreshAllCategoryOptions();
+    }
+
+    function buildOptions(values, selected, placeholder) {
+      var html = '<option value="">' + escapeHtml(placeholder || 'เลือก') + '</option>';
+      (values || []).forEach(function(value) {
+        var clean = String(value || '').trim();
+        if (!clean) return;
+        html += '<option value="' + escapeHtml(clean) + '"' + (clean === selected ? ' selected' : '') + '>' + escapeHtml(clean) + '</option>';
+      });
+      return html;
+    }
+
+    function updateSubTypeOptions(wrapper, preferredSubType) {
+      if (!wrapper) return;
+      var mainSelect = wrapper.querySelector('.exp-main-type');
+      var subSelect = wrapper.querySelector('.exp-sub-type');
+      if (!mainSelect || !subSelect) return;
+      var mainType = mainSelect.value;
+      var currentSubType = preferredSubType !== undefined ? String(preferredSubType || '').trim() : subSelect.value;
+      var subTypes = expenseCategories.subTypesByMain[mainType] || [];
+      subSelect.innerHTML = buildOptions(subTypes, currentSubType, 'ประเภทย่อย');
+      if (currentSubType && subTypes.indexOf(currentSubType) === -1) {
+        subSelect.innerHTML += '<option value="' + escapeHtml(currentSubType) + '" selected>' + escapeHtml(currentSubType) + '</option>';
+      }
+    }
+
+    function updateCategoryOptions(wrapper, preferredMainType, preferredSubType) {
+      if (!wrapper) return;
+      var mainSelect = wrapper.querySelector('.exp-main-type');
+      if (!mainSelect) return;
+      var currentMainType = preferredMainType !== undefined ? String(preferredMainType || '').trim() : mainSelect.value;
+      mainSelect.innerHTML = buildOptions(expenseCategories.mainTypes, currentMainType, 'ประเภทหลัก');
+      if (currentMainType && expenseCategories.mainTypes.indexOf(currentMainType) === -1) {
+        mainSelect.innerHTML += '<option value="' + escapeHtml(currentMainType) + '" selected>' + escapeHtml(currentMainType) + '</option>';
+      }
+      updateSubTypeOptions(wrapper, preferredSubType);
+    }
+
+    function refreshAllCategoryOptions() {
+      document.querySelectorAll('.swipe-wrapper').forEach(function(wrapper) {
+        var mainSelect = wrapper.querySelector('.exp-main-type');
+        var subSelect = wrapper.querySelector('.exp-sub-type');
+        updateCategoryOptions(wrapper, mainSelect ? mainSelect.value : '', subSelect ? subSelect.value : '');
+      });
+    }
+
     function setItemMeta(metaDict, name, unit, metaSource, subType) {
       var cleanName = String(name || '').trim();
       var cleanUnit = String(unit || '').trim();
@@ -977,6 +1061,19 @@
       }
     }
 
+    function syncCategoryFromItem(wrapper) {
+      if (!wrapper) return;
+      var itemInput = wrapper.querySelector('.i');
+      var unitInput = wrapper.querySelector('.u');
+      var mainSelect = wrapper.querySelector('.exp-main-type');
+      var subSelect = wrapper.querySelector('.exp-sub-type');
+      if (!itemInput || !mainSelect || !subSelect) return;
+      var meta = getExpenseMeta(itemInput.value, unitInput ? unitInput.value : '');
+      if (meta.mainType) {
+        updateCategoryOptions(wrapper, meta.mainType, meta.subType || '');
+      }
+    }
+
     function refreshAllUnitOptions() {
       document.querySelectorAll('.swipe-wrapper').forEach(function(wrapper) {
         updateUnitOptions(wrapper);
@@ -986,11 +1083,15 @@
     async function pullItems() {
       try {
         const sharedData = await apiCall('shared_loadDB');
-        const categories = sharedData && sharedData.database && sharedData.database.categories;
+        const database = sharedData && sharedData.database;
+        if (database && database.expenseCategories) {
+          applyExpenseCategories(database.expenseCategories);
+        }
+        const categories = database && database.categories;
         if (categories) {
           var sharedDict = {};
           var sharedMeta = {};
-          var itemMeta = sharedData.database.itemMeta || {};
+          var itemMeta = database.itemMeta || {};
           Object.keys(categories).forEach(function(category) {
             (categories[category] || []).forEach(function(displayName) {
               var parsed = parseSharedItemName(displayName);
@@ -1001,6 +1102,7 @@
           });
           if (applyItemDict(sharedDict, sharedMeta)) {
             refreshAllUnitOptions();
+            refreshAllCategoryOptions();
             return;
           }
         }
@@ -1027,6 +1129,8 @@
       if (savedItems) { itemDict = JSON.parse(savedItems); }
       var savedMeta = localStorage.getItem('BOY_JUICE_ITEM_META');
       if (savedMeta) { itemMetaDict = JSON.parse(savedMeta); }
+      var savedCategories = localStorage.getItem('BOY_EXPENSE_CATEGORIES');
+      if (savedCategories) { expenseCategories = normalizeExpenseCategories(JSON.parse(savedCategories)); }
 
       var savedStaff = localStorage.getItem('BOY_STAFF');
       if (savedStaff) { staffList = JSON.parse(savedStaff); }
@@ -1089,12 +1193,15 @@
         var unitInput = row.querySelector('.u');
         if (!unitInput.value) { unitInput.value = itemDict[val]; }
       }
-      updateUnitOptions(inputEl.closest('.swipe-wrapper'));
+      var wrapper = inputEl.closest('.swipe-wrapper');
+      updateUnitOptions(wrapper);
+      syncCategoryFromItem(wrapper);
       doSync(); 
     }
 
-    function addRow(i, q, u, p) {
+    function addRow(i, q, u, p, mainType, subType) {
       if(!i) i = ''; if(!q) q = ''; if(!u) u = ''; if(!p) p = '';
+      if(!mainType) mainType = ''; if(!subType) subType = '';
       expenseRowCounter++;
       var unitListId = 'unitOptions_' + expenseRowCounter;
       var wrapper = document.createElement('div');
@@ -1106,6 +1213,8 @@
           '<input type="text" class="u" placeholder="หน่วย" value="'+escapeHtml(u)+'" list="'+unitListId+'" onchange="updateUnitOptions(this.closest(\'.swipe-wrapper\')); doSync()" onkeydown="nav(event, 2)">' +
           '<datalist id="'+unitListId+'"></datalist>' +
           '<input type="text" class="p" placeholder="บาท" value="'+escapeHtml(p)+'" onchange="doSync()" onkeydown="nav(event, 3)">' +
+          '<select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); doSync()"></select>' +
+          '<select class="exp-sub-type" onchange="doSync()"></select>' +
           '<div class="stock-unit-hint"></div>' +
         '</div>' +
         '<div class="delete-action" onclick="removeRow(this)">ลบ</div>';
@@ -1117,6 +1226,8 @@
         updateUnitOptions(wrapper);
       });
       updateUnitOptions(wrapper, u);
+      updateCategoryOptions(wrapper, mainType, subType);
+      if (!mainType && !subType) syncCategoryFromItem(wrapper);
       return wrapper;
     }
 
@@ -1143,18 +1254,26 @@
       var exp = [];
       var wrappers = document.querySelectorAll('.swipe-wrapper');
       for(var w=0; w<wrappers.length; w++) {
-        var ins = wrappers[w].querySelectorAll('.exp-row input:not([type="hidden"])');
-        if (ins[0].value || ins[1].value || ins[2].value || ins[3].value) {
-          var itemName = ins[0].value.trim();
-          var unit = ins[2].value.trim();
+        var itemInput = wrappers[w].querySelector('.i');
+        var qtyInput = wrappers[w].querySelector('.q');
+        var unitInput = wrappers[w].querySelector('.u');
+        var amountInput = wrappers[w].querySelector('.p');
+        var mainSelect = wrappers[w].querySelector('.exp-main-type');
+        var subSelect = wrappers[w].querySelector('.exp-sub-type');
+        if (!itemInput || !qtyInput || !unitInput || !amountInput) continue;
+        if (itemInput.value || qtyInput.value || unitInput.value || amountInput.value || (mainSelect && mainSelect.value) || (subSelect && subSelect.value)) {
+          var itemName = itemInput.value.trim();
+          var unit = unitInput.value.trim();
           var meta = getExpenseMeta(itemName, unit);
+          var mainType = (mainSelect && mainSelect.value) || meta.mainType || '';
+          var subType = (subSelect && subSelect.value) || meta.subType || '';
           exp.push({
-            i: ins[0].value,
-            q: ins[1].value,
-            u: ins[2].value,
-            p: ins[3].value,
-            m: meta.mainType || '',
-            t: meta.subType || ''
+            i: itemInput.value,
+            q: qtyInput.value,
+            u: unitInput.value,
+            p: amountInput.value,
+            m: mainType,
+            t: subType
           });
         }
       }
@@ -1253,7 +1372,7 @@
         document.getElementById('otherIncomeVal').value = (d.other) ? d.other.v : '';
         document.getElementById('otherIncomeNote').value = (d.other) ? d.other.n : '';
         if (d.exp && d.exp.length > 0) {
-          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p); }
+          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t); }
           addRow(); 
         } else { for(var i=0; i<4; i++) addRow(); }
         if (parsed.submitted) {

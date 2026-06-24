@@ -670,7 +670,7 @@ document.addEventListener('keydown', function(event) {
         if (isSubmitting) return;
         isSubmitting = true; document.getElementById('btn-submit-order').disabled = true; window.showLoader("กำลังส่งออเดอร์...");
         try {
-            await apiCall('order', { qtyData: window.orderCart, categories: window.activeCategories });
+            await apiCall('order', { date: window.getBusinessDateKey(), qtyData: window.orderCart, categories: window.activeCategories });
             window.orderCart = {}; scheduleAutoSave();
             alert("✅ ส่งออเดอร์สำเร็จ!"); window.switchTab('receive'); window.closeCart(); window.renderOrder();
         } catch(e) { alert("❌ " + e.message); } finally { isSubmitting = false; document.getElementById('btn-submit-order').disabled = false; window.hideLoader(); }
@@ -688,7 +688,7 @@ document.addEventListener('keydown', function(event) {
         
         isSubmitting = true; document.getElementById('btn-submit-receive').disabled = true; window.showLoader("กำลังบันทึก...");
         try {
-            await apiCall('receive', { qtyData: finalData });
+            await apiCall('receive', { date: window.getBusinessDateKey(), qtyData: finalData });
             window.receiveQty = {}; window.receiveWgt = {}; scheduleAutoSave();
             alert("✅ บันทึกรับสินค้าสำเร็จ!"); window.switchTab('return'); window.renderReceive();
         } catch(e) { alert("❌ " + e.message); } finally { isSubmitting = false; document.getElementById('btn-submit-receive').disabled = false; window.hideLoader(); }
@@ -714,7 +714,7 @@ document.addEventListener('keydown', function(event) {
 
         isSubmitting = true; document.getElementById('btn-submit-return').disabled = true; window.showLoader("กำลังปิดยอด...");
         try {
-            await apiCall('return', { qtyData: finalData, cash: cashVal, transfer: transferVal });
+            await apiCall('return', { date: window.getBusinessDateKey(), qtyData: finalData, cash: cashVal, transfer: transferVal });
             window.returnQty = {}; window.returnWgt = {}; window.revenue = {cash:"", transfer:""};
             window.VIP_ITEMS.forEach(i => window.returnQty[i] = 0);
             document.getElementById('revenue-cash').value = ''; document.getElementById('revenue-transfer').value = '';
