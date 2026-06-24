@@ -43,9 +43,8 @@
     .input-group span { font-size: 1.2rem; min-width: 30px; text-align: center; }
     .hidden { display: none !important; }
     
-    #expenseList { display: grid; gap: 11px; counter-reset: expense-item; }
-    .swipe-wrapper { position: relative; counter-increment: expense-item; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 0; padding: 26px 7px 7px; scroll-behavior: smooth; border: 1px solid #e4e7ec; border-radius: 16px; background: #f8fafc; box-shadow: inset 4px 0 0 rgba(46, 204, 113, 0.45); }
-    .swipe-wrapper::before { content: "รายการ " counter(expense-item); position: absolute; top: 7px; left: 14px; font-size: 0.74rem; line-height: 1; font-weight: 800; color: #667085; letter-spacing: 0; }
+    #expenseList { display: grid; gap: 12px; }
+    .swipe-wrapper { position: relative; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 0; padding: 7px; scroll-behavior: smooth; border: 1px solid #e4e7ec; border-radius: 16px; background: #f8fafc; }
     .swipe-wrapper::-webkit-scrollbar { display: none; }
     .exp-row { min-width: 100%; scroll-snap-align: start; display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.2fr; gap: 7px; }
     .exp-row input, .exp-row select { border-color: #d7dde5; box-shadow: 0 1px 0 rgba(16,24,40,0.03); }
