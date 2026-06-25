@@ -217,6 +217,10 @@
       color: var(--ink);
       border-color: #b8c6d4;
     }
+    .refresh-btn:disabled {
+      cursor: progress;
+      opacity: .72;
+    }
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -784,6 +788,7 @@
   <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
     const STORE_KEY = "BOY_DASHBOARD_FILTERS";
+    const DATA_CACHE_PREFIX = "BOY_DASHBOARD_DATA:";
     const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
     const palette = ["#14a05f", "#4aa3df", "#f2a900", "#8854d0", "#ef6f6c", "#18a999", "#64748b", "#d1d5db", "#8bc34a", "#ff8a3d"];
     const state = loadSavedState();
@@ -854,7 +859,13 @@
     }
 
     async function loadDashboard(force) {
-      showLoading(true);
+      const cached = !force ? readDashboardCache() : null;
+      if (cached) {
+        dashboardData = cached;
+        renderDashboard(cached);
+      }
+      showLoading(!cached);
+      setRefreshState(true);
       try {
         const data = await apiCall("dashboardGetMonthlySummary", {
           year: state.year,
@@ -863,11 +874,38 @@
           force: !!force
         });
         dashboardData = data;
+        writeDashboardCache(data);
         renderDashboard(data);
       } catch (err) {
-        renderError(err);
+        if (cached || dashboardData) {
+          markRefreshError(err);
+        } else {
+          renderError(err);
+        }
       } finally {
         showLoading(false);
+        setRefreshState(false);
+      }
+    }
+
+    function dashboardDataCacheKey() {
+      return `${DATA_CACHE_PREFIX}${state.year}-${String(state.month).padStart(2, "0")}-${state.branch}`;
+    }
+
+    function readDashboardCache() {
+      try {
+        const text = localStorage.getItem(dashboardDataCacheKey());
+        return text ? JSON.parse(text) : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function writeDashboardCache(data) {
+      try {
+        localStorage.setItem(dashboardDataCacheKey(), JSON.stringify(data));
+      } catch (err) {
+        // Local cache is only for faster display. Ignore quota/private-mode failures.
       }
     }
 
@@ -886,8 +924,9 @@
 
     function renderDashboard(data) {
       const period = data.period || {};
+      const cacheText = data.cacheHit ? " | จาก cache" : "";
       document.getElementById("reportSubtitle").textContent =
-        `${data.scopeLabel || ""} | ${period.monthLabel || ""} ${period.year || ""} | อัปเดตล่าสุด ${formatDateTime(data.generatedAt)}`;
+        `${data.scopeLabel || ""} | ${period.monthLabel || ""} ${period.year || ""} | อัปเดตล่าสุด ${formatDateTime(data.generatedAt)}${cacheText}`;
 
       renderMetric("income", data.summary.income, data.summary.compare.income);
       renderMetric("expense", data.summary.expense, data.summary.compare.expense);
@@ -1200,8 +1239,19 @@
       document.getElementById("increaseBody").innerHTML = `<tr><td colspan="3" class="empty">ยังไม่มีข้อมูล</td></tr>`;
     }
 
+    function markRefreshError(err) {
+      const subtitle = document.getElementById("reportSubtitle");
+      subtitle.textContent = `${subtitle.textContent} | โหลดล่าสุดไม่สำเร็จ: ${err.message || "ไม่ทราบสาเหตุ"}`;
+    }
+
     function showLoading(show) {
       document.getElementById("loadingLayer").classList.toggle("show", !!show);
+    }
+
+    function setRefreshState(loading) {
+      const button = document.getElementById("refreshBtn");
+      button.disabled = !!loading;
+      button.textContent = loading ? "กำลังโหลด..." : "รีเฟรชข้อมูล";
     }
 
     function formatMoney(value) {

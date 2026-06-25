@@ -1436,6 +1436,16 @@ function handleDashboardGetMonthlySummary_(payload) {
   const month = Math.min(12, Math.max(1, Number(payload.month) || (now.getMonth() + 1)));
   const scope = dashboardNormalizeScope_(payload.branch || payload.scope || 'all');
   const previousPeriod = dashboardShiftMonth_(year, month, -1);
+  const cacheKey = dashboardCacheKey_(year, month, scope);
+
+  if (!payload.force) {
+    const cached = dashboardGetCached_(cacheKey);
+    if (cached) {
+      cached.cacheHit = true;
+      cached.servedAt = new Date().toISOString();
+      return cached;
+    }
+  }
 
   const rows = {
     income: tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income, 9),
@@ -1446,9 +1456,10 @@ function handleDashboardGetMonthlySummary_(payload) {
   const current = dashboardBuildPeriod_(year, month, scope, rows, metaByName, true);
   const previous = dashboardBuildPeriod_(previousPeriod.year, previousPeriod.month, scope, rows, metaByName, false);
 
-  return {
+  const result = {
     status: 'success',
     generatedAt: new Date().toISOString(),
+    cacheHit: false,
     scope: scope,
     scopeLabel: dashboardScopeLabel_(scope),
     period: {
@@ -1470,6 +1481,8 @@ function handleDashboardGetMonthlySummary_(payload) {
     unknowns: dashboardTopRows_(current.unknownItems, 20),
     monthSeries: dashboardBuildMonthSeries_(year, month, scope, rows, metaByName, 6)
   };
+  dashboardPutCached_(cacheKey, result);
+  return result;
 }
 
 function dashboardBuildPeriod_(year, month, scope, rows, metaByName, includeDaily) {
@@ -1510,6 +1523,30 @@ function dashboardBuildPeriod_(year, month, scope, rows, metaByName, includeDail
   period.summary.profit = period.summary.income - period.summary.expense;
   period.expenseCategories = dashboardFinalizeCategories_(period.categoryMap, period.summary.expense);
   return period;
+}
+
+function dashboardCacheKey_(year, month, scope) {
+  return ['dashboard', Number(year), String(Number(month)).padStart(2, '0'), scope || 'all'].join(':');
+}
+
+function dashboardGetCached_(cacheKey) {
+  try {
+    const text = CacheService.getScriptCache().get(cacheKey);
+    return text ? JSON.parse(text) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function dashboardPutCached_(cacheKey, result) {
+  try {
+    const text = JSON.stringify(result);
+    if (text.length <= 90000) {
+      CacheService.getScriptCache().put(cacheKey, text, 600);
+    }
+  } catch (err) {
+    // Cache is only an optimization. Dashboard correctness must not depend on it.
+  }
 }
 
 function dashboardExpenseEntryFromExpenseRow_(row, metaByName, sign, sourceType) {
