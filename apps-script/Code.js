@@ -1,5 +1,10 @@
 const CONFIG = {
-  branchName: 'สาขา 1',
+  branchName: 'ทาวน่า',
+  bigcBranchName: 'บิ๊กซีพัทยากลาง',
+  branchAliases: {
+    tawana: ['ทาวน่า', 'สาขา 1'],
+    bigc: ['บิ๊กซีพัทยากลาง', 'BigC', 'บิ๊กซี']
+  },
   sourceName: 'BOY Operation System:Tawana',
   spreadsheets: {
     master: '11LqJbnCQQvNIV8tNgoh2x_JGLZWofUaxrpzHUp6U-po',
@@ -297,11 +302,27 @@ function rowDateMatches_(rowDate, targetDate) {
 }
 
 function isTawanaBranch_(value) {
-  return normalizeText_(value) === CONFIG.branchName;
+  return canonicalBranch_(value) === CONFIG.branchName;
 }
 
 function isBranch_(value, branchName) {
-  return normalizeText_(value) === branchName;
+  return canonicalBranch_(value) === canonicalBranch_(branchName);
+}
+
+function canonicalBranch_(value) {
+  const text = normalizeText_(value);
+  const lower = text.toLowerCase();
+  if (!lower) return '';
+
+  const tawanaAliases = (CONFIG.branchAliases && CONFIG.branchAliases.tawana) || [];
+  const bigcAliases = (CONFIG.branchAliases && CONFIG.branchAliases.bigc) || [];
+  if (tawanaAliases.map(function(alias) { return normalizeText_(alias).toLowerCase(); }).indexOf(lower) !== -1) {
+    return CONFIG.branchName;
+  }
+  if (bigcAliases.map(function(alias) { return normalizeText_(alias).toLowerCase(); }).indexOf(lower) !== -1) {
+    return CONFIG.bigcBranchName;
+  }
+  return text;
 }
 
 function dailyCacheSheet_() {
@@ -325,7 +346,7 @@ function getDailyCache_(date, branchName) {
   const values = sh.getRange(2, 1, sh.getLastRow() - 1, 5).getValues();
   for (let i = values.length - 1; i >= 0; i--) {
     const row = values[i];
-    if (rowDateMatches_(row[0], key) && normalizeText_(row[1]) === branch) {
+    if (rowDateMatches_(row[0], key) && isBranch_(row[1], branch)) {
       return {
         rowNumber: i + 2,
         draft: normalizeText_(row[2]) || '{}',
@@ -872,7 +893,7 @@ function snapshotHasData_(snapshot) {
 
 function handleBigcExpenseLoadData_(date) {
   const scope = 'BigCExpense';
-  const branchName = 'BigC';
+  const branchName = CONFIG.bigcBranchName;
   const key = dateKey_(date);
   const expenseRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12);
   const snapshot = buildExpenseSnapshotForBranch_(key, branchName, expenseRows);
@@ -909,7 +930,7 @@ function handleBigcExpenseSubmit_(date, data) {
   try {
     const txId = Utilities.getUuid().slice(0, 8);
     replaceExpenseRowsForBranch_(date, data || {}, {
-      branchName: 'BigC',
+      branchName: CONFIG.bigcBranchName,
       sourceName: 'BOY Operation System:BigC Expense',
       idPrefix: 'BIGC-EXP',
       txId: txId
@@ -1071,7 +1092,7 @@ function handleBigcOrderReceive_(date, qtyData) {
     const dateObj = date ? parseDate_(date) : now_();
     const count = replaceBigcWithdrawalRows_(dateObj, qtyData, {
       sign: 1,
-      note: 'รับสินค้าเข้า BigC',
+      note: 'รับสินค้าเข้าบิ๊กซีพัทยากลาง',
       sourceName: 'BOY Operation System:BigC Receive',
       idPrefix: 'BIGC-WITHDRAW'
     });
@@ -1090,7 +1111,7 @@ function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
     const dateObj = date ? parseDate_(date) : now_();
     const returned = replaceBigcWithdrawalRows_(dateObj, qtyData, {
       sign: -1,
-      note: 'คืนของให้สาขา 1',
+      note: 'คืนของให้ทาวน่า',
       sourceName: 'BOY Operation System:BigC Return',
       idPrefix: 'BIGC-RETURN'
     });
@@ -1210,7 +1231,7 @@ function replaceBigcWithdrawalRows_(date, qtyData, options) {
   const metaByName = getDatabaseRowMap_();
 
   deleteRowsByPredicate_(sh, function(row) {
-    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], 'BigC') && normalizeText_(row[10]) === sourceName;
+    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], CONFIG.bigcBranchName) && normalizeText_(row[10]) === sourceName;
   });
 
   const rows = [];
@@ -1222,7 +1243,7 @@ function replaceBigcWithdrawalRows_(date, qtyData, options) {
     const meta = metaByName[resolved.name] || {};
     rows.push([
       dateObj,
-      'BigC',
+      CONFIG.bigcBranchName,
       resolved.name,
       resolved.unit,
       qty * sign,
@@ -1277,7 +1298,7 @@ function replaceBigcOrderIncomeRows_(date, cash, transfer) {
   const createdAt = now_();
 
   deleteRowsByPredicate_(sh, function(row) {
-    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], 'BigC') && normalizeText_(row[8]) === sourceName;
+    return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], CONFIG.bigcBranchName) && normalizeText_(row[8]) === sourceName;
   });
 
   const rows = [];
@@ -1292,7 +1313,7 @@ function addBigcIncomeRow_(rows, dateObj, subChannel, amount, suffix, txId, crea
   if (amountNumber === 0) return;
   rows.push([
     dateObj,
-    'BigC',
+    CONFIG.bigcBranchName,
     'หน้าร้าน',
     subChannel,
     amountNumber,
@@ -1513,7 +1534,7 @@ function dashboardBuildPeriod_(year, month, scope, rows, metaByName, includeDail
 
   rows.withdrawals.slice(1).forEach(function(row) {
     const info = dashboardDateInfo_(row[0], monthPrefix);
-    if (!info || !isBranch_(row[1], 'BigC')) return;
+    if (!info || !isBranch_(row[1], CONFIG.bigcBranchName)) return;
     const sign = dashboardWithdrawalSign_(scope);
     if (!sign) return;
     const entry = dashboardExpenseEntryFromWithdrawalRow_(row, metaByName, sign);
@@ -1526,7 +1547,7 @@ function dashboardBuildPeriod_(year, month, scope, rows, metaByName, includeDail
 }
 
 function dashboardCacheKey_(year, month, scope) {
-  return ['dashboard', Number(year), String(Number(month)).padStart(2, '0'), scope || 'all'].join(':');
+  return ['dashboard:v3', Number(year), String(Number(month)).padStart(2, '0'), scope || 'all'].join(':');
 }
 
 function dashboardGetCached_(cacheKey) {
@@ -1573,7 +1594,7 @@ function dashboardExpenseEntryFromWithdrawalRow_(row, metaByName, sign) {
   const category = dashboardResolveCategory_(row[7], '', meta);
   return {
     date: row[0],
-    branch: 'BigC',
+    branch: CONFIG.bigcBranchName,
     name: name || 'ไม่ระบุรายการ',
     unit: normalizeText_(row[3]),
     qty: toNumber_(row[4]) * sign,
@@ -1807,20 +1828,20 @@ function dashboardDateInfo_(value, monthPrefix) {
 function dashboardNormalizeScope_(scope) {
   const text = normalizeText_(scope).toLowerCase();
   if (text === 'tawana' || text === 'ทาวน่า' || text === 'สาขา 1') return 'tawana';
-  if (text === 'bigc' || text === 'big c') return 'bigc';
+  if (text === 'bigc' || text === 'big c' || text === 'บิ๊กซี' || text === 'บิ๊กซีพัทยากลาง') return 'bigc';
   return 'all';
 }
 
 function dashboardScopeLabel_(scope) {
   if (scope === 'tawana') return 'ทาวน่า';
-  if (scope === 'bigc') return 'BigC';
+  if (scope === 'bigc') return CONFIG.bigcBranchName;
   return 'รวม 2 สาขา';
 }
 
 function dashboardScopeIncludesBranch_(scope, branchName) {
-  if (scope === 'all') return isTawanaBranch_(branchName) || isBranch_(branchName, 'BigC');
+  if (scope === 'all') return isTawanaBranch_(branchName) || isBranch_(branchName, CONFIG.bigcBranchName);
   if (scope === 'tawana') return isTawanaBranch_(branchName);
-  if (scope === 'bigc') return isBranch_(branchName, 'BigC');
+  if (scope === 'bigc') return isBranch_(branchName, CONFIG.bigcBranchName);
   return false;
 }
 
@@ -1865,4 +1886,53 @@ function dashboardMonthLabel_(month) {
 function dashboardShortMonthLabel_(month) {
   const labels = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
   return labels[Number(month) - 1] || '';
+}
+
+function adminRenameBranchesOnce_() {
+  const sheets = [
+    CONFIG.sheets.income,
+    CONFIG.sheets.expenses,
+    CONFIG.sheets.withdrawals,
+    CONFIG.sheets.dailyCache
+  ];
+  const result = {};
+  sheets.forEach(function(sheetName) {
+    result[sheetName] = renameBranchColumnValues_(CONFIG.spreadsheets.transactions, sheetName);
+  });
+  return {
+    status: 'success',
+    renamedTo: {
+      tawana: CONFIG.branchName,
+      bigc: CONFIG.bigcBranchName
+    },
+    sheets: result
+  };
+}
+
+function renameBranchColumnValues_(spreadsheetId, sheetName) {
+  const ss = ss_(spreadsheetId);
+  const sh = ss.getSheetByName(sheetName);
+  if (!sh || sh.getLastRow() < 2) return { updated: 0, rows: 0 };
+
+  const rowCount = sh.getLastRow() - 1;
+  const range = sh.getRange(2, 2, rowCount, 1);
+  const values = range.getValues();
+  let updated = 0;
+  values.forEach(function(row) {
+    const current = normalizeText_(row[0]);
+    const next = branchRenameTarget_(current);
+    if (next && next !== current) {
+      row[0] = next;
+      updated++;
+    }
+  });
+  if (updated) range.setValues(values);
+  return { updated: updated, rows: rowCount };
+}
+
+function branchRenameTarget_(value) {
+  const text = normalizeText_(value);
+  if (text === 'สาขา 1') return CONFIG.branchName;
+  if (text === 'BigC') return CONFIG.bigcBranchName;
+  return '';
 }

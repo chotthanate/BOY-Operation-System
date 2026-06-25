@@ -6,12 +6,12 @@
   <meta name="theme-color" content="#f6c945">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="BigC Expense">
+  <meta name="apple-mobile-web-app-title" content="บิ๊กซีพัทยากลาง">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
-  <title>BigC | รายจ่าย</title>
+  <title>บิ๊กซีพัทยากลาง | รายจ่าย</title>
   <style>
     :root {
       --primary: #f2b705;
@@ -228,15 +228,15 @@
   <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
     <div class="app-switcher-title">เลือกใช้งาน</div>
     <a href="./tawana.html">ทาวน่า</a>
-    <a class="active" href="./bigc.html">BigC</a>
-    <a href="./bigc-order.html">รายการเบิกของ BigC</a>
+    <a class="active" href="./bigc.html">บิ๊กซีพัทยากลาง</a>
+    <a href="./bigc-order.html">รายการเบิกของบิ๊กซีพัทยากลาง</a>
     <a href="./dashboard.html">Dashboard</a>
     <a href="./index.html">หน้ารวม</a>
   </nav>
 
   <main>
     <div class="topbar">
-      <h1>BigC รายจ่าย</h1>
+      <h1>บิ๊กซีพัทยากลาง รายจ่าย</h1>
       <button class="settings-btn" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button>
     </div>
 
@@ -595,14 +595,14 @@
       if (!date) return;
       clearTimeout(timer);
       isLoadingData = true;
-      showLoading('กำลังโหลดรายจ่าย BigC');
+      showLoading('กำลังโหลดรายจ่ายบิ๊กซีพัทยากลาง');
       try {
         const res = await apiCall('bigcExpenseLoadData', { date });
         const snapshot = safeParse(res.draft, {});
         renderSnapshot(snapshot);
         if (res.submitted) document.getElementById('lockedOverlay').classList.remove('hidden');
         else document.getElementById('lockedOverlay').classList.add('hidden');
-        setStatus(res.submitted ? 'วันนี้มีข้อมูลที่บันทึกแล้ว' : 'พร้อมบันทึกรายจ่าย BigC');
+        setStatus(res.submitted ? 'วันนี้มีข้อมูลที่บันทึกแล้ว' : 'พร้อมบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
       } catch (e) {
         alert('โหลดข้อมูลไม่สำเร็จ: ' + e.message);
       } finally {
@@ -617,13 +617,13 @@
       const data = collectSnapshot();
       if (!data.exp.length) return alert('ยังไม่มีรายการรายจ่าย');
       clearTimeout(timer);
-      showLoading('กำลังบันทึกรายจ่าย BigC');
+      showLoading('กำลังบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
       try {
         const res = await apiCall('bigcExpenseSubmit', { date, data });
         if (res.status !== 'Success') throw new Error(res.message || res.status || 'บันทึกไม่สำเร็จ');
         document.getElementById('lockedOverlay').classList.remove('hidden');
         setStatus('บันทึกแล้ว');
-        alert('บันทึกรายจ่าย BigC เรียบร้อย');
+        alert('บันทึกรายจ่ายบิ๊กซีพัทยากลางเรียบร้อย');
       } catch (e) {
         alert('บันทึกไม่สำเร็จ: ' + e.message);
       } finally {
