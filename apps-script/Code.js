@@ -118,6 +118,9 @@ function doPost(e) {
       case 'bigcOrderReturn':
         result = handleBigcOrderReturn_(payload.date, payload.qtyData || {}, payload.cash, payload.transfer);
         break;
+      case 'dashboardGetMonthlySummary':
+        result = handleDashboardGetMonthlySummary_(payload);
+        break;
       default:
         result = { status: 'error', message: 'Action ไม่ถูกต้อง: ' + action };
     }
@@ -1424,4 +1427,405 @@ function getLeavesForMonth_(month, year) {
     });
   });
   return result;
+}
+
+function handleDashboardGetMonthlySummary_(payload) {
+  payload = payload || {};
+  const now = now_();
+  const year = Number(payload.year) || now.getFullYear();
+  const month = Math.min(12, Math.max(1, Number(payload.month) || (now.getMonth() + 1)));
+  const scope = dashboardNormalizeScope_(payload.branch || payload.scope || 'all');
+  const previousPeriod = dashboardShiftMonth_(year, month, -1);
+
+  const rows = {
+    income: tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income, 9),
+    expenses: tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12),
+    withdrawals: tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.withdrawals, 11)
+  };
+  const metaByName = getDatabaseRowMap_();
+  const current = dashboardBuildPeriod_(year, month, scope, rows, metaByName, true);
+  const previous = dashboardBuildPeriod_(previousPeriod.year, previousPeriod.month, scope, rows, metaByName, false);
+
+  return {
+    status: 'success',
+    generatedAt: new Date().toISOString(),
+    scope: scope,
+    scopeLabel: dashboardScopeLabel_(scope),
+    period: {
+      year: year,
+      month: month,
+      monthLabel: dashboardMonthLabel_(month),
+      daysInMonth: new Date(year, month, 0).getDate()
+    },
+    previousPeriod: {
+      year: previousPeriod.year,
+      month: previousPeriod.month,
+      monthLabel: dashboardMonthLabel_(previousPeriod.month)
+    },
+    summary: dashboardBuildSummary_(current.summary, previous.summary),
+    dailyIncome: current.dailyIncome,
+    expenseCategories: current.expenseCategories,
+    topRawMaterials: dashboardTopRows_(current.rawItems, 10),
+    rawMaterialIncreases: dashboardRawMaterialIncreases_(current.rawItems, previous.rawItems, 10),
+    unknowns: dashboardTopRows_(current.unknownItems, 20),
+    monthSeries: dashboardBuildMonthSeries_(year, month, scope, rows, metaByName, 6)
+  };
+}
+
+function dashboardBuildPeriod_(year, month, scope, rows, metaByName, includeDaily) {
+  const period = {
+    summary: { income: 0, expense: 0, profit: 0, rawMaterialExpense: 0, unknownAmount: 0, unknownCount: 0 },
+    dailyIncome: includeDaily ? dashboardEmptyDailyIncome_(year, month) : [],
+    categoryMap: {},
+    rawItems: {},
+    unknownItems: {}
+  };
+
+  const monthPrefix = monthKey_(year, month);
+  rows.income.slice(1).forEach(function(row) {
+    const info = dashboardDateInfo_(row[0], monthPrefix);
+    if (!info || !dashboardScopeIncludesBranch_(scope, row[1])) return;
+    const amount = toNumber_(row[4]);
+    if (!amount) return;
+    period.summary.income += amount;
+    if (includeDaily) dashboardAddDailyIncome_(period.dailyIncome[info.day - 1], row, amount);
+  });
+
+  rows.expenses.slice(1).forEach(function(row) {
+    const info = dashboardDateInfo_(row[0], monthPrefix);
+    if (!info || !dashboardScopeIncludesBranch_(scope, row[1])) return;
+    const entry = dashboardExpenseEntryFromExpenseRow_(row, metaByName, 1, 'actual');
+    dashboardAddExpenseEntry_(period, entry);
+  });
+
+  rows.withdrawals.slice(1).forEach(function(row) {
+    const info = dashboardDateInfo_(row[0], monthPrefix);
+    if (!info || !isBranch_(row[1], 'BigC')) return;
+    const sign = dashboardWithdrawalSign_(scope);
+    if (!sign) return;
+    const entry = dashboardExpenseEntryFromWithdrawalRow_(row, metaByName, sign);
+    dashboardAddExpenseEntry_(period, entry);
+  });
+
+  period.summary.profit = period.summary.income - period.summary.expense;
+  period.expenseCategories = dashboardFinalizeCategories_(period.categoryMap, period.summary.expense);
+  return period;
+}
+
+function dashboardExpenseEntryFromExpenseRow_(row, metaByName, sign, sourceType) {
+  const name = normalizeText_(row[2]);
+  const meta = metaByName[name] || {};
+  const category = dashboardResolveCategory_(row[7], row[8], meta);
+  return {
+    date: row[0],
+    branch: normalizeText_(row[1]),
+    name: name || 'ไม่ระบุรายการ',
+    unit: normalizeText_(row[3]),
+    qty: toNumber_(row[4]),
+    amount: toNumber_(row[6]) * sign,
+    mainType: category.mainType,
+    subType: category.subType,
+    unknown: category.unknown,
+    sourceType: sourceType || 'actual'
+  };
+}
+
+function dashboardExpenseEntryFromWithdrawalRow_(row, metaByName, sign) {
+  const name = normalizeText_(row[2]);
+  const meta = metaByName[name] || {};
+  const category = dashboardResolveCategory_(row[7], '', meta);
+  return {
+    date: row[0],
+    branch: 'BigC',
+    name: name || 'ไม่ระบุรายการ',
+    unit: normalizeText_(row[3]),
+    qty: toNumber_(row[4]) * sign,
+    amount: toNumber_(row[6]) * sign,
+    mainType: category.mainType,
+    subType: category.subType,
+    unknown: category.unknown,
+    sourceType: sign > 0 ? 'bigc-withdrawal' : 'tawana-transfer-out'
+  };
+}
+
+function dashboardAddExpenseEntry_(period, entry) {
+  if (!entry.name && !entry.amount) return;
+  period.summary.expense += entry.amount;
+
+  const main = entry.mainType || 'ไม่ระบุ';
+  const sub = entry.subType || 'ไม่ระบุ';
+  if (!period.categoryMap[main]) {
+    period.categoryMap[main] = { name: main, amount: 0, count: 0, subMap: {} };
+  }
+  const mainRow = period.categoryMap[main];
+  mainRow.amount += entry.amount;
+  mainRow.count += 1;
+
+  if (!mainRow.subMap[sub]) {
+    mainRow.subMap[sub] = { name: sub, amount: 0, count: 0, itemMap: {} };
+  }
+  const subRow = mainRow.subMap[sub];
+  subRow.amount += entry.amount;
+  subRow.count += 1;
+
+  if (!subRow.itemMap[entry.name]) {
+    subRow.itemMap[entry.name] = dashboardBlankItem_(entry.name);
+  }
+  dashboardAddItemValue_(subRow.itemMap[entry.name], entry);
+
+  if (main === 'วัตถุดิบ') {
+    period.summary.rawMaterialExpense += entry.amount;
+    if (!period.rawItems[entry.name]) period.rawItems[entry.name] = dashboardBlankItem_(entry.name);
+    dashboardAddItemValue_(period.rawItems[entry.name], entry);
+  }
+
+  if (entry.unknown) {
+    period.summary.unknownAmount += entry.amount;
+    period.summary.unknownCount += 1;
+    if (!period.unknownItems[entry.name]) period.unknownItems[entry.name] = dashboardBlankItem_(entry.name);
+    dashboardAddItemValue_(period.unknownItems[entry.name], entry);
+  }
+}
+
+function dashboardBlankItem_(name) {
+  return { name: name || 'ไม่ระบุรายการ', amount: 0, count: 0, qty: 0, unit: '', units: {} };
+}
+
+function dashboardAddItemValue_(target, entry) {
+  target.amount += entry.amount;
+  target.count += 1;
+  if (entry.unit) {
+    target.units[entry.unit] = (target.units[entry.unit] || 0) + entry.qty;
+  } else {
+    target.qty += entry.qty;
+  }
+}
+
+function dashboardResolveCategory_(mainValue, subValue, meta) {
+  const main = dashboardCleanType_(mainValue) || dashboardCleanType_(meta && meta.mainType) || 'ไม่ระบุ';
+  const sub = dashboardCleanType_(subValue) || dashboardCleanType_(meta && meta.subType) || 'ไม่ระบุ';
+  return {
+    mainType: main,
+    subType: sub,
+    unknown: main === 'ไม่ระบุ' || sub === 'ไม่ระบุ'
+  };
+}
+
+function dashboardCleanType_(value) {
+  const text = normalizeText_(value);
+  if (!text || text === 'ไม่พบข้อมูล' || text === 'ไม่ระบุ') return '';
+  return text;
+}
+
+function dashboardFinalizeCategories_(categoryMap, totalExpense) {
+  return Object.keys(categoryMap).map(function(mainName) {
+    const main = categoryMap[mainName];
+    const subcategories = Object.keys(main.subMap).map(function(subName) {
+      const sub = main.subMap[subName];
+      const items = dashboardTopRows_(sub.itemMap, 100);
+      return {
+        name: sub.name,
+        amount: dashboardRound_(sub.amount),
+        percent: dashboardPercent_(sub.amount, main.amount),
+        count: sub.count,
+        items: items
+      };
+    }).sort(function(a, b) { return b.amount - a.amount; });
+
+    return {
+      name: main.name,
+      amount: dashboardRound_(main.amount),
+      percent: dashboardPercent_(main.amount, totalExpense),
+      count: main.count,
+      subcategories: subcategories
+    };
+  }).sort(function(a, b) { return b.amount - a.amount; });
+}
+
+function dashboardTopRows_(itemMap, limit) {
+  return Object.keys(itemMap || {}).map(function(name) {
+    const item = itemMap[name];
+    return {
+      name: item.name,
+      amount: dashboardRound_(item.amount),
+      count: item.count,
+      qty: dashboardRound_(item.qty),
+      unitText: dashboardUnitText_(item.units)
+    };
+  }).filter(function(item) {
+    return item.amount !== 0 || item.count > 0;
+  }).sort(function(a, b) {
+    return b.amount - a.amount;
+  }).slice(0, limit || 10);
+}
+
+function dashboardRawMaterialIncreases_(currentMap, previousMap, limit) {
+  const seen = {};
+  Object.keys(currentMap || {}).forEach(function(name) { seen[name] = true; });
+  Object.keys(previousMap || {}).forEach(function(name) { seen[name] = true; });
+
+  return Object.keys(seen).map(function(name) {
+    const current = currentMap[name] ? currentMap[name].amount : 0;
+    const previous = previousMap[name] ? previousMap[name].amount : 0;
+    const change = current - previous;
+    return {
+      name: name,
+      current: dashboardRound_(current),
+      previous: dashboardRound_(previous),
+      change: dashboardRound_(change),
+      changePercent: dashboardPercent_(change, Math.abs(previous))
+    };
+  }).filter(function(row) {
+    return row.current > 0 && row.change > 0;
+  }).sort(function(a, b) {
+    return b.change - a.change;
+  }).slice(0, limit || 10);
+}
+
+function dashboardBuildMonthSeries_(year, month, scope, rows, metaByName, count) {
+  const output = [];
+  for (let i = (count || 6) - 1; i >= 0; i--) {
+    const period = dashboardShiftMonth_(year, month, -i);
+    const data = dashboardBuildPeriod_(period.year, period.month, scope, rows, metaByName, false);
+    output.push({
+      year: period.year,
+      month: period.month,
+      label: dashboardShortMonthLabel_(period.month),
+      income: dashboardRound_(data.summary.income),
+      expense: dashboardRound_(data.summary.expense),
+      profit: dashboardRound_(data.summary.profit)
+    });
+  }
+  return output;
+}
+
+function dashboardBuildSummary_(current, previous) {
+  return {
+    income: dashboardRound_(current.income),
+    expense: dashboardRound_(current.expense),
+    profit: dashboardRound_(current.profit),
+    rawMaterialExpense: dashboardRound_(current.rawMaterialExpense),
+    unknownAmount: dashboardRound_(current.unknownAmount),
+    unknownCount: current.unknownCount,
+    compare: {
+      income: dashboardCompare_(current.income, previous.income),
+      expense: dashboardCompare_(current.expense, previous.expense),
+      profit: dashboardCompare_(current.profit, previous.profit),
+      rawMaterialExpense: dashboardCompare_(current.rawMaterialExpense, previous.rawMaterialExpense)
+    }
+  };
+}
+
+function dashboardCompare_(current, previous) {
+  const change = current - previous;
+  return {
+    previous: dashboardRound_(previous),
+    change: dashboardRound_(change),
+    percent: dashboardPercent_(change, Math.abs(previous))
+  };
+}
+
+function dashboardEmptyDailyIncome_(year, month) {
+  const days = new Date(year, month, 0).getDate();
+  const rows = [];
+  for (let d = 1; d <= days; d++) {
+    rows.push({ day: d, cash: 0, transfer: 0, grab: 0, goku: 0, delivery: 0, other: 0, total: 0 });
+  }
+  return rows;
+}
+
+function dashboardAddDailyIncome_(daily, row, amount) {
+  const main = normalizeText_(row[2]).toLowerCase();
+  const sub = normalizeText_(row[3]).toLowerCase();
+  daily.total += amount;
+  if (main.indexOf('หน้าร้าน') !== -1 && sub.indexOf('สด') !== -1) {
+    daily.cash += amount;
+  } else if (main.indexOf('หน้าร้าน') !== -1 && (sub.indexOf('โอน') !== -1 || sub.indexOf('ธนาคาร') !== -1)) {
+    daily.transfer += amount;
+  } else if (main.indexOf('delivery') !== -1 && sub.indexOf('grab') !== -1) {
+    daily.grab += amount;
+    daily.delivery += amount;
+  } else if (main.indexOf('delivery') !== -1 && (sub.indexOf('goku') !== -1 || sub.indexOf('gokoo') !== -1)) {
+    daily.goku += amount;
+    daily.delivery += amount;
+  } else if (main.indexOf('delivery') !== -1) {
+    daily.delivery += amount;
+  } else {
+    daily.other += amount;
+  }
+}
+
+function dashboardDateInfo_(value, monthPrefix) {
+  if (isBlank_(value)) return null;
+  let key;
+  try {
+    key = dateKey_(value);
+  } catch (err) {
+    return null;
+  }
+  if (key.slice(0, 7) !== monthPrefix) return null;
+  return { key: key, day: Number(key.slice(8, 10)) };
+}
+
+function dashboardNormalizeScope_(scope) {
+  const text = normalizeText_(scope).toLowerCase();
+  if (text === 'tawana' || text === 'ทาวน่า' || text === 'สาขา 1') return 'tawana';
+  if (text === 'bigc' || text === 'big c') return 'bigc';
+  return 'all';
+}
+
+function dashboardScopeLabel_(scope) {
+  if (scope === 'tawana') return 'ทาวน่า';
+  if (scope === 'bigc') return 'BigC';
+  return 'รวม 2 สาขา';
+}
+
+function dashboardScopeIncludesBranch_(scope, branchName) {
+  if (scope === 'all') return isTawanaBranch_(branchName) || isBranch_(branchName, 'BigC');
+  if (scope === 'tawana') return isTawanaBranch_(branchName);
+  if (scope === 'bigc') return isBranch_(branchName, 'BigC');
+  return false;
+}
+
+function dashboardWithdrawalSign_(scope) {
+  if (scope === 'tawana') return -1;
+  if (scope === 'bigc') return 1;
+  return 0;
+}
+
+function dashboardShiftMonth_(year, month, offset) {
+  const d = new Date(Number(year), Number(month) - 1 + Number(offset || 0), 1);
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+function dashboardPercent_(value, total) {
+  const base = Number(total);
+  if (!base) return 0;
+  return Math.round((Number(value || 0) / base) * 10000) / 10000;
+}
+
+function dashboardRound_(value) {
+  const n = Number(value || 0);
+  return Math.round(n * 100) / 100;
+}
+
+function dashboardUnitText_(units) {
+  const keys = Object.keys(units || {}).filter(function(unit) {
+    return toNumber_(units[unit]) !== 0;
+  });
+  if (!keys.length) return '';
+  if (keys.length === 1) return dashboardRound_(units[keys[0]]) + ' ' + keys[0];
+  return keys.slice(0, 2).map(function(unit) {
+    return dashboardRound_(units[unit]) + ' ' + unit;
+  }).join(', ') + (keys.length > 2 ? '...' : '');
+}
+
+function dashboardMonthLabel_(month) {
+  const labels = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+  return labels[Number(month) - 1] || '';
+}
+
+function dashboardShortMonthLabel_(month) {
+  const labels = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  return labels[Number(month) - 1] || '';
 }

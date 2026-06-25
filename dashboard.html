@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Dashboard | BOY Operation System</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f8fb;
+      --surface: #ffffff;
+      --surface-soft: #f9fbfd;
+      --ink: #132033;
+      --muted: #66758a;
+      --line: #dce5ee;
+      --green: #14a05f;
+      --green-soft: #eaf8f1;
+      --amber: #f2a900;
+      --amber-soft: #fff6da;
+      --blue: #1772d0;
+      --blue-soft: #eef6ff;
+      --red: #e34b4b;
+      --red-soft: #fff0f0;
+      --violet: #8854d0;
+      --shadow: 0 14px 36px rgba(24, 39, 62, .08);
+      --radius: 8px;
+      --sidebar: 244px;
+    }
+
+    * { box-sizing: border-box; }
+    html { min-height: 100%; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, "Noto Sans Thai", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    button, input, select {
+      font: inherit;
+    }
+    button {
+      cursor: pointer;
+    }
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar) minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      padding: 24px 18px;
+      border-right: 1px solid var(--line);
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(14px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--green), #77c66e);
+      color: white;
+      font-weight: 900;
+      letter-spacing: 0;
+      box-shadow: 0 10px 22px rgba(20,160,95,.25);
+    }
+    .brand strong {
+      display: block;
+      font-size: 17px;
+      line-height: 1.2;
+    }
+    .brand span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    .nav {
+      display: grid;
+      gap: 6px;
+    }
+    .nav a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .nav a.active,
+    .nav a:hover {
+      color: var(--green);
+      background: var(--green-soft);
+    }
+    .nav .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: .7;
+    }
+    .help {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 20px;
+      padding: 14px;
+      border: 1px solid #bce7cf;
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #fff, #f2fbf7);
+      color: #23734c;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .main {
+      min-width: 0;
+      padding: 22px;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(24px, 2.2vw, 34px);
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .control-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .field {
+      display: grid;
+      gap: 4px;
+    }
+    .field label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .field input,
+    .field select {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      padding: 0 10px;
+      color: var(--ink);
+      font-weight: 700;
+      outline: none;
+    }
+    .branch-switch {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(92px, 1fr));
+      gap: 0;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f4f7fa;
+    }
+    .branch-switch button {
+      min-height: 34px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 900;
+      padding: 0 12px;
+      white-space: nowrap;
+    }
+    .branch-switch button.active {
+      color: white;
+      background: var(--green);
+      box-shadow: 0 8px 16px rgba(20,160,95,.24);
+    }
+    .refresh-btn {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      padding: 0 14px;
+      font-weight: 800;
+    }
+    .refresh-btn:hover {
+      color: var(--ink);
+      border-color: #b8c6d4;
+    }
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .metric {
+      min-height: 136px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .metric.income { border-color: #b9e8cc; }
+    .metric.expense { border-color: #f8d889; }
+    .metric.profit { border-color: #bad8f7; }
+    .metric.raw { border-color: #dbc6f5; }
+    .metric-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+      margin-bottom: 12px;
+    }
+    .metric-value {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      font-size: clamp(26px, 3vw, 36px);
+      line-height: 1.1;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+    .metric-value span {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+    .delta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: #f0f3f6;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .delta.up { color: #117a48; background: var(--green-soft); }
+    .delta.down { color: #b43a3a; background: var(--red-soft); }
+    .alert-panel {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+      border: 1px solid #ffc9c9;
+      border-radius: var(--radius);
+      background: var(--red-soft);
+      color: #842b2b;
+    }
+    .alert-panel.hidden { display: none; }
+    .alert-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: white;
+      color: var(--red);
+      font-weight: 900;
+      border: 1px solid #ffc9c9;
+    }
+    .alert-panel strong { display: block; font-size: 15px; }
+    .alert-panel span { color: #9c4a4a; font-size: 13px; }
+    .link-btn {
+      border: 0;
+      background: transparent;
+      color: var(--green);
+      font-weight: 900;
+      padding: 6px;
+    }
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.28fr) minmax(360px, .72fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px 8px;
+    }
+    .panel-title {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+    .panel-note {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .chart-wrap {
+      height: 300px;
+      padding: 8px 14px 16px;
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .wide {
+      grid-column: 1 / -1;
+    }
+    .split-panel {
+      display: grid;
+      grid-template-columns: minmax(260px, .78fr) minmax(0, 1fr);
+      gap: 16px;
+      padding: 0 18px 18px;
+    }
+    .donut-box {
+      height: 285px;
+      min-width: 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #edf1f5;
+      text-align: right;
+      vertical-align: middle;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    th {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: none;
+      font-weight: 900;
+      background: var(--surface-soft);
+    }
+    tr.clickable {
+      cursor: pointer;
+    }
+    tr.clickable:hover td {
+      background: #f8fbf9;
+    }
+    .rank {
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
+      margin-right: 8px;
+      border-radius: 999px;
+      background: #eef3f7;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .category-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .table-scroll {
+      overflow: auto;
+      max-height: 335px;
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .mini-list {
+      padding: 0 18px 18px;
+    }
+    .empty {
+      padding: 20px;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 700;
+    }
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, .25);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+      z-index: 80;
+    }
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(520px, 100vw);
+      height: 100vh;
+      background: white;
+      border-left: 1px solid var(--line);
+      box-shadow: -18px 0 50px rgba(24, 39, 62, .18);
+      transform: translateX(102%);
+      transition: transform .2s ease;
+      z-index: 90;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+    .drawer.open {
+      transform: translateX(0);
+    }
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .drawer-head h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+    .drawer-close {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      font-weight: 900;
+    }
+    .sub-tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .sub-tabs button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      color: var(--muted);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .sub-tabs button.active {
+      border-color: #9bdcbc;
+      background: var(--green-soft);
+      color: var(--green);
+    }
+    .drawer-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 18px 28px;
+    }
+    .drawer-summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .drawer-summary div {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-soft);
+    }
+    .drawer-summary span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .drawer-summary strong {
+      font-size: 16px;
+    }
+    .loading-layer {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      place-items: center;
+      background: rgba(245, 248, 251, .82);
+      backdrop-filter: blur(6px);
+    }
+    .loading-layer.show {
+      display: grid;
+    }
+    .skeleton-card {
+      width: min(720px, calc(100vw - 32px));
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: white;
+      box-shadow: var(--shadow);
+    }
+    .sk-line {
+      height: 14px;
+      margin: 10px 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #eef2f6 0%, #dfe7ef 45%, #eef2f6 90%);
+      background-size: 220% 100%;
+      animation: shimmer 1.1s linear infinite;
+    }
+    .sk-line.big { height: 30px; width: 48%; }
+    .sk-line.mid { width: 72%; }
+    .sk-line.short { width: 38%; }
+    @keyframes shimmer {
+      from { background-position: 120% 0; }
+      to { background-position: -120% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .drawer, .drawer-backdrop, .sk-line { transition: none; animation: none; }
+    }
+    @media (max-width: 1180px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar {
+        position: static;
+        height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .help { display: none; }
+      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .dashboard-grid, .two-col { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .main { padding: 14px; }
+      .topbar { grid-template-columns: 1fr; }
+      .control-panel { justify-content: stretch; }
+      .field { flex: 1 1 120px; }
+      .branch-switch { flex: 1 1 100%; grid-template-columns: repeat(3, 1fr); }
+      .metric-grid { grid-template-columns: 1fr; }
+      .split-panel { grid-template-columns: 1fr; }
+      .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .chart-wrap { height: 250px; }
+      .alert-panel { grid-template-columns: auto minmax(0, 1fr); }
+      .alert-panel .link-btn { grid-column: 1 / -1; justify-self: start; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">BOY</div>
+        <div>
+          <strong>BOY Operation</strong>
+          <span>รายงานสรุปรายเดือน</span>
+        </div>
+      </div>
+      <nav class="nav" aria-label="เมนูหลัก">
+        <a href="./index.html"><span class="dot"></span>หน้ารวม</a>
+        <a href="./tawana.html"><span class="dot"></span>ทาวน่า</a>
+        <a href="./bigc.html"><span class="dot"></span>BigC</a>
+        <a href="./bigc-order.html"><span class="dot"></span>รายการเบิกของ</a>
+        <a href="./dashboard.html" class="active"><span class="dot"></span>Dashboard</a>
+      </nav>
+      <div class="help">
+        ระบบนี้อ่านข้อมูลจาก BOY_Transactions แล้วสรุปตามเดือนและสาขาที่เลือก
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="topbar">
+        <div>
+          <h1>Dashboard รายเดือน</h1>
+          <div class="subtitle" id="reportSubtitle">กำลังเตรียมข้อมูล</div>
+        </div>
+        <div class="control-panel">
+          <div class="field">
+            <label for="yearInput">ปี</label>
+            <input id="yearInput" type="number" min="2024" max="2100" step="1">
+          </div>
+          <div class="field">
+            <label for="monthSelect">เดือน</label>
+            <select id="monthSelect"></select>
+          </div>
+          <div class="branch-switch" role="tablist" aria-label="เลือกสาขา">
+            <button type="button" data-branch="all">รวม 2 สาขา</button>
+            <button type="button" data-branch="tawana">ทาวน่า</button>
+            <button type="button" data-branch="bigc">BigC</button>
+          </div>
+          <button class="refresh-btn" type="button" id="refreshBtn">รีเฟรชข้อมูล</button>
+        </div>
+      </section>
+
+      <section class="metric-grid" aria-label="สรุปยอดรวม">
+        <div class="metric income">
+          <div class="metric-label">รายรับรวม</div>
+          <div class="metric-value" id="incomeValue">0 <span>บาท</span></div>
+          <div class="delta" id="incomeDelta">เทียบเดือนก่อน 0%</div>
+        </div>
+        <div class="metric expense">
+          <div class="metric-label">รายจ่ายรวม</div>
+          <div class="metric-value" id="expenseValue">0 <span>บาท</span></div>
+          <div class="delta" id="expenseDelta">เทียบเดือนก่อน 0%</div>
+        </div>
+        <div class="metric profit">
+          <div class="metric-label">กำไร/ขาดทุน</div>
+          <div class="metric-value" id="profitValue">0 <span>บาท</span></div>
+          <div class="delta" id="profitDelta">เทียบเดือนก่อน 0%</div>
+        </div>
+        <div class="metric raw">
+          <div class="metric-label">วัตถุดิบ</div>
+          <div class="metric-value" id="rawValue">0 <span>บาท</span></div>
+          <div class="delta" id="rawDelta">เทียบเดือนก่อน 0%</div>
+        </div>
+      </section>
+
+      <section class="alert-panel hidden" id="unknownAlert">
+        <div class="alert-icon">!</div>
+        <div>
+          <strong>มีรายการที่ยังไม่ระบุหมวด</strong>
+          <span id="unknownText">ตรวจฐานข้อมูลรายการใน BOY_Master</span>
+        </div>
+        <button class="link-btn" type="button" id="unknownBtn">ดูรายการ</button>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">รายรับรายวัน</h2>
+            <span class="panel-note">เงินสด / เงินโอน / Delivery</span>
+          </div>
+          <div class="chart-wrap"><canvas id="dailyIncomeChart"></canvas></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">เทียบย้อนหลัง 6 เดือน</h2>
+            <span class="panel-note">รายรับ รายจ่าย กำไร</span>
+          </div>
+          <div class="chart-wrap"><canvas id="monthCompareChart"></canvas></div>
+        </article>
+
+        <article class="panel wide">
+          <div class="panel-head">
+            <h2 class="panel-title">รายจ่ายแยกตามประเภท</h2>
+            <span class="panel-note">กดแถวเพื่อดูประเภทย่อยและรายการ</span>
+          </div>
+          <div class="split-panel">
+            <div class="donut-box"><canvas id="expenseDonutChart"></canvas></div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ประเภทหลัก</th>
+                    <th>ยอดเงิน</th>
+                    <th>%</th>
+                    <th>จำนวน</th>
+                  </tr>
+                </thead>
+                <tbody id="categoryBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="two-col">
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">Top 10 วัตถุดิบ</h2>
+            <span class="panel-note">รายจ่ายสูงสุดของเดือน</span>
+          </div>
+          <div class="mini-list table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>รายการ</th>
+                  <th>ยอดเงิน</th>
+                  <th>จำนวน</th>
+                </tr>
+              </thead>
+              <tbody id="topRawBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">วัตถุดิบที่เพิ่มขึ้นมากสุด</h2>
+            <span class="panel-note">เทียบเดือนก่อน</span>
+          </div>
+          <div class="mini-list table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>รายการ</th>
+                  <th>เพิ่มขึ้น</th>
+                  <th>%</th>
+                </tr>
+              </thead>
+              <tbody id="increaseBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="detailDrawer" aria-label="รายละเอียดรายจ่าย">
+    <div class="drawer-head">
+      <div>
+        <h2 id="drawerTitle">รายละเอียด</h2>
+        <div class="subtitle" id="drawerSubtitle"></div>
+      </div>
+      <button class="drawer-close" type="button" onclick="closeDrawer()" aria-label="ปิด">X</button>
+    </div>
+    <div class="sub-tabs" id="subTabs"></div>
+    <div class="drawer-body">
+      <div class="drawer-summary" id="drawerSummary"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>รายการ</th>
+            <th>ยอดเงิน</th>
+            <th>จำนวน</th>
+            <th>ครั้ง</th>
+          </tr>
+        </thead>
+        <tbody id="drawerItems"></tbody>
+      </table>
+    </div>
+  </aside>
+
+  <div class="loading-layer" id="loadingLayer" aria-live="polite">
+    <div class="skeleton-card">
+      <div class="sk-line big"></div>
+      <div class="sk-line mid"></div>
+      <div class="sk-line"></div>
+      <div class="sk-line"></div>
+      <div class="sk-line short"></div>
+    </div>
+  </div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
+    const STORE_KEY = "BOY_DASHBOARD_FILTERS";
+    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    const palette = ["#14a05f", "#4aa3df", "#f2a900", "#8854d0", "#ef6f6c", "#18a999", "#64748b", "#d1d5db", "#8bc34a", "#ff8a3d"];
+    const state = loadSavedState();
+    let dashboardData = null;
+    let selectedCategory = null;
+    let selectedSubIndex = 0;
+
+    document.addEventListener("DOMContentLoaded", init);
+
+    function init() {
+      const monthSelect = document.getElementById("monthSelect");
+      monthNames.forEach((name, index) => {
+        const option = document.createElement("option");
+        option.value = String(index + 1);
+        option.textContent = name;
+        monthSelect.appendChild(option);
+      });
+
+      document.getElementById("yearInput").value = state.year;
+      monthSelect.value = state.month;
+      setBranchButtons();
+
+      document.getElementById("yearInput").addEventListener("change", () => {
+        state.year = Number(document.getElementById("yearInput").value) || new Date().getFullYear();
+        saveState();
+        loadDashboard();
+      });
+      monthSelect.addEventListener("change", () => {
+        state.month = Number(monthSelect.value);
+        saveState();
+        loadDashboard();
+      });
+      document.querySelectorAll("[data-branch]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.branch = button.dataset.branch;
+          setBranchButtons();
+          saveState();
+          loadDashboard();
+        });
+      });
+      document.getElementById("refreshBtn").addEventListener("click", () => loadDashboard(true));
+      document.getElementById("unknownBtn").addEventListener("click", openUnknownDrawer);
+      window.addEventListener("resize", () => {
+        if (dashboardData) renderCharts(dashboardData);
+      });
+
+      loadDashboard();
+    }
+
+    function loadSavedState() {
+      const now = new Date();
+      const fallback = { year: now.getFullYear(), month: now.getMonth() + 1, branch: "all" };
+      try {
+        return Object.assign(fallback, JSON.parse(localStorage.getItem(STORE_KEY) || "{}"));
+      } catch (err) {
+        return fallback;
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    }
+
+    function setBranchButtons() {
+      document.querySelectorAll("[data-branch]").forEach(button => {
+        button.classList.toggle("active", button.dataset.branch === state.branch);
+      });
+    }
+
+    async function loadDashboard(force) {
+      showLoading(true);
+      try {
+        const data = await apiCall("dashboardGetMonthlySummary", {
+          year: state.year,
+          month: state.month,
+          branch: state.branch,
+          force: !!force
+        });
+        dashboardData = data;
+        renderDashboard(data);
+      } catch (err) {
+        renderError(err);
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    async function apiCall(action, payload = {}) {
+      const response = await fetch(WEB_APP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(Object.assign({ action }, payload))
+      });
+      const data = await response.json();
+      if (data.status !== "success") {
+        throw new Error(data.message || "โหลดข้อมูลไม่สำเร็จ");
+      }
+      return data;
+    }
+
+    function renderDashboard(data) {
+      const period = data.period || {};
+      document.getElementById("reportSubtitle").textContent =
+        `${data.scopeLabel || ""} | ${period.monthLabel || ""} ${period.year || ""} | อัปเดตล่าสุด ${formatDateTime(data.generatedAt)}`;
+
+      renderMetric("income", data.summary.income, data.summary.compare.income);
+      renderMetric("expense", data.summary.expense, data.summary.compare.expense);
+      renderMetric("profit", data.summary.profit, data.summary.compare.profit);
+      renderMetric("raw", data.summary.rawMaterialExpense, data.summary.compare.rawMaterialExpense);
+      renderUnknownAlert(data);
+      renderCategoryTable(data.expenseCategories || []);
+      renderTopRaw(data.topRawMaterials || []);
+      renderIncreases(data.rawMaterialIncreases || []);
+      renderCharts(data);
+    }
+
+    function renderMetric(type, value, compare) {
+      document.getElementById(`${type}Value`).innerHTML = `${formatMoney(value)} <span>บาท</span>`;
+      const el = document.getElementById(`${type}Delta`);
+      const change = compare ? compare.change : 0;
+      const percent = compare ? compare.percent : 0;
+      el.textContent = `เทียบเดือนก่อน ${change >= 0 ? "+" : ""}${formatMoney(change)} บาท (${formatSignedPercent(percent)})`;
+      el.className = `delta ${change > 0 ? "up" : change < 0 ? "down" : ""}`;
+      if (type === "expense" || type === "raw") {
+        el.className = `delta ${change > 0 ? "down" : change < 0 ? "up" : ""}`;
+      }
+    }
+
+    function renderUnknownAlert(data) {
+      const alert = document.getElementById("unknownAlert");
+      const count = data.summary.unknownCount || 0;
+      const amount = data.summary.unknownAmount || 0;
+      alert.classList.toggle("hidden", count === 0);
+      document.getElementById("unknownText").textContent =
+        `${count} รายการ รวม ${formatMoney(amount)} บาท ควรกลับไปแก้หมวดใน Database`;
+    }
+
+    function renderCategoryTable(categories) {
+      const body = document.getElementById("categoryBody");
+      if (!categories.length) {
+        body.innerHTML = `<tr><td colspan="4" class="empty">ยังไม่มีข้อมูลรายจ่าย</td></tr>`;
+        return;
+      }
+      body.innerHTML = categories.map((cat, index) => `
+        <tr class="clickable" onclick="openCategoryDrawer(${index})">
+          <td><span class="category-dot" style="background:${palette[index % palette.length]}"></span>${escapeHtml(cat.name)}</td>
+          <td>${formatMoney(cat.amount)}</td>
+          <td>${formatPercent(cat.percent)}</td>
+          <td>${cat.count || 0}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderTopRaw(rows) {
+      const body = document.getElementById("topRawBody");
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="3" class="empty">ยังไม่มีข้อมูลวัตถุดิบ</td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.map((row, index) => `
+        <tr>
+          <td><span class="rank">${index + 1}</span>${escapeHtml(row.name)}</td>
+          <td>${formatMoney(row.amount)}</td>
+          <td>${escapeHtml(row.unitText || "-")}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderIncreases(rows) {
+      const body = document.getElementById("increaseBody");
+      if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="3" class="empty">ยังไม่มีรายการที่เพิ่มขึ้น</td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.map((row, index) => `
+        <tr>
+          <td><span class="rank">${index + 1}</span>${escapeHtml(row.name)}</td>
+          <td style="color:#b43a3a;font-weight:900">+${formatMoney(row.change)}</td>
+          <td>${formatSignedPercent(row.changePercent)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderCharts(data) {
+      drawDailyIncomeChart(document.getElementById("dailyIncomeChart"), data.dailyIncome || []);
+      drawMonthCompareChart(document.getElementById("monthCompareChart"), data.monthSeries || []);
+      drawDonutChart(document.getElementById("expenseDonutChart"), data.expenseCategories || []);
+    }
+
+    function drawDailyIncomeChart(canvas, rows) {
+      const ctx = setupCanvas(canvas);
+      const { width, height } = canvas.getBoundingClientRect();
+      clearCanvas(ctx, width, height);
+      if (!rows.length) return drawEmptyChart(ctx, width, height, "ยังไม่มีข้อมูลรายรับ");
+
+      const pad = { l: 42, r: 18, t: 18, b: 34 };
+      const chartW = width - pad.l - pad.r;
+      const chartH = height - pad.t - pad.b;
+      const max = Math.max(1, ...rows.map(r => r.total || 0));
+      drawGrid(ctx, pad, chartW, chartH, max);
+      const barW = Math.max(4, chartW / rows.length * .58);
+      rows.forEach((row, i) => {
+        const x = pad.l + i * chartW / rows.length + (chartW / rows.length - barW) / 2;
+        let y = pad.t + chartH;
+        [
+          ["cash", "#14a05f"],
+          ["transfer", "#f2a900"],
+          ["delivery", "#1772d0"],
+          ["other", "#aeb8c4"]
+        ].forEach(([key, color]) => {
+          const h = chartH * (row[key] || 0) / max;
+          y -= h;
+          ctx.fillStyle = color;
+          ctx.fillRect(x, y, barW, h);
+        });
+        if (i % 2 === 0 || rows.length <= 16) {
+          ctx.fillStyle = "#66758a";
+          ctx.font = "11px Arial";
+          ctx.textAlign = "center";
+          ctx.fillText(row.day, x + barW / 2, height - 10);
+        }
+      });
+
+      ctx.beginPath();
+      rows.forEach((row, i) => {
+        const x = pad.l + i * chartW / rows.length + chartW / rows.length / 2;
+        const y = pad.t + chartH - chartH * (row.total || 0) / max;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = "#0d7f49";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
+    function drawMonthCompareChart(canvas, rows) {
+      const ctx = setupCanvas(canvas);
+      const { width, height } = canvas.getBoundingClientRect();
+      clearCanvas(ctx, width, height);
+      if (!rows.length) return drawEmptyChart(ctx, width, height, "ยังไม่มีข้อมูลเปรียบเทียบ");
+      const pad = { l: 46, r: 20, t: 18, b: 36 };
+      const chartW = width - pad.l - pad.r;
+      const chartH = height - pad.t - pad.b;
+      const max = Math.max(1, ...rows.flatMap(r => [r.income || 0, r.expense || 0]));
+      drawGrid(ctx, pad, chartW, chartH, max);
+      const groupW = chartW / rows.length;
+      const barW = Math.max(8, groupW * .22);
+      rows.forEach((row, i) => {
+        const baseX = pad.l + i * groupW + groupW / 2;
+        drawBar(ctx, baseX - barW - 2, pad.t, chartH, barW, row.income, max, "#14a05f");
+        drawBar(ctx, baseX + 2, pad.t, chartH, barW, row.expense, max, "#f2a900");
+        ctx.fillStyle = row.profit >= 0 ? "#1772d0" : "#e34b4b";
+        ctx.fillRect(baseX - barW, pad.t + chartH - 4, barW * 2, 4);
+        ctx.fillStyle = "#66758a";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(row.label, baseX, height - 12);
+      });
+    }
+
+    function drawDonutChart(canvas, categories) {
+      const ctx = setupCanvas(canvas);
+      const { width, height } = canvas.getBoundingClientRect();
+      clearCanvas(ctx, width, height);
+      const rows = categories.filter(row => row.amount > 0).slice(0, 8);
+      if (!rows.length) return drawEmptyChart(ctx, width, height, "ยังไม่มีข้อมูลรายจ่าย");
+      const total = rows.reduce((sum, row) => sum + row.amount, 0);
+      const cx = width / 2;
+      const cy = height / 2;
+      const radius = Math.min(width, height) * .32;
+      const hole = radius * .58;
+      let start = -Math.PI / 2;
+      rows.forEach((row, i) => {
+        const angle = (row.amount / total) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, start, start + angle);
+        ctx.closePath();
+        ctx.fillStyle = palette[i % palette.length];
+        ctx.fill();
+        start += angle;
+      });
+      ctx.beginPath();
+      ctx.arc(cx, cy, hole, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.fillStyle = "#132033";
+      ctx.textAlign = "center";
+      ctx.font = "900 22px Arial";
+      ctx.fillText(formatMoney(total), cx, cy - 2);
+      ctx.fillStyle = "#66758a";
+      ctx.font = "12px Arial";
+      ctx.fillText("บาท", cx, cy + 18);
+    }
+
+    function drawBar(ctx, x, top, chartH, barW, value, max, color) {
+      const h = chartH * Math.max(0, value || 0) / max;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, top + chartH - h, barW, h);
+    }
+
+    function drawGrid(ctx, pad, chartW, chartH, max) {
+      ctx.strokeStyle = "#e9eef3";
+      ctx.lineWidth = 1;
+      ctx.fillStyle = "#66758a";
+      ctx.font = "11px Arial";
+      ctx.textAlign = "right";
+      for (let i = 0; i <= 4; i++) {
+        const y = pad.t + chartH * i / 4;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, y);
+        ctx.lineTo(pad.l + chartW, y);
+        ctx.stroke();
+        const label = max * (1 - i / 4);
+        ctx.fillText(shortMoney(label), pad.l - 8, y + 4);
+      }
+    }
+
+    function setupCanvas(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      const ctx = canvas.getContext("2d");
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      return ctx;
+    }
+
+    function clearCanvas(ctx, width, height) {
+      ctx.clearRect(0, 0, width, height);
+    }
+
+    function drawEmptyChart(ctx, width, height, text) {
+      ctx.fillStyle = "#66758a";
+      ctx.font = "700 14px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(text, width / 2, height / 2);
+    }
+
+    function openCategoryDrawer(index) {
+      const categories = dashboardData ? dashboardData.expenseCategories || [] : [];
+      selectedCategory = categories[index];
+      selectedSubIndex = 0;
+      renderDrawer();
+      openDrawer();
+    }
+
+    function openUnknownDrawer() {
+      selectedCategory = {
+        name: "หมวดไม่ระบุ",
+        amount: dashboardData.summary.unknownAmount,
+        percent: 0,
+        count: dashboardData.summary.unknownCount,
+        subcategories: [{
+          name: "รายการที่ควรแก้ใน Database",
+          amount: dashboardData.summary.unknownAmount,
+          percent: 1,
+          count: dashboardData.summary.unknownCount,
+          items: dashboardData.unknowns || []
+        }]
+      };
+      selectedSubIndex = 0;
+      renderDrawer();
+      openDrawer();
+    }
+
+    function renderDrawer() {
+      if (!selectedCategory) return;
+      const subs = selectedCategory.subcategories || [];
+      const selectedSub = subs[selectedSubIndex] || subs[0] || { items: [] };
+      document.getElementById("drawerTitle").textContent = selectedCategory.name;
+      document.getElementById("drawerSubtitle").textContent = `${formatMoney(selectedCategory.amount)} บาท | ${selectedCategory.count || 0} รายการ`;
+      document.getElementById("subTabs").innerHTML = subs.map((sub, index) => `
+        <button type="button" class="${index === selectedSubIndex ? "active" : ""}" onclick="selectSubcategory(${index})">
+          ${escapeHtml(sub.name)}
+        </button>
+      `).join("");
+      document.getElementById("drawerSummary").innerHTML = `
+        <div><span>ประเภทย่อย</span><strong>${escapeHtml(selectedSub.name || "-")}</strong></div>
+        <div><span>ยอดเงิน</span><strong>${formatMoney(selectedSub.amount || 0)}</strong></div>
+        <div><span>สัดส่วน</span><strong>${formatPercent(selectedSub.percent || 0)}</strong></div>
+      `;
+      const items = selectedSub.items || [];
+      document.getElementById("drawerItems").innerHTML = items.length ? items.map(item => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td>${formatMoney(item.amount)}</td>
+          <td>${escapeHtml(item.unitText || "-")}</td>
+          <td>${item.count || 0}</td>
+        </tr>
+      `).join("") : `<tr><td colspan="4" class="empty">ไม่มีรายการในหมวดนี้</td></tr>`;
+    }
+
+    function selectSubcategory(index) {
+      selectedSubIndex = index;
+      renderDrawer();
+    }
+
+    function openDrawer() {
+      document.getElementById("detailDrawer").classList.add("open");
+      document.getElementById("drawerBackdrop").classList.add("open");
+    }
+
+    function closeDrawer() {
+      document.getElementById("detailDrawer").classList.remove("open");
+      document.getElementById("drawerBackdrop").classList.remove("open");
+    }
+
+    function renderError(err) {
+      document.getElementById("reportSubtitle").textContent = err.message || "โหลดข้อมูลไม่สำเร็จ";
+      ["income", "expense", "profit", "raw"].forEach(type => renderMetric(type, 0, { change: 0, percent: 0 }));
+      document.getElementById("categoryBody").innerHTML = `<tr><td colspan="4" class="empty">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(err.message || "")}</td></tr>`;
+      document.getElementById("topRawBody").innerHTML = `<tr><td colspan="3" class="empty">ยังไม่มีข้อมูล</td></tr>`;
+      document.getElementById("increaseBody").innerHTML = `<tr><td colspan="3" class="empty">ยังไม่มีข้อมูล</td></tr>`;
+    }
+
+    function showLoading(show) {
+      document.getElementById("loadingLayer").classList.toggle("show", !!show);
+    }
+
+    function formatMoney(value) {
+      return new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(Number(value || 0));
+    }
+
+    function shortMoney(value) {
+      const n = Number(value || 0);
+      if (Math.abs(n) >= 1000000) return `${Math.round(n / 1000000)}M`;
+      if (Math.abs(n) >= 1000) return `${Math.round(n / 1000)}K`;
+      return String(Math.round(n));
+    }
+
+    function formatPercent(value) {
+      const n = Number(value || 0) * 100;
+      return `${n.toFixed(1)}%`;
+    }
+
+    function formatSignedPercent(value) {
+      const n = Number(value || 0) * 100;
+      return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "-";
+      return date.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
