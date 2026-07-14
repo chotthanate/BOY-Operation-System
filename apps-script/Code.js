@@ -18,11 +18,11 @@ const CONFIG = {
     expenseCategories: 'ประเภทค่าใช้จ่าย',
     income: 'รายรับ',
     expenses: 'รายจ่าย',
-    withdrawals: 'รายการเบิกของ',
+    withdrawals: 'ประวัติเบิกของ',
     dailyCache: 'แคชรายวัน',
     leave: 'การลาพนักงาน',
     salary: 'สรุปเงินเดือน',
-    bigcOrderMenu: 'เมนูเบิกของ BigC'
+    bigcOrderMenu: 'รายการเบิกของ'
   }
 };
 
@@ -113,6 +113,9 @@ function doPost(e) {
         break;
       case 'bigcOrderSaveDB':
         result = handleBigcOrderSaveDb_(payload.database || {});
+        break;
+      case 'bigcOrderRebuildMenuFromMaster':
+        result = handleBigcOrderRebuildMenuFromMaster_();
         break;
       case 'bigcOrderSubmitOrder':
         result = handleBigcOrderSubmitOrder_(payload.date, payload.qtyData || {}, payload.categories || {});
@@ -1032,7 +1035,7 @@ function handleBigcOrderAutoSave_(draftData) {
 }
 
 function handleBigcOrderSaveDb_(database) {
-  const headers = ['หมวดหมู่', 'รายการที่แสดง', 'รายการในชีท', 'ชั่งน้ำหนัก', 'ลำดับ', 'เปิดใช้งาน', 'อัปเดตเมื่อ'];
+  const headers = ['หมวดหมู่', 'รายการเบิก/คืน', 'อ้างอิงรายการจริง', 'หน่วยกรอก', 'วิธีคิดต้นทุน', 'ใช้ UW', 'UW ที่ใช้', 'เปิดใช้งาน', 'หมายเหตุ', 'อัปเดตเมื่อ'];
   const sh = ensureSheet_(CONFIG.spreadsheets.master, CONFIG.sheets.bigcOrderMenu, headers);
   const categories = database.categories || {};
   const weightSet = {};
@@ -1047,18 +1050,25 @@ function handleBigcOrderSaveDb_(database) {
     (categories[category] || []).forEach(function(item, index) {
       const displayItem = normalizeText_(item);
       if (!displayItem) return;
+      const parsed = parseBigcOrderDisplayItem_(displayItem);
+      const unit = parsed.unit || '';
+      const usesWeight = !!weightSet[displayItem] || isWeightUnit_(unit);
       rows.push([
         category,
         displayItem,
-        mappings[displayItem] || '',
-        !!weightSet[displayItem],
-        index + 1,
+        mappings[displayItem] || parsed.name || displayItem,
+        unit,
+        usesWeight ? 'น้ำหนักพร้อมใช้ / UW' : 'จำนวน x ราคาเฉลี่ย',
+        usesWeight,
+        usesWeight ? 'UW เนื้อ/ปั่น' : 'ไม่ใช้',
         true,
+        '',
         updatedAt
       ]);
     });
   });
 
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations();
   sh.clearContents();
   sh.getRange(1, 1, 1, headers.length).setValues([headers]);
   appendRows_(sh, rows);
@@ -1067,6 +1077,111 @@ function handleBigcOrderSaveDb_(database) {
     status: 'success',
     database: readBigcOrderMenu_() || database
   };
+}
+
+function handleBigcOrderRebuildMenuFromMaster_() {
+  const headers = ['หมวดหมู่', 'รายการเบิก/คืน', 'อ้างอิงรายการจริง', 'หน่วยกรอก', 'วิธีคิดต้นทุน', 'ใช้ UW', 'UW ที่ใช้', 'เปิดใช้งาน', 'หมายเหตุ', 'อัปเดตเมื่อ'];
+  const sh = ensureSheet_(CONFIG.spreadsheets.master, CONFIG.sheets.bigcOrderMenu, headers);
+  const database = buildBigcOrderDatabaseFromMaster_();
+  const specialRows = getBigcSpecialWithdrawalRows_();
+  const specialNames = {};
+  const rows = [];
+  const rowsByDisplayName = {};
+  const updatedAt = new Date();
+
+  specialRows.forEach(function(row) {
+    specialNames[normalizeText_(row[1])] = true;
+  });
+
+  function addRow(row) {
+    const displayName = normalizeText_(row[1]);
+    if (!displayName || rowsByDisplayName[displayName]) return;
+    rowsByDisplayName[displayName] = true;
+    rows.push(row);
+  }
+
+  Object.keys(database.categories || {}).forEach(function(category) {
+    (database.categories[category] || []).forEach(function(displayItem) {
+      const displayName = normalizeText_(displayItem);
+      if (!displayName || isGeneratedSpecialDuplicate_(displayName, specialNames)) return;
+
+      const parsed = parseBigcOrderDisplayItem_(displayName);
+      const unit = parsed.unit || '';
+      const usesWeight = isWeightUnit_(unit);
+      addRow([
+        category,
+        displayName,
+        parsed.name || displayName,
+        unit,
+        usesWeight ? 'น้ำหนักพร้อมใช้ / UW' : 'จำนวน x ราคาเฉลี่ย',
+        usesWeight,
+        usesWeight ? 'UW เนื้อ/ปั่น' : 'ไม่ใช้',
+        true,
+        '',
+        updatedAt
+      ]);
+    });
+  });
+
+  specialRows.forEach(function(row) {
+    const displayName = normalizeText_(row[1]);
+    const existingIndex = rows.findIndex(function(existing) {
+      return normalizeText_(existing[1]) === displayName;
+    });
+    if (existingIndex !== -1) {
+      rows.splice(existingIndex, 1);
+      delete rowsByDisplayName[displayName];
+    }
+    row[9] = updatedAt;
+    addRow(row);
+  });
+
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).clearDataValidations();
+  sh.clearContents();
+  sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+  appendRows_(sh, rows);
+  formatBigcOrderMenuSheet_(sh, headers.length);
+
+  return {
+    status: 'success',
+    saved: rows.length,
+    database: readBigcOrderMenu_()
+  };
+}
+
+function getBigcSpecialWithdrawalRows_() {
+  return [
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'อโวคาโด (กล่อง)', 'อโวคาโด', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ผลไม้ปอก/พร้อมใช้สำหรับ BigC', ''],
+    ['🍉 ผลไม้ (ลูก)', 'แตงโม (ลูก)', 'แตงโม', 'ลูก', 'จำนวน x ราคาเฉลี่ย', false, 'ไม่ใช้', true, 'เบิกเป็นลูก ไม่ชั่งน้ำหนัก', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'แตงโม (กล่อง)', 'แตงโม', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกแล้ว/พร้อมใช้', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'สับปะรด (กล่อง)', 'สับปะรด', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกเอาตาออก/พร้อมปั่น', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'มะพร้าว (กล่อง)', 'มะพร้าว', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'เนื้อมะพร้าวพร้อมใช้', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'มะม่วง (กล่อง)', 'มะม่วง', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกแล้ว/พร้อมใช้', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'เสาวรส (ถุง)', 'เสาวรส', 'กก.', 'ปริมาณน้ำ/เนื้อ / UW', true, 'UW คั้น/สกัดตรง', true, 'ควักแล้ว/พร้อมใช้', ''],
+    ['🥥 น้ำผลไม้', 'น้ำมะพร้าว', 'มะพร้าว', 'ml', 'ปริมาณน้ำ / UW', true, 'UW คั้น/สกัดตรง', true, 'น้ำมะพร้าวที่แยกออกมา', ''],
+    ['🥥 น้ำผลไม้', 'น้ำมะนาว', 'มะนาว', 'ml', 'ปริมาณน้ำ / UW', true, 'UW คั้น/สกัดตรง', true, 'น้ำมะนาวคั้น', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'มะละกอ (กล่อง)', 'มะละกอ', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกแล้ว/พร้อมใช้', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'เมลอน (กล่อง)', 'เมล่อน', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกแล้ว/พร้อมใช้', ''],
+    ['🍉 ผลไม้ (ใส่กล่อง)', 'แคนตาลูป (กล่อง)', 'แคนตาลูป', 'กก.', 'น้ำหนักพร้อมใช้ / UW', true, 'UW เนื้อ/ปั่น', true, 'ปอกแล้ว/พร้อมใช้', '']
+  ];
+}
+
+function isGeneratedSpecialDuplicate_(displayName, specialNames) {
+  const text = normalizeText_(displayName);
+  return Object.keys(specialNames).some(function(specialName) {
+    return text === specialName || text.indexOf(specialName + ' (') === 0;
+  });
+}
+
+function formatBigcOrderMenuSheet_(sh, columnCount) {
+  sh.setFrozenRows(1);
+  sh.getRange(1, 1, 1, columnCount)
+    .setBackground('#1f4e79')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setWrap(true);
+  sh.autoResizeColumns(1, columnCount);
 }
 
 function handleBigcOrderSubmitOrder_(date, qtyData, categories) {
@@ -1129,7 +1244,9 @@ function readBigcOrderMenu_() {
   const sh = ss.getSheetByName(CONFIG.sheets.bigcOrderMenu);
   if (!sh || sh.getLastRow() < 2) return null;
 
-  const values = sh.getRange(1, 1, sh.getLastRow(), 7).getValues();
+  const values = sh.getRange(1, 1, sh.getLastRow(), Math.min(sh.getLastColumn(), 10)).getValues();
+  const headers = (values[0] || []).map(function(cell) { return normalizeText_(cell); });
+  const isNewSchema = headers[0] === 'หมวดหมู่' && headers[1] === 'รายการเบิก/คืน';
   const categories = {};
   const weightItems = [];
   const itemMappings = {};
@@ -1139,15 +1256,24 @@ function readBigcOrderMenu_() {
     const category = normalizeText_(row[0]);
     const item = normalizeText_(row[1]);
     if (!category || !item) return;
-    if (toBool_(row[5], true) === false) return;
+    if (isNewSchema && toBool_(row[7], true) === false) return;
+    if (!isNewSchema && toBool_(row[5], true) === false) return;
 
     if (!categories[category]) categories[category] = [];
     categories[category].push(item);
-    if (toBool_(row[3], false)) weightItems.push(item);
+    if (isNewSchema) {
+      const method = normalizeText_(row[4]);
+      const unit = normalizeText_(row[3]);
+      if (toBool_(row[5], false) || isWeightUnit_(unit) || method.indexOf('UW') !== -1) weightItems.push(item);
 
-    const sheetItem = normalizeText_(row[2]);
-    if (sheetItem && sheetItem !== item) itemMappings[item] = sheetItem;
-    if (row[6]) updatedAt = row[6] instanceof Date ? row[6].toISOString() : normalizeText_(row[6]);
+      if (row[9]) updatedAt = row[9] instanceof Date ? row[9].toISOString() : normalizeText_(row[9]);
+    } else {
+      if (toBool_(row[3], false)) weightItems.push(item);
+
+      const sheetItem = normalizeText_(row[2]);
+      if (sheetItem && sheetItem !== item) itemMappings[item] = sheetItem;
+      if (row[6]) updatedAt = row[6] instanceof Date ? row[6].toISOString() : normalizeText_(row[6]);
+    }
   });
 
   return {
@@ -1229,6 +1355,7 @@ function replaceBigcWithdrawalRows_(date, qtyData, options) {
   const note = normalizeText_(options.note);
   const txId = Utilities.getUuid().slice(0, 8);
   const metaByName = getDatabaseRowMap_();
+  const orderItemMap = getBigcOrderItemMap_();
 
   deleteRowsByPredicate_(sh, function(row) {
     return rowDateMatches_(row[0], dateObj) && isBranch_(row[1], CONFIG.bigcBranchName) && normalizeText_(row[10]) === sourceName;
@@ -1239,7 +1366,7 @@ function replaceBigcWithdrawalRows_(date, qtyData, options) {
     const qty = toNumber_(qtyData[rawName]);
     if (qty === 0) return;
 
-    const resolved = resolveBigcOrderItem_(rawName, metaByName);
+    const resolved = resolveBigcOrderItem_(rawName, metaByName, orderItemMap);
     const meta = metaByName[resolved.name] || {};
     rows.push([
       dateObj,
@@ -1260,8 +1387,39 @@ function replaceBigcWithdrawalRows_(date, qtyData, options) {
   return rows.length;
 }
 
-function resolveBigcOrderItem_(rawName, metaByName) {
+function getBigcOrderItemMap_() {
+  const ss = ss_(CONFIG.spreadsheets.master);
+  const sh = ss.getSheetByName(CONFIG.sheets.bigcOrderMenu);
+  if (!sh || sh.getLastRow() < 2) return {};
+
+  const values = sh.getRange(1, 1, sh.getLastRow(), Math.min(sh.getLastColumn(), 10)).getValues();
+  const headers = (values[0] || []).map(function(cell) { return normalizeText_(cell); });
+  if (!(headers[0] === 'หมวดหมู่' && headers[1] === 'รายการเบิก/คืน')) return {};
+
+  const map = {};
+  values.slice(1).forEach(function(row) {
+    if (toBool_(row[7], true) === false) return;
+    const displayName = normalizeText_(row[1]);
+    if (!displayName) return;
+    const parsed = parseBigcOrderDisplayItem_(displayName);
+    map[displayName] = {
+      name: normalizeText_(row[2]) || parsed.name || displayName,
+      unit: normalizeText_(row[3]) || parsed.unit || ''
+    };
+  });
+  return map;
+}
+
+function resolveBigcOrderItem_(rawName, metaByName, orderItemMap) {
   const original = normalizeText_(rawName);
+  const mapped = (orderItemMap || {})[original];
+  if (mapped && mapped.name) {
+    return {
+      name: mapped.name,
+      unit: mapped.unit || getDefaultUnitForItem_(mapped.name)
+    };
+  }
+
   if (metaByName[original]) {
     return {
       name: original,
