@@ -1,0 +1,100 @@
+# BOY Operation System: Working Across PC and Mac
+
+ไฟล์นี้เป็นกติกาการทำงานของ Codex ใน repository นี้ เพื่อให้ผู้ใช้สลับทำงานระหว่าง PC และ Mac ผ่าน GitHub ได้อย่างปลอดภัย โดยถือว่าผู้ใช้จะไม่แก้ repository นี้พร้อมกันสองเครื่อง
+
+## หลักทั่วไป
+
+- ทำงานบน branch ปัจจุบันที่ผู้ใช้ใช้อยู่ และตรวจ upstream ก่อน pull หรือ push ทุกครั้ง
+- ห้ามใช้ `git push --force`, `git push --force-with-lease` หรือ force push ทุกรูปแบบ
+- ห้ามใช้คำสั่งลบหรือเขียนทับงานเพื่อแก้ปัญหาเอง เช่น `git reset --hard`, `git clean -fd`, `git checkout -- <file>` หรือ `git restore <file>`
+- ห้ามทิ้ง แก้ทับ stash หรือย้ายงานที่ยังไม่ได้บันทึกโดยไม่ได้รับคำสั่งชัดเจนจากผู้ใช้
+- ห้ามแก้ conflict ให้อัตโนมัติ ถ้าพบ conflict, branch diverged, remote ผิด, upstream ไม่ชัดเจน หรือเหตุการณ์ที่อาจทำให้งานหาย ให้หยุดและอธิบายผู้ใช้แบบเข้าใจง่าย
+- ใช้ `git pull --ff-only` เท่านั้น ห้ามสร้าง merge commit หรือ rebase อัตโนมัติเพียงเพื่อให้ pull ผ่าน
+- Stage เฉพาะไฟล์ที่เป็นงานรอบนั้น ห้ามใช้ `git add -A` เมื่อมีไฟล์ที่ไม่เกี่ยวข้องหรือไม่ทราบที่มา
+- ไม่ต้องสร้างหรือแก้ `WORK_STATUS.md` ในทุก commit ให้ใช้เฉพาะเมื่อมีงานค้าง หรือมีข้อมูลส่งมอบสำคัญที่ไม่สามารถเข้าใจจากโค้ดและ commit ล่าสุดได้
+- `.clasp.json` ใน repository นี้เป็นการตั้งค่า Apps Script project และไม่ใช่ไฟล์ login ส่วนไฟล์ยืนยันตัวตนของ clasp เช่น `.clasprc.json` ต้องไม่ถูก commit
+
+## เมื่อผู้ใช้บอกว่า “เก็บงาน”
+
+ให้ดำเนินการตามลำดับต่อไปนี้:
+
+1. ตรวจ repository, branch, upstream และ remote ด้วย `git status --short --branch`, `git branch -vv` และ `git remote -v`
+2. ตรวจไฟล์ที่เปลี่ยนทั้งหมด รวมทั้ง untracked files และอ่าน diff ก่อน stage
+3. รัน `git fetch origin` แล้วตรวจว่า local branch ไม่ได้ตามหลังหรือ diverged จาก upstream
+   - ถ้า remote มี commit ใหม่ หรือ branch diverged ให้หยุดก่อน ห้าม pull ทับงาน ห้าม rebase และอธิบายผู้ใช้
+4. ตรวจว่าไฟล์ที่จะส่งไม่มีข้อมูลลับ รวมถึง:
+   - passwords หรือ PIN ที่ใช้จริง
+   - API keys หรือ access tokens ที่เป็นความลับ
+   - `.env` และไฟล์ environment จริง
+   - private keys, certificates, service-account files
+   - OAuth credentials, session files, cookies และไฟล์ login
+   - database credentials หรือ connection strings ที่มีรหัสผ่าน
+5. ตรวจทั้งชื่อไฟล์ เนื้อหา diff และไฟล์ staged ห้ามเชื่อ `.gitignore` เพียงอย่างเดียว
+6. ถ้าพบสิ่งที่อาจเป็นข้อมูลลับ ให้หยุด ห้าม stage/commit/push และแจ้งชื่อไฟล์กับลักษณะความเสี่ยงโดยไม่แสดงค่าลับเต็ม ๆ
+7. ทดสอบงานเท่าที่เหมาะสมกับสิ่งที่แก้ หากไม่มี test suite ให้ตรวจ syntax, เปิดหน้าที่เกี่ยวข้อง หรือใช้การตรวจแบบ read-only ที่เหมาะสม และบอกตามจริงว่าทดสอบอะไร
+8. อัปเดต `WORK_STATUS.md` เฉพาะกรณีต่อไปนี้:
+   - มีงานที่ยังไม่เสร็จและเครื่องถัดไปต้องทำต่อ
+   - ต้องมีขั้นตอน deploy/manual action ที่ยังไม่ได้ทำ
+   - มีข้อจำกัด การตัดสินใจ หรือบริบทสำคัญที่ดูจากโค้ดและ commit ไม่ออก
+   - ถ้างานจบสมบูรณ์และ commit อธิบายได้ชัด ไม่ต้องสร้างหรือแก้ไฟล์นี้
+9. Stage เฉพาะไฟล์ที่ตรวจแล้ว จากนั้นอ่าน `git diff --cached` และตรวจข้อมูลลับซ้ำ
+10. Commit ด้วยข้อความสั้นที่อ่านแล้วเข้าใจว่าแก้อะไร ห้ามใช้ข้อความกว้าง ๆ เช่น `update`, `fix` หรือ `work`
+11. Push แบบปกติไปยัง upstream ของ branch ปัจจุบัน ห้าม force push
+12. ตรวจว่าหลัง push สถานะสะอาดและ local ตรงกับ upstream
+13. แจ้งผู้ใช้ว่า:
+    - commit อะไรและ push ไป branch ใด
+    - ทดสอบอะไรและผลเป็นอย่างไร
+    - มีงานค้างหรือปัญหาอะไรหรือไม่
+
+ถ้าไม่มีไฟล์เปลี่ยนแปลง ให้ไม่สร้าง empty commit และแจ้งว่าไม่มีงานใหม่ต้องเก็บ
+
+## เมื่อผู้ใช้บอกว่า “ทำงานต่อ”
+
+ให้ดำเนินการตามลำดับต่อไปนี้ก่อนแก้ไฟล์ใด ๆ:
+
+1. ตรวจ repository, branch, upstream และ remote
+2. ตรวจงานค้างด้วย `git status --porcelain=v1`
+3. ตรวจ commit ที่ยังไม่ได้ push และสถานะ ahead/behind กับ upstream
+4. ถ้ามี modified, staged หรือ untracked files ที่ยังไม่ได้บันทึก หรือมี local commit ที่ยังไม่ได้ push:
+   - หยุดทันที
+   - ห้าม pull, reset, stash, checkout, restore หรือลบไฟล์
+   - อธิบายผู้ใช้ว่าพบงานค้างอะไร และรอคำสั่ง
+5. เมื่อ working tree สะอาด ให้รัน `git fetch origin`
+6. ถ้า branch diverged หรือ upstream/remote ไม่ตรงตามที่คาด ให้หยุดและอธิบายผู้ใช้
+7. ดึงงานด้วย `git pull --ff-only` เท่านั้น
+8. อ่าน commit ล่าสุดด้วย `git log -1 --stat --oneline` และอ่านรายละเอียด diff/commit เพิ่มเติมเมื่อจำเป็น
+9. อ่าน `WORK_STATUS.md` หากมี และตรวจว่าข้อมูลยังตรงกับโค้ดล่าสุด
+10. สรุปให้ผู้ใช้สั้น ๆ ว่า:
+    - ดึงถึง commit ใด
+    - งานล่าสุดทำอะไร
+    - มีงานค้างหรือหมายเหตุใดจาก `WORK_STATUS.md`
+11. จากนั้นจึงทำงานต่อจากจุดล่าสุดตามคำขอของผู้ใช้
+
+## การใช้ WORK_STATUS.md
+
+ถ้าจำเป็นต้องสร้างไฟล์นี้ ให้เขียนเฉพาะข้อมูลส่งมอบที่ยังมีผล เช่น:
+
+```markdown
+# Work Status
+
+## Current state
+- สิ่งที่ทำเสร็จแล้วแต่สำคัญต่อการทำต่อ
+
+## Pending
+- งานที่ยังค้าง พร้อมไฟล์หรือหน้าที่เกี่ยวข้อง
+
+## Manual steps
+- ขั้นตอน deploy, Apps Script หรือ Google Sheets ที่ยังต้องทำ
+
+## Notes
+- ข้อจำกัดหรือการตัดสินใจที่ดูจากโค้ดไม่ออก
+```
+
+เมื่องานค้างหมดแล้ว ให้ลบหัวข้อที่หมดอายุ หรือเอาไฟล์ออกได้ใน commit ถัดไปหลังตรวจว่าข้อมูลทั้งหมดเข้าใจได้จากโค้ดและ commit history แล้ว
+
+## ตรวจข้อมูลลับก่อนส่ง GitHub
+
+- ตรวจ tracked, untracked และ staged files ทุกครั้ง
+- ใช้ secret scanner ที่มีในเครื่องได้ เช่น Gitleaks แต่ผล scanner ไม่แทนการอ่าน diff ด้วยคน
+- URL ของ Google Apps Script, public spreadsheet IDs และ Firebase/Supabase public configuration ต้องพิจารณาตามบริบท ไม่ให้สรุปว่าเป็น secret หรือปลอดภัยโดยอัตโนมัติ
+- ถ้าไม่แน่ใจว่าค่าหนึ่งเผยแพร่ได้หรือไม่ ให้ถือว่ายังไม่ปลอดภัย หยุดก่อน push และถามผู้ใช้

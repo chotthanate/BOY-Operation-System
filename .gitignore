@@ -1,0 +1,57 @@
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+credentials.json
+credentials-*.json
+client_secret*.json
+service-account*.json
+service_account*.json
+google-services.json
+secrets.json
+secrets.*.json
+*.credentials.json
+*.secrets.json
+
+# Google Apps Script authentication (project .clasp.json remains tracked)
+.clasprc.json
+.clasp-credentials.json
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+.parcel-cache/
+.vite/
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+
+# Local test and tool output
+.eslintcache
+.stylelintcache
+playwright-report/
+test-results/
