@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ตรวจระบบ | BOY Operation System</title>
+  <style>
+    :root { --ink:#162033; --muted:#607086; --line:#dce3ee; --blue:#3157c8; --green:#168356; --red:#c23b45; --paper:#f4f7fb; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:Arial,"Noto Sans Thai",sans-serif; padding:20px 14px 48px; }
+    main { max-width:920px; margin:auto; }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:16px; }
+    h1 { margin:0 0 6px; font-size:28px; }
+    p { margin:0; color:var(--muted); line-height:1.55; }
+    .back { white-space:nowrap; text-decoration:none; color:var(--blue); font-weight:700; padding:9px 12px; background:white; border:1px solid var(--line); border-radius:10px; }
+    .notice { background:#fff7df; border:1px solid #efd189; color:#714b00; padding:13px 15px; border-radius:12px; margin-bottom:14px; line-height:1.5; }
+    .card { background:white; border:1px solid var(--line); border-radius:14px; padding:17px; margin-bottom:14px; box-shadow:0 8px 24px rgba(29,48,79,.06); }
+    .card h2 { margin:0 0 6px; font-size:19px; }
+    .controls { display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:end; margin-top:14px; }
+    label { display:grid; gap:6px; font-size:13px; color:var(--muted); font-weight:700; }
+    input, select, button { min-height:44px; border-radius:10px; border:1px solid var(--line); font:inherit; }
+    input, select { width:100%; background:white; padding:9px 11px; color:var(--ink); }
+    button { border:0; background:var(--blue); color:white; padding:10px 16px; font-weight:700; cursor:pointer; }
+    button.secondary { background:#edf1fb; color:#2849a8; border:1px solid #cbd6f3; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .links { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:13px; }
+    .flow-link { display:block; padding:13px; border:1px solid var(--line); border-radius:11px; text-decoration:none; color:var(--ink); background:#fbfcfe; }
+    .flow-link strong { display:block; margin-bottom:3px; }
+    .flow-link span { color:var(--muted); font-size:13px; }
+    .summary { display:flex; flex-wrap:wrap; gap:9px; margin-top:13px; }
+    .pill { padding:7px 10px; border-radius:999px; font-size:13px; font-weight:700; background:#edf1f6; }
+    .pill.ok { background:#e2f6ec; color:#0c7047; }
+    .pill.bad { background:#fde7e9; color:#a92330; }
+    .pill.wait { background:#fff1d5; color:#865300; }
+    .results { display:grid; gap:9px; margin-top:12px; }
+    .result { border:1px solid var(--line); border-left:5px solid var(--green); border-radius:10px; padding:12px; }
+    .result.bad { border-left-color:var(--red); }
+    .result-head { display:flex; justify-content:space-between; gap:10px; font-weight:700; }
+    .meta { color:var(--muted); font-size:13px; line-height:1.55; margin-top:5px; overflow-wrap:anywhere; }
+    .error { color:var(--red); font-weight:700; }
+    .empty { color:var(--muted); padding:12px 0 2px; }
+    @media (max-width:700px) { header{display:block}.back{display:inline-block;margin-top:12px}.controls,.links{grid-template-columns:1fr}.controls button{width:100%} }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>ตรวจระบบ BOY</h1><p>ใช้ตรวจว่าข้อมูลจากหน้าเว็บจริงเชื่อมไปยังตารางใหม่ครบหรือไม่</p></div>
+      <a class="back" href="index.html">← หน้าหลัก</a>
+    </header>
+
+    <div class="notice">หน้านี้ไม่สร้างข้อมูลเอง ให้เปิดหน้าใช้งานจริงด้านล่าง บันทึกข้อมูลทดสอบ แล้วกลับมากด “ตรวจผล”</div>
+
+    <section class="card">
+      <h2>1. ตรวจความพร้อม</h2>
+      <p>ตรวจ backend, BOY_Master และหัวตารางใน BOY_Transactions โดยไม่เขียนข้อมูล</p>
+      <div style="margin-top:13px"><button id="healthButton" class="secondary" type="button" onclick="checkHealth()">ตรวจความพร้อมของระบบ</button></div>
+      <div id="healthSummary" class="summary"></div>
+      <div id="healthResults" class="results"></div>
+    </section>
+
+    <section class="card">
+      <h2>2. บันทึกผ่านหน้าเว็บจริง</h2>
+      <p>เลือกหน้าที่ต้องการ เปิดไปบันทึกข้อมูลทดสอบหนึ่งรายการ แล้วกลับมาหน้านี้</p>
+      <div class="links">
+        <a id="tawanaTestLink" class="flow-link" href="tawana.html" target="_blank"><strong>ทาวน่า</strong><span>รายรับ รายจ่าย ลา เงินเดือน</span></a>
+        <a id="bigcTestLink" class="flow-link" href="bigc.html" target="_blank"><strong>รายจ่าย BigC</strong><span>ทดสอบรายจ่ายของสาขา</span></a>
+        <a id="bigcOrderTestLink" class="flow-link" href="bigc-order.html" target="_blank"><strong>Order BigC</strong><span>สั่งของ รับของ คืนของ</span></a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. ตรวจความเชื่อมโยง</h2>
+      <p>ระบบจะตรวจ transaction_id กับรายละเอียด การชำระเงิน สต็อก และประวัติสถานะ</p>
+      <div class="controls">
+        <label>วันที่ทำรายการ<input id="testDate" type="date"></label>
+        <label>งานที่ทดสอบ<select id="flow">
+          <option value="tawana">ทาวน่า</option>
+          <option value="bigcExpense">รายจ่าย BigC</option>
+          <option value="bigcOrder">สั่งของ BigC</option>
+          <option value="bigcReceive">รับของ BigC</option>
+          <option value="bigcReturn">คืนของ/ปิดยอด BigC</option>
+        </select></label>
+        <button id="verifyButton" type="button" onclick="verifyFlow()">ตรวจผล</button>
+      </div>
+      <div id="verifySummary" class="summary"></div>
+      <div id="verifyResults" class="results"></div>
+    </section>
+  </main>
+
+  <script>
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxZ-mwUaQPerVZt_9WCfh_wgAx32fZ1va7RLN2Lpg8ba5_o66W3wS9D515SZKX-q3nrcg/exec';
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function todayKey() {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10);
+    }
+
+    async function apiCall(action, payload) {
+      const response = await fetch(WEB_APP_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify(Object.assign({action:action}, payload || {}))
+      });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) { throw new Error('backend ตอบกลับไม่ใช่ JSON'); }
+      if (data.status === 'error') throw new Error(data.message || 'backend แจ้งข้อผิดพลาด');
+      return data;
+    }
+
+    function pill(text, state) { return '<span class="pill ' + state + '">' + escapeHtml(text) + '</span>'; }
+
+    async function checkHealth() {
+      const button = document.getElementById('healthButton');
+      const summary = document.getElementById('healthSummary');
+      const results = document.getElementById('healthResults');
+      button.disabled = true; summary.innerHTML = pill('กำลังตรวจ...', 'wait'); results.innerHTML = '';
+      try {
+        const data = await apiCall('systemHealthCheck');
+        const all = (data.masterTables || []).concat(data.tables || []);
+        const passed = all.filter(function(item){ return item.ok; }).length;
+        summary.innerHTML = pill(data.ok ? 'พร้อมทดสอบ' : 'ยังมีจุดผิดพลาด', data.ok ? 'ok' : 'bad') + pill(passed + '/' + all.length + ' ตารางผ่าน', data.ok ? 'ok' : 'wait');
+        results.innerHTML = all.map(function(item){
+          return '<div class="result ' + (item.ok ? '' : 'bad') + '"><div class="result-head"><span>' + escapeHtml(item.name) + '</span><span>' + (item.ok ? 'ผ่าน' : 'ไม่ผ่าน') + '</span></div><div class="meta">' + escapeHtml(item.message) + ' · ' + Number(item.rows || 0) + ' แถวข้อมูล</div></div>';
+        }).join('');
+      } catch (error) {
+        summary.innerHTML = pill('เชื่อมต่อไม่ได้', 'bad');
+        results.innerHTML = '<div class="error">' + escapeHtml(error.message) + '<br><small>ถ้ายังไม่ได้ deploy Apps Script รุ่นล่าสุด หน้านี้จะยังตรวจไม่ได้</small></div>';
+      } finally { button.disabled = false; }
+    }
+
+    async function verifyFlow() {
+      const button = document.getElementById('verifyButton');
+      const summary = document.getElementById('verifySummary');
+      const results = document.getElementById('verifyResults');
+      const date = document.getElementById('testDate').value;
+      const flow = document.getElementById('flow').value;
+      if (!date) return;
+      button.disabled = true; summary.innerHTML = pill('กำลังตรวจ...', 'wait'); results.innerHTML = '';
+      try {
+        const data = await apiCall('systemVerifyFlow', {date:date, flow:flow});
+        summary.innerHTML = pill(data.found + ' ธุรกรรม', data.found ? 'ok' : 'wait') + pill(data.ok ? 'เชื่อมครบ' : 'ต้องตรวจเพิ่ม', data.ok ? 'ok' : 'bad');
+        if (!data.transactions.length) {
+          results.innerHTML = '<div class="empty">' + escapeHtml(data.message) + '</div>';
+        } else {
+          results.innerHTML = data.transactions.map(function(item){
+            const issue = item.checks && item.checks.length ? item.checks.join(' · ') : 'เชื่อมโยงครบตามกฎของประเภทรายการ';
+            return '<div class="result ' + (item.ok ? '' : 'bad') + '"><div class="result-head"><span>' + escapeHtml(item.type || 'ไม่ระบุประเภท') + '</span><span>' + escapeHtml(item.status) + '</span></div><div class="meta"><strong>' + escapeHtml(item.transactionId) + '</strong><br>รายละเอียด ' + item.lineCount + ' · ชำระเงิน ' + item.paymentCount + ' · สต็อก ' + item.movementCount + ' · ประวัติ ' + item.historyCount + '<br>' + escapeHtml(issue) + '</div></div>';
+          }).join('');
+        }
+      } catch (error) {
+        summary.innerHTML = pill('ตรวจไม่ได้', 'bad');
+        results.innerHTML = '<div class="error">' + escapeHtml(error.message) + '</div>';
+      } finally { button.disabled = false; }
+    }
+
+    function setTestLinks() {
+      const query = '?mode=test&api=' + encodeURIComponent(WEB_APP_URL);
+      document.getElementById('tawanaTestLink').href = 'tawana.html' + query;
+      document.getElementById('bigcTestLink').href = 'bigc.html' + query;
+      document.getElementById('bigcOrderTestLink').href = 'bigc-order.html' + query;
+    }
+
+    document.getElementById('testDate').value = todayKey();
+    setTestLinks();
+  </script>
+</body>
+</html>

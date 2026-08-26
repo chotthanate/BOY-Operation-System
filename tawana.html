@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#2ecc71">
+  <meta name="theme-color" content="#0f6b55">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BOY POS">
@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
-  <title>BOY Juice POS & HR</title>
+  <title>BOY Operations — ทาวน่า</title>
   <style>
     *, *::before, *::after { box-sizing: border-box !important; }
     :root { --primary: #2ecc71; --bg: #f2f2f7; --danger: #ff3b30; --app-max-width: 1120px; }
@@ -44,6 +44,7 @@
     .hidden { display: none !important; }
     
     #expenseList { display: grid; gap: 12px; }
+    .quick-expense-hint { margin: -2px 0 10px; padding: 9px 11px; border-radius: 10px; background: #eefbf3; color: #277a48; font-size: 0.82rem; line-height: 1.45; }
     .swipe-wrapper { position: relative; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin-bottom: 0; padding: 7px; scroll-behavior: smooth; border: 1px solid #e4e7ec; border-radius: 16px; background: #f8fafc; }
     .swipe-wrapper::-webkit-scrollbar { display: none; }
     .exp-row { min-width: 100%; scroll-snap-align: start; display: grid; grid-template-columns: 2.5fr 1fr 1fr 1.2fr; gap: 7px; }
@@ -91,9 +92,9 @@
     .mini-danger { background: #fff1f0; color: var(--danger); }
     @media (max-width: 540px) { .db-form { grid-template-columns: 1fr; } .db-row { grid-template-columns: auto 1fr; } .db-actions { grid-column: 1 / -1; justify-content: stretch; } .db-actions .mini-btn { flex: 1; } }
 
-    #loadingOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: transparent; z-index: 99999; display: flex; align-items: center; justify-content: center; pointer-events: none; }
-    .fruit-loader { font-size: 70px; animation: breathe 1.2s infinite ease-in-out alternate; text-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-    @keyframes breathe { 0% { transform: scale(0.85); opacity: 0.7; } 100% { transform: scale(1.15); opacity: 1; } }
+    #loadingOverlay { position: fixed; inset: 0; background: rgba(244,247,245,.72); z-index: 99999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+    .fruit-loader { width: 48px; height: 48px; border: 4px solid #d7e5df; border-top-color: var(--primary); border-radius: 50%; font-size: 0; animation: loadingSpin .75s linear infinite; box-shadow: 0 8px 24px rgba(15,107,85,.12); }
+    @keyframes loadingSpin { to { transform: rotate(360deg); } }
 
     /* สไตล์สำหรับกล่องบันทึกการลา */
     .leave-box { border: 1px solid #eee; padding: 12px; border-radius: 12px; margin-bottom: 10px; background: #fafafa; }
@@ -156,66 +157,339 @@
     .app-switcher-panel a.active { background: #e8f5e9; color: var(--primary); }
     .app-switcher-panel a + a { margin-top: 4px; }
     .app-switcher-hidden { display: none !important; }
+    .test-mode-banner { position: sticky; top: 0; z-index: 10050; padding: 10px 14px; background: #f59e0b; color: #422006; text-align: center; font-weight: 900; box-shadow: 0 3px 10px rgba(0,0,0,.16); }
+    .test-mode-banner[hidden] { display: none; }
+
+    /* 2026 mobile-first redesign */
+    :root {
+      --primary: #0f6b55;
+      --primary-strong: #0a4f40;
+      --primary-soft: #e9f4f0;
+      --ink: #17211d;
+      --muted: #69756f;
+      --line: #e3e9e6;
+      --surface: #ffffff;
+      --surface-soft: #f5f8f6;
+      --warning: #b7791f;
+      --warning-soft: #fff7e6;
+      --danger: #c43d3d;
+      --app-max-width: 920px;
+      --bottom-nav-height: 72px;
+    }
+    html { background: #f4f7f5; }
+    body {
+      padding: max(14px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(var(--bottom-nav-height) + 28px + env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)) !important;
+      background: #f4f7f5;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans Thai", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+    .app-shell { width: min(100%, var(--app-max-width)); margin: 0 auto; }
+    .app-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 2px 0 18px;
+    }
+    .store-switcher-button {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      padding: 6px 4px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .store-avatar {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      background: var(--primary-strong);
+      color: white;
+      font-weight: 900;
+      font-size: 1.05rem;
+      box-shadow: 0 8px 18px rgba(10,79,64,.18);
+    }
+    .store-copy { min-width: 0; display: grid; gap: 2px; }
+    .store-eyebrow { color: var(--muted); font-size: .74rem; font-weight: 700; }
+    .store-name { display: flex; align-items: center; gap: 6px; font-size: 1rem; font-weight: 900; white-space: nowrap; }
+    .store-name svg { width: 16px; height: 16px; stroke: currentColor; }
+    .topbar-actions { display: flex; gap: 8px; }
+    .icon-button {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--surface);
+      color: var(--ink);
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(34,55,46,.05);
+    }
+    .icon-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .app-content { min-height: 55vh; }
+    .app-view { display: none; animation: viewIn .18s ease-out; }
+    .app-view.active { display: block; }
+    @keyframes viewIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    .page-intro { margin: 2px 2px 20px; }
+    .page-kicker { color: var(--primary); font-size: .76rem; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; }
+    .page-intro h1 { margin: 5px 0 5px; color: var(--ink); font-size: clamp(1.65rem, 6vw, 2.25rem); line-height: 1.15; letter-spacing: -.025em; }
+    .page-intro p { margin: 0; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+    .card {
+      max-width: none;
+      padding: 18px;
+      margin: 0 0 14px;
+      border: 1px solid rgba(218,228,223,.82);
+      border-radius: 22px;
+      background: var(--surface);
+      box-shadow: 0 8px 24px rgba(24,57,43,.055);
+    }
+    .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+    .section-title { margin: 0; color: var(--ink); font-size: 1.08rem; font-weight: 900; }
+    .section-description { margin: 4px 0 0; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+    h3 { border-left: 0; padding-left: 0; color: var(--ink); }
+    .date-status-card { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: end; }
+    .field { display: grid; gap: 7px; min-width: 0; }
+    .field label { color: #4d5a54; font-size: .76rem; font-weight: 800; }
+    input, select, textarea {
+      min-height: 48px;
+      border: 1px solid #dbe3df;
+      border-radius: 14px;
+      padding: 11px 13px;
+      background: #fbfcfb;
+      color: var(--ink);
+      box-shadow: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(15,107,85,.11);
+    }
+    input::placeholder { color: #9ca7a1; }
+    #mainDate {
+      text-align: left;
+      color: var(--ink);
+      border-color: #dbe3df;
+      background: #fbfcfb;
+      padding: 11px 13px;
+    }
+    .save-state { align-self: center; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 10px; border-radius: 999px; background: #eef2f0; color: #5e6c65; font-size: .76rem; font-weight: 850; white-space: nowrap; }
+    .save-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #94a39b; }
+    .save-state.saving { background: var(--warning-soft); color: var(--warning); }
+    .save-state.saving::before { background: #e19a28; animation: pulseDot .9s infinite alternate; }
+    .save-state.saved { background: var(--primary-soft); color: var(--primary-strong); }
+    .save-state.saved::before { background: var(--primary); }
+    .save-state.error { background: #fff0f0; color: var(--danger); }
+    .save-state.error::before { background: var(--danger); }
+    @keyframes pulseDot { to { opacity: .3; } }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; margin-bottom: 14px; }
+    .summary-item { padding: 14px 12px; border: 1px solid var(--line); border-radius: 18px; background: rgba(255,255,255,.75); }
+    .summary-item span { display: block; color: var(--muted); font-size: .72rem; font-weight: 750; }
+    .summary-item strong { display: block; margin-top: 5px; font-size: 1.02rem; color: var(--ink); white-space: nowrap; }
+    .summary-item.net-positive { background: var(--primary-soft); border-color: #cfe6dd; }
+    .summary-item.net-negative { background: #fff1f1; border-color: #f1d0d0; }
+    .income-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+    .income-grid .wide { grid-column: 1 / -1; }
+    .other-income-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(110px,.7fr); gap: 10px; }
+    .quick-expense-hint { margin: 0 0 14px; padding: 11px 13px; border: 0; border-radius: 14px; background: var(--primary-soft); color: var(--primary-strong); font-size: .8rem; }
+    #expenseList { gap: 10px; }
+    .swipe-wrapper { display: block; overflow: visible; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: #fbfcfb; }
+    .exp-row { min-width: 0; display: grid; grid-template-columns: minmax(0,2fr) repeat(3,minmax(84px,.7fr)); gap: 10px; }
+    .exp-field { display: grid; gap: 6px; min-width: 0; }
+    .exp-field label { color: var(--muted); font-size: .7rem; font-weight: 800; }
+    .exp-field input, .exp-field select { min-height: 44px; padding: 9px 11px; background: white; }
+    .exp-main-field { grid-column: 1 / 3; }
+    .exp-sub-field { grid-column: 3 / 5; }
+    .delete-action { grid-column: 1 / -1; min-width: 0; min-height: 38px; margin: 0; border: 0; border-radius: 12px; background: transparent; color: var(--danger); font-size: .78rem; cursor: pointer; }
+    .section-actions { display: flex; gap: 9px; margin-top: 12px; }
+    .section-actions .btn-main { margin-top: 0; }
+    .btn-main { min-height: 50px; padding: 13px 16px; border-radius: 15px; font-size: .92rem; font-weight: 850; }
+    .btn-primary { background: var(--primary); color: white; box-shadow: 0 8px 18px rgba(15,107,85,.18); }
+    .btn-secondary { border: 1px solid var(--line); background: white; color: var(--ink); }
+    .btn-soft { border: 1px solid #cfe5dc; background: var(--primary-soft); color: var(--primary-strong); }
+    .btn-danger-quiet { background: transparent; color: var(--danger); border: 1px solid #efd5d5; }
+    .btn-submit { position: static; width: 100%; margin: 4px 0 0; background: var(--primary); color: white; box-shadow: 0 10px 22px rgba(15,107,85,.2); }
+    .leave-box { border: 1px solid var(--line); padding: 14px; border-radius: 18px; margin-bottom: 10px; background: #fbfcfb; }
+    .radio-group { justify-content: flex-start; flex-wrap: wrap; gap: 10px; }
+    .radio-group label { min-height: 40px; padding: 8px 10px; border-radius: 12px; background: white; border: 1px solid var(--line); }
+    .saved-leave-area { border-top-color: var(--line); }
+    .saved-leave-item, .saved-leave-empty { border-color: var(--line); border-radius: 14px; background: var(--surface-soft); }
+    .feature-card { display: grid; gap: 14px; }
+    .feature-icon { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 18px; background: var(--primary-soft); color: var(--primary); }
+    .feature-icon svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .feature-card h2 { margin: 0; font-size: 1.25rem; }
+    .feature-card p { margin: 0; color: var(--muted); line-height: 1.6; font-size: .88rem; }
+    .rule-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .rule-list li { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
+    .rule-list li:last-child { border-bottom: 0; }
+    .rule-list strong { color: var(--ink); }
+    .more-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 11px; }
+    .more-card { min-height: 126px; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer; }
+    .more-card svg { width: 24px; height: 24px; fill: none; stroke: var(--primary); stroke-width: 1.8; }
+    .more-card strong { display: block; margin-top: 18px; font-size: .92rem; }
+    .more-card span { display: block; margin-top: 3px; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+    .bottom-nav {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9900;
+      min-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px max(10px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+      border-top: 1px solid rgba(208,219,214,.95);
+      background: rgba(255,255,255,.97);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 -8px 24px rgba(28,55,43,.07);
+    }
+    .bottom-nav-inner { width: min(100%, 620px); margin: 0 auto; display: flex; align-items: center; gap: 6px; }
+    .bottom-nav-item {
+      flex: 1 1 0;
+      min-width: 54px;
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 17px;
+      background: transparent;
+      color: #7b8681;
+      cursor: pointer;
+      transition: flex .2s ease, background .2s ease, color .2s ease;
+    }
+    .bottom-nav-item svg { width: 22px; height: 22px; flex: 0 0 22px; fill: none; stroke: currentColor; stroke-width: 1.9; }
+    .bottom-nav-label { display: none; font-size: .82rem; font-weight: 900; white-space: nowrap; }
+    .bottom-nav-item.active { flex: 1.8 1 0; background: var(--primary-soft); color: var(--primary-strong); }
+    .bottom-nav-item.active .bottom-nav-label { display: inline; }
+    .app-switcher-toggle { display: none; }
+    .app-switcher-backdrop { z-index: 10030; background: rgba(19,31,26,.46); }
+    .app-switcher-panel {
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      max-height: 82dvh;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 12px max(16px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      border-radius: 26px 26px 0 0;
+      box-shadow: 0 -18px 48px rgba(0,0,0,.18);
+    }
+    .sheet-handle { width: 42px; height: 5px; border-radius: 999px; background: #d7dfdb; margin: 0 auto 14px; }
+    .app-switcher-title { padding: 2px 2px 12px; color: var(--ink); font-size: 1.08rem; }
+    .store-option, .app-switcher-panel a.store-option { width: 100%; min-height: 58px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 9px; border: 0; border-radius: 16px; background: transparent; color: var(--ink); text-align: left; text-decoration: none; cursor: pointer; }
+    .store-option + .store-option { margin-top: 4px; }
+    .store-option.active { background: var(--primary-soft); color: var(--primary-strong); }
+    .store-option.disabled { opacity: .48; cursor: default; }
+    .store-option-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 13px; background: #eef2f0; font-weight: 900; }
+    .store-option.active .store-option-icon { background: var(--primary); color: white; }
+    .store-option strong { display: block; font-size: .9rem; }
+    .store-option small { display: block; margin-top: 2px; color: var(--muted); font-size: .72rem; }
+    .store-option-badge { padding: 5px 8px; border-radius: 999px; background: #eef2f0; color: var(--muted); font-size: .66rem; font-weight: 850; }
+    .settings-btn { position: static; width: auto; height: auto; font-size: inherit; }
+    .full-overlay { padding: max(16px, env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom)); background: rgba(15,27,22,.66); }
+    .overlay-card { width: min(100%, 620px); padding: 22px; border-radius: 24px; box-shadow: 0 22px 56px rgba(0,0,0,.22); }
+    .review-list { display: grid; gap: 8px; margin: 16px 0; text-align: left; }
+    .review-row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .review-row:last-child { border-bottom: 0; }
+    .review-row span { color: var(--muted); }
+    .review-row strong { color: var(--ink); }
+    .test-mode-banner { margin: calc(-1 * max(14px, env(safe-area-inset-top))) calc(-1 * max(14px, env(safe-area-inset-right))) 14px calc(-1 * max(14px, env(safe-area-inset-left))); box-shadow: none; }
+    @media (max-width: 640px) {
+      .date-status-card { grid-template-columns: 1fr; }
+      .save-state { justify-self: start; }
+      .summary-grid { gap: 7px; }
+      .summary-item { padding: 12px 9px; }
+      .summary-item strong { font-size: .88rem; }
+      .exp-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .exp-item-field { grid-column: 1 / -1; }
+      .exp-main-field, .exp-sub-field { grid-column: auto; }
+      .section-actions { flex-direction: column; }
+    }
+    @media (max-width: 390px) {
+      body { padding-left: 10px !important; padding-right: 10px !important; }
+      .income-grid { grid-template-columns: 1fr; }
+      .income-grid .wide { grid-column: auto; }
+      .other-income-grid { grid-template-columns: 1fr; }
+      .bottom-nav-item { padding: 0 9px; min-width: 48px; }
+      .bottom-nav-item.active { flex: 1.65 1 0; }
+      .bottom-nav-label { font-size: .76rem; }
+      .more-grid { grid-template-columns: 1fr; }
+    }
+    @media (min-width: 780px) {
+      .daily-columns { display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.35fr); gap: 14px; align-items: start; }
+      .daily-columns .card { margin-bottom: 0; }
+    }
   </style>
 </head>
 <body>
-  <button class="app-switcher-toggle" type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูระบบ">☰</button>
+  <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
   <div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
-  <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
-    <div class="app-switcher-title">เลือกใช้งาน</div>
-    <a href="./index.html" class="active">ทาวน่า</a>
-    <a href="./grill.html">เนื้อย่าง</a>
-    <a href="./bigc.html">บิ๊กซีพัทยากลาง</a>
-    <a href="./bigc-order.html">รายการเบิกของบิ๊กซีพัทยากลาง</a>
-    <a href="./stock.html">สต็อก</a>
-    <a href="./other-expenses.html">ค่าใช้จ่ายอื่นๆ</a>
-    <a href="./dashboard.html">Dashboard</a>
+  <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เลือกร้านค้า">
+    <div class="sheet-handle"></div>
+    <div class="app-switcher-title">เลือกร้านที่ต้องการทำงาน</div>
+    <a href="./tawana.html" class="store-option active"><span class="store-option-icon">TW</span><span><strong>ทาวน่า</strong><small>ร้านน้ำ · รายรับ รายจ่าย ลา และเงินเดือน</small></span><span class="store-option-badge">กำลังใช้</span></a>
+    <a href="./bigc.html" class="store-option"><span class="store-option-icon">BC</span><span><strong>บิ๊กซี พัทยากลาง</strong><small>ค่าใช้จ่ายของสาขา</small></span><span class="store-option-badge">เปิด</span></a>
+    <button class="store-option disabled" type="button" disabled><span class="store-option-icon">GR</span><span><strong>ร้านเนื้อ / Grill</strong><small>เตรียมรองรับร้านใหม่</small></span><span class="store-option-badge">เร็วๆ นี้</span></button>
+    <button class="store-option disabled" type="button" disabled><span class="store-option-icon">BG</span><span><strong>ร้าน Burger</strong><small>จะเชื่อม POS และข้อมูลกลางในอนาคต</small></span><span class="store-option-badge">เร็วๆ นี้</span></button>
   </nav>
 
-  <div class="card" style="z-index: 950;">
-    <div class="settings-btn" onclick="toggleSettings()">⚙️</div>
-    <h3>📅 วันที่</h3>
-    <input type="date" id="mainDate" onchange="loadData()">
+  <div class="app-shell">
+    <header class="app-topbar">
+      <button class="store-switcher-button" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="store-avatar">TW</span><span class="store-copy"><span class="store-eyebrow">กำลังทำงานที่</span><span class="store-name">ทาวน่า <svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke-width="2"/></svg></span></span></button>
+      <div class="topbar-actions"><button class="icon-button settings-btn" type="button" onclick="toggleSettings()" aria-label="ตั้งค่าระบบ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></button></div>
+    </header>
+    <main class="app-content">
+      <section id="dailyView" class="app-view active">
+        <div class="page-intro"><div class="page-kicker">Daily operation</div><h1>บันทึกประจำวัน</h1><p>รายรับ รายจ่าย และสถานะข้อมูลของร้านในหน้าจอเดียว</p></div>
+        <div class="card date-status-card"><div class="field"><label for="mainDate">วันที่ทำรายการ</label><input type="date" id="mainDate" onchange="loadData()"></div><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div>
+        <div class="summary-grid" aria-label="สรุปยอดวันนี้"><div class="summary-item"><span>รายรับ</span><strong id="summaryIncome">฿0.00</strong></div><div class="summary-item"><span>รายจ่าย</span><strong id="summaryExpense">฿0.00</strong></div><div id="summaryNetCard" class="summary-item net-positive"><span>คงเหลือ</span><strong id="summaryNet">฿0.00</strong></div></div>
+        <div id="formArea" class="daily-columns">
+          <div class="card"><div class="section-heading"><div><h2 class="section-title">รายรับ</h2><p class="section-description">แยกช่องทางเพื่อให้ตรวจสอบยอดได้ง่าย</p></div></div><div class="income-grid">
+            <div class="field"><label for="val-cash">เงินสด</label><input type="number" inputmode="decimal" id="val-cash" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
+            <div class="field"><label for="val-transfer">เงินโอน</label><input type="number" inputmode="decimal" id="val-transfer" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
+            <div class="field wide"><label>รายรับอื่น</label><div class="other-income-grid"><input type="text" id="otherIncomeNote" placeholder="รายละเอียด เช่น ค่าส่ง" onchange="doSync()"><input type="number" inputmode="decimal" id="otherIncomeVal" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div></div>
+          </div></div>
+          <div class="card"><div class="section-heading"><div><h2 class="section-title">รายจ่าย</h2><p class="section-description">บันทึกรายการซื้อและหมวดหมู่เพื่อใช้วิเคราะห์ต้นทุน</p></div></div><div class="quick-expense-hint">กรอกชื่อรายการและยอดรวมก่อน ส่วนจำนวนกับหน่วยใช้เมื่อเป็นสินค้าที่ต้องติดตามสต็อก</div><div id="expenseList"></div><div class="section-actions"><button class="btn-main btn-soft" type="button" onclick="addRow()">+ เพิ่มรายการ</button><button class="btn-main btn-danger-quiet" type="button" onclick="clearAllData()">ล้างข้อมูลทั้งหมด</button></div></div>
+        </div>
+        <button class="btn-main btn-submit" id="btnSubmit" type="button" onclick="openSubmitReview()">ตรวจสอบและส่งข้อมูลประจำวัน</button>
+      </section>
+      <section id="leaveView" class="app-view">
+        <div class="page-intro"><div class="page-kicker">People</div><h1>การลาพนักงาน</h1><p>บันทึกการลาโดยใช้วันที่เดียวกับรายการประจำวัน</p></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">รายการลา</h2><p class="section-description">เลือกพนักงานและระบุเต็มวันหรือรายชั่วโมง</p></div></div><div id="leaveList"></div><div class="section-actions"><button class="btn-main btn-secondary" type="button" onclick="addLeaveRow()">+ เพิ่มพนักงาน</button><button class="btn-main btn-primary" type="button" onclick="saveMultipleLeaves()">บันทึกข้อมูลการลา</button></div><div class="saved-leave-area"><div class="saved-leave-title">บันทึกแล้วในวันที่เลือก</div><div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div></div></div>
+      </section>
+      <section id="payrollView" class="app-view">
+        <div class="page-intro"><div class="page-kicker">Payroll</div><h1>สรุปเงินเดือน</h1><p>ดูเวลาทำงาน การลา และยอดเงินเดือนรายเดือน</p></div>
+        <div class="card feature-card"><div class="feature-icon">฿</div><h2>คำนวณจากข้อมูลที่บันทึกไว้</h2><p>ระบบรวมวันทำงานและการลาเพื่อช่วยตรวจยอดก่อนลงเป็นค่าใช้จ่ายปลายเดือน</p><ul class="rule-list"><li><span>ค่าแรงต่อวัน</span><strong>400 บาท</strong></li><li><span>หักลารายชั่วโมง</span><strong>40 บาท/ชม.</strong></li><li><span>โควต้าพิเศษ</span><strong>2 วัน</strong></li></ul><button class="btn-main btn-primary" type="button" onclick="openSalaryDashboard()">เปิดสรุปเงินเดือน</button></div>
+      </section>
+      <section id="moreView" class="app-view">
+        <div class="page-intro"><div class="page-kicker">BOY system</div><h1>เมนูเพิ่มเติม</h1><p>รายงาน การเบิกของ การทดสอบ และการตั้งค่าระบบ</p></div>
+        <div class="more-grid"><a class="more-card" href="./dashboard.html"><span class="store-option-icon">DB</span><span><strong>Dashboard</strong><span>ดูรายงานสรุปของบริษัท</span></span></a><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a><a class="more-card" href="./system-test.html"><span class="store-option-icon">TS</span><span><strong>ตรวจสอบระบบ</strong><span>ทดสอบการเชื่อมต่อหลังบ้าน</span></span></a><button class="more-card settings-btn" type="button" onclick="toggleSettings()"><span class="store-option-icon">ST</span><span><strong>ตั้งค่าระบบ</strong><span>พนักงาน Database และสต็อก</span></span></button></div>
+      </section>
+    </main>
   </div>
-
-  <div id="formArea" style="position: relative;">
-    <div class="card">
-      <h3>💰 รายรับ</h3>
-      <div class="input-group">
-        <span>💵</span><input type="number" inputmode="decimal" id="val-cash" placeholder="ระบุยอดเงินสด" onchange="doSync()">
-      </div>
-      <div class="input-group">
-        <span>📱</span><input type="number" inputmode="decimal" id="val-transfer" placeholder="ระบุยอดโอน" onchange="doSync()">
-      </div>
-      <div style="display:grid; grid-template-columns: 2fr 1fr; gap:8px; margin-top:5px;">
-        <input type="text" id="otherIncomeNote" placeholder="รายได้อื่น (ระบุ)" onchange="doSync()">
-        <input type="number" inputmode="decimal" id="otherIncomeVal" placeholder="บาท" onchange="doSync()">
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>💸 รายจ่าย</h3>
-      <div id="expenseList"></div>
-      <button class="btn-main" style="background: none; border: 1px dashed #aaa; color: #666;" onclick="addRow()">+ เพิ่มบรรทัดรายจ่าย</button>
-      <button class="btn-main" style="background: #fff; border: 1px solid #ddd; color: var(--danger); margin-top: 5px;" onclick="clearAllData()">🗑️ ล้างข้อมูลทั้งหมด</button>
-    </div>
-
-    <div class="card">
-      <h3>🏖️ บันทึกการลาพนักงาน</h3>
-      <div id="leaveList"></div>
-      <button class="btn-main" style="background: none; border: 1px dashed #007aff; color: #007aff;" onclick="addLeaveRow()">+ เพิ่มบรรทัดการลา</button>
-      <button class="btn-main" style="background: #e8f5e9; color: var(--primary); border: 1px solid var(--primary); margin-top: 10px; padding: 15px;" onclick="saveMultipleLeaves()">
-        📌 บันทึกข้อมูลการลา
-      </button>
-      <div class="saved-leave-area">
-        <div class="saved-leave-title">รายการลาที่บันทึกแล้วของวันที่เลือก</div>
-        <div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div>
-      </div>
-    </div>
-  </div>
-
-  <button class="btn-main btn-submit" id="btnSubmit" onclick="submitToSheet()">🚀 ส่งยอดสรุปชีท</button>
-  <button class="btn-main btn-hr" onclick="openSalaryDashboard()">📊 สรุปเงินเดือน</button>
+  <nav class="bottom-nav" aria-label="เมนูหลัก"><div class="bottom-nav-inner">
+    <button class="bottom-nav-item active" type="button" aria-label="บันทึกประจำวัน" onclick="switchAppView('dailyView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9H3zM9 20v-6h6v6"/></svg><span class="bottom-nav-label">บันทึก</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="การลาพนักงาน" onclick="switchAppView('leaveView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.5-5 3-7 8-7s7.5 2 8 7"/></svg><span class="bottom-nav-label">การลา</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="สรุปเงินเดือน" onclick="switchAppView('payrollView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v13H4zM7 10h4M7 14h2M15 11h2v4h-2z"/></svg><span class="bottom-nav-label">เงินเดือน</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="เมนูเพิ่มเติม" onclick="switchAppView('moreView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg><span class="bottom-nav-label">เพิ่มเติม</span></button>
+  </div></nav>
+  <div id="reviewOverlay" class="full-overlay hidden"><div class="overlay-card"><h2 style="margin:0;">ตรวจสอบก่อนส่ง</h2><p style="color:var(--muted); margin:8px 0 0;">หลังส่งแล้ว วันนี้จะถูกล็อกเพื่อป้องกันการแก้โดยไม่ตั้งใจ</p><div class="review-list"><div class="review-row"><span>รายรับรวม</span><strong id="reviewIncome">฿0.00</strong></div><div class="review-row"><span>รายจ่ายรวม</span><strong id="reviewExpense">฿0.00</strong></div><div class="review-row"><span>คงเหลือ</span><strong id="reviewNet">฿0.00</strong></div><div class="review-row"><span>จำนวนรายการรายจ่าย</span><strong id="reviewExpenseCount">0 รายการ</strong></div></div><button class="btn-main btn-primary" type="button" onclick="confirmSubmitReview()">ยืนยันและส่งข้อมูล</button><button class="btn-main btn-secondary" type="button" onclick="closeSubmitReview()">กลับไปตรวจสอบ</button></div></div>
 
   <div id="settingsOverlay" class="full-overlay hidden">
     <div class="overlay-card">
@@ -325,8 +599,25 @@
 
   <script>
     // BOY Operation System API: writes to the new BOY workbook family only.
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
+    function resolveWebAppUrl(defaultUrl) {
+      const isLocal = location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const override = isLocal ? new URLSearchParams(location.search).get('api') : '';
+      return override && /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(override) ? override : defaultUrl;
+    }
+    const WEB_APP_URL = resolveWebAppUrl("https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec");
+    const TEST_MODE = new URLSearchParams(location.search).get('mode') === 'test';
     const STAGING_MODE = false;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!TEST_MODE) return;
+      document.getElementById('testModeBanner').hidden = false;
+      document.getElementById('btnSubmit').textContent = 'ตรวจสอบและบันทึกข้อมูลทดลอง';
+      document.querySelectorAll('.settings-btn').forEach(function(button) { button.style.display = 'none'; });
+      document.querySelectorAll('#appSwitcherPanel a').forEach(function(link) {
+        if (!/\/(tawana|bigc|bigc-order)\.html$/.test(new URL(link.href, location.href).pathname)) link.style.display = 'none';
+        else link.href = link.getAttribute('href').split('?')[0] + location.search;
+      });
+    });
 
     var timer;
     var appStarted = false;
@@ -351,6 +642,64 @@
       document.getElementById('appSwitcherBackdrop').classList.toggle('app-switcher-hidden');
       document.getElementById('appSwitcherPanel').classList.toggle('app-switcher-hidden');
     }
+
+    function switchAppView(viewId, button) {
+      document.querySelectorAll('.app-view').forEach(function(view) {
+        view.classList.toggle('active', view.id === viewId);
+      });
+      document.querySelectorAll('.bottom-nav-item').forEach(function(item) {
+        item.classList.toggle('active', item === button);
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function toUiNumber(value) {
+      var number = parseFloat(String(value == null ? '' : value).replace(/,/g, ''));
+      return Number.isFinite(number) ? number : 0;
+    }
+
+    function formatMoney(value) {
+      return '฿' + toUiNumber(value).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function calculateDailySummary(snapshot) {
+      var data = snapshot || collectFormDataSnapshot();
+      var income = toUiNumber(data.cash && data.cash.v) + toUiNumber(data.transfer && data.transfer.v) + toUiNumber(data.other && data.other.v);
+      var expense = (data.exp || []).reduce(function(total, row) { return total + toUiNumber(row.p); }, 0);
+      return { income: income, expense: expense, net: income - expense, expenseCount: (data.exp || []).length };
+    }
+
+    function updateDailySummary(snapshot) {
+      if (!document.getElementById('summaryIncome')) return;
+      var totals = calculateDailySummary(snapshot);
+      document.getElementById('summaryIncome').textContent = formatMoney(totals.income);
+      document.getElementById('summaryExpense').textContent = formatMoney(totals.expense);
+      document.getElementById('summaryNet').textContent = formatMoney(totals.net);
+      var card = document.getElementById('summaryNetCard');
+      card.classList.toggle('net-positive', totals.net >= 0);
+      card.classList.toggle('net-negative', totals.net < 0);
+      return totals;
+    }
+
+    function setSaveState(state, text) {
+      var status = document.getElementById('saveStatus');
+      if (!status) return;
+      status.className = 'save-state' + (state ? ' ' + state : '');
+      status.textContent = text;
+    }
+
+    function openSubmitReview() {
+      if (!document.getElementById('mainDate').value) return alert('กรุณาระบุวันที่');
+      var totals = updateDailySummary();
+      document.getElementById('reviewIncome').textContent = formatMoney(totals.income);
+      document.getElementById('reviewExpense').textContent = formatMoney(totals.expense);
+      document.getElementById('reviewNet').textContent = formatMoney(totals.net);
+      document.getElementById('reviewExpenseCount').textContent = totals.expenseCount + ' รายการ';
+      document.getElementById('reviewOverlay').classList.remove('hidden');
+    }
+
+    function closeSubmitReview() { document.getElementById('reviewOverlay').classList.add('hidden'); }
+    async function confirmSubmitReview() { closeSubmitReview(); await submitToSheet(); }
 
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') closeAppSwitcher();
@@ -567,9 +916,9 @@
       const wrapper = document.createElement('div');
       wrapper.className = 'leave-box';
       wrapper.innerHTML = `
-        <div style="display: flex; gap: 8px; align-items: center; position: relative;">
-          <input type="text" class="hr-name" placeholder="ชื่อพนักงาน" oninput="showStaffSuggestions(this)" autocomplete="off" style="flex: 1;">
-          <button onclick="this.parentElement.parentElement.remove()" style="background: var(--danger); color: white; border: none; padding: 12px; border-radius: 10px; font-weight: bold;">ลบ</button>
+        <div class="field">
+          <label>ชื่อพนักงาน</label>
+          <input type="text" class="hr-name" placeholder="ค้นหาหรือพิมพ์ชื่อ" oninput="showStaffSuggestions(this)" autocomplete="off">
         </div>
         <div class="radio-group">
           <label>
@@ -580,8 +929,9 @@
             <input type="radio" name="leaveType_${leaveRowCounter}" value="Hourly" onchange="toggleLeaveHours(this)">
             รายชั่วโมง
           </label>
-          <input type="number" class="hr-hours hidden" placeholder="ชม." style="width: 70px; padding: 8px; margin-left: auto;">
+          <input type="number" class="hr-hours hidden" placeholder="จำนวนชั่วโมง" style="width: 130px; margin-left: auto;">
         </div>
+        <button class="delete-action" type="button" onclick="this.closest('.leave-box').remove()">ลบรายการนี้</button>
       `;
       document.getElementById('leaveList').appendChild(wrapper);
     }
@@ -1197,15 +1547,15 @@
       wrapper.className = 'swipe-wrapper';
       wrapper.innerHTML = 
         '<div class="exp-row">' +
-          '<input type="text" class="i" placeholder="รายการ" value="'+escapeHtml(i)+'" oninput="showSuggestions(this)" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)" autocomplete="off">' +
-          '<input type="text" class="q" placeholder="จำนวน" value="'+escapeHtml(q)+'" onchange="doSync()" onkeydown="nav(event, 1)">' +
-          '<input type="text" class="u" placeholder="หน่วย" value="'+escapeHtml(u)+'" list="'+unitListId+'" onchange="updateUnitOptions(this.closest(\'.swipe-wrapper\')); doSync()" onkeydown="nav(event, 2)">' +
+          '<div class="exp-field exp-item-field"><label>รายการ</label><input type="text" class="i" placeholder="เช่น น้ำแข็ง" value="'+escapeHtml(i)+'" oninput="showSuggestions(this)" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)" autocomplete="off"></div>' +
+          '<div class="exp-field"><label>จำนวน</label><input type="text" class="q" placeholder="0" value="'+escapeHtml(q)+'" onchange="doSync()" onkeydown="nav(event, 1)"></div>' +
+          '<div class="exp-field"><label>หน่วย</label><input type="text" class="u" placeholder="เช่น ลัง" value="'+escapeHtml(u)+'" list="'+unitListId+'" onchange="updateUnitOptions(this.closest(\'.swipe-wrapper\')); doSync()" onkeydown="nav(event, 2)"></div>' +
           '<datalist id="'+unitListId+'"></datalist>' +
-          '<input type="text" class="p" placeholder="บาท" value="'+escapeHtml(p)+'" onchange="doSync()" onkeydown="nav(event, 3)">' +
-          '<select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); doSync()"></select>' +
-          '<select class="exp-sub-type" onchange="doSync()"></select>' +
-        '</div>' +
-        '<div class="delete-action" onclick="removeRow(this)">ลบ</div>';
+          '<div class="exp-field"><label>ยอดรวม (บาท)</label><input type="text" inputmode="decimal" class="p" placeholder="0.00" value="'+escapeHtml(p)+'" onchange="doSync()" oninput="updateDailySummary()" onkeydown="nav(event, 3)"></div>' +
+          '<div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); doSync()"></select></div>' +
+          '<div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="doSync()"></select></div>' +
+          '<button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button>' +
+        '</div>';
       document.getElementById('expenseList').appendChild(wrapper);
       wrapper.querySelector('.i').addEventListener('input', function() {
         updateUnitOptions(wrapper);
@@ -1219,7 +1569,7 @@
       return wrapper;
     }
 
-    function removeRow(btn) { btn.parentElement.remove(); doSync(); }
+    function removeRow(btn) { btn.closest('.swipe-wrapper').remove(); doSync(); }
 
     function clearAllData() {
       if(confirm("❗ ต้องการล้างข้อมูลทั้งหมด?")) {
@@ -1283,6 +1633,7 @@
         const res = await apiCall('submit', { date: date, data: data });
         document.getElementById('loadingOverlay').classList.add('hidden');
         if(res.status === "Success") {
+          setSaveState('saved', 'ส่งข้อมูลแล้ว');
           const dObj = new Date(date);
           const thMonths = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
           document.getElementById('displayDateText').innerText = `${dObj.getDate()} ${thMonths[dObj.getMonth()]} ${dObj.getFullYear().toString().slice(-2)}`;
@@ -1293,7 +1644,7 @@
             }, 150);
           }
         } else { alert("แจ้งเตือนจากระบบ: " + res.status); }
-      } catch (err) { document.getElementById('loadingOverlay').classList.add('hidden'); alert("❌ ส่งไม่สำเร็จ สาเหตุ: " + err.message); }
+      } catch (err) { document.getElementById('loadingOverlay').classList.add('hidden'); setSaveState('error', 'ส่งข้อมูลไม่สำเร็จ'); alert("❌ ส่งไม่สำเร็จ สาเหตุ: " + err.message); }
     }
 
     function goToNextDay() {
@@ -1308,6 +1659,7 @@
       document.getElementById('lockedOverlay').classList.add('hidden');
       document.getElementById('btnSubmit').style.display = 'block';
       await apiCall('unlockDate', { date: document.getElementById('mainDate').value });
+      setSaveState('saved', 'เปิดให้แก้ไขแล้ว');
     }
 
     function nav(e, idx) {
@@ -1329,8 +1681,15 @@
       var date = document.getElementById('mainDate').value;
       if(!date) return;
       var data = collectFormDataSnapshot();
+      updateDailySummary(data);
+      setSaveState('saving', 'กำลังบันทึกร่าง...');
       timer = setTimeout(async function() {
-        apiCall('autoSave', { date: date, data: data });
+        try {
+          await apiCall('autoSave', { date: date, data: data });
+          setSaveState('saved', 'บันทึกร่างแล้ว');
+        } catch (error) {
+          setSaveState('error', 'บันทึกร่างไม่สำเร็จ');
+        }
       }, 500);
     }
 
@@ -1367,10 +1726,13 @@
           document.getElementById('lockedDate').value = date; 
           document.getElementById('lockedOverlay').classList.remove('hidden');
           document.getElementById('btnSubmit').style.display = 'none';
+          setSaveState('saved', 'ส่งข้อมูลแล้ว');
         } else {
           document.getElementById('lockedOverlay').classList.add('hidden');
           document.getElementById('btnSubmit').style.display = 'block';
+          setSaveState('saved', 'บันทึกร่างอัตโนมัติ');
         }
+        updateDailySummary();
       } catch (err) { alert("❌ ดึงข้อมูลไม่สำเร็จ สาเหตุ: " + err.message); }
       finally {
         if (requestId === loadDataSeq) {

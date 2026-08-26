@@ -22,9 +22,53 @@ const CONFIG = {
     dailyCache: 'แคชรายวัน',
     leave: 'การลาพนักงาน',
     salary: 'สรุปเงินเดือน',
-    bigcOrderMenu: 'รายการเบิกของ'
+    bigcOrderMenu: 'รายการเบิกของ',
+    masterBranches: 'M_สาขา',
+    masterItems: 'M_สินค้า',
+    masterUnits: 'M_หน่วย',
+    masterItemUnits: 'M_หน่วยสินค้า',
+    masterExpenseItems: 'M_รายการค่าใช้จ่าย',
+    masterEmployees: 'M_พนักงาน',
+    transactionsV2: 'T_Transactions',
+    transactionLinesV2: 'T_รายละเอียด',
+    paymentsV2: 'T_การชำระเงิน',
+    stockMovementsV2: 'T_สต็อกเคลื่อนไหว',
+    leavesV2: 'T_การลา',
+    payrollV2: 'T_เงินเดือน',
+    attachmentsV2: 'T_ไฟล์แนบ',
+    statusHistoryV2: 'T_ประวัติสถานะ'
   }
 };
+
+const TRANSACTION_V2_HEADERS = {
+  transactions: ['transaction_id', 'วันที่รายการ', 'เวลารายการ', 'ประเภทธุรกรรม', 'รูปแบบการบันทึก', 'branch_id', 'supplier_id', 'related_employee_id', 'expense_item_id', 'parent_transaction_id', 'เลขอ้างอิงภายนอก', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'ภาษี', 'ยอดสุทธิ', 'ช่องทางชำระเงิน', 'กระทบสต็อก', 'สถานะ', 'หมายเหตุ', 'แหล่งที่มา', 'created_by', 'created_at', 'updated_by', 'updated_at', 'เหตุผลยกเลิก'],
+  lines: ['line_id', 'transaction_id', 'ลำดับ', 'item_id', 'expense_item_id', 'รายละเอียด', 'จำนวน', 'unit_id', 'conversion_to_base', 'จำนวนหน่วยฐาน', 'ราคาต่อหน่วย', 'ส่วนลด', 'ภาษี', 'ยอดรวม', 'lot_no', 'วันผลิต', 'วันหมดอายุ', 'หมายเหตุ', 'created_at'],
+  payments: ['payment_id', 'transaction_id', 'ช่องทางชำระเงิน', 'จำนวนเงิน', 'เลขอ้างอิง', 'วันที่ชำระ', 'สถานะ', 'employee_id', 'created_at', 'หมายเหตุ'],
+  stockMovements: ['movement_id', 'transaction_id', 'line_id', 'วันเวลาเคลื่อนไหว', 'branch_id', 'item_id', 'ประเภทเคลื่อนไหว', 'จำนวนเปลี่ยนแปลงหน่วยฐาน', 'base_unit_id', 'ต้นทุนต่อหน่วยฐาน', 'มูลค่ารวม', 'lot_no', 'วันหมดอายุ', 'from_branch_id', 'to_branch_id', 'created_by', 'created_at', 'หมายเหตุ'],
+  leaves: ['leave_id', 'employee_id', 'branch_id', 'ประเภทลา', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'เวลาเริ่ม', 'เวลาสิ้นสุด', 'ชั่วโมงลา', 'จำนวนวันลา', 'สถานะ', 'approved_by', 'วันที่อนุมัติ', 'created_by', 'created_at', 'หมายเหตุ'],
+  payroll: ['payroll_id', 'รอบเงินเดือน', 'branch_id', 'employee_id', 'วันทำงาน', 'ชั่วโมงทำงาน', 'ค่าแรงฐาน', 'ค่าล่วงเวลา', 'เบี้ยขยัน', 'โบนัส/พิเศษ', 'รายได้อื่น', 'หักลา', 'หักขาด/สาย', 'หักอื่น', 'ประกันสังคม', 'เงินเดือนสุทธิ', 'สถานะ', 'วันที่จ่าย', 'ช่องทางชำระเงิน', 'approved_by', 'created_at', 'หมายเหตุ'],
+  history: ['history_id', 'entity_type', 'entity_id', 'สถานะเดิม', 'สถานะใหม่', 'changed_by', 'changed_at', 'เหตุผล', 'ข้อมูลเพิ่มเติม']
+};
+
+const PREPRODUCTION_RESET_TABS = [
+  'รายรับ',
+  'แคชรายวัน',
+  'รายจ่าย',
+  'ประวัติเบิกของ',
+  'การลาพนักงาน',
+  'T_Transactions',
+  'T_รายละเอียด',
+  'T_การชำระเงิน',
+  'T_สต็อกเคลื่อนไหว',
+  'T_ตรวจนับสต็อก',
+  'T_การลา',
+  'T_เงินเดือน',
+  'T_ไฟล์แนบ',
+  'T_ประวัติสถานะ'
+];
+
+const PREPRODUCTION_RESET_ARM_PROPERTY = 'preproduction_reset_armed_at';
+const PREPRODUCTION_RESET_ARM_MINUTES = 10;
 
 function doGet() {
   return json_({
@@ -129,6 +173,12 @@ function doPost(e) {
       case 'dashboardGetMonthlySummary':
         result = handleDashboardGetMonthlySummary_(payload);
         break;
+      case 'systemHealthCheck':
+        result = handleSystemHealthCheck_();
+        break;
+      case 'systemVerifyFlow':
+        result = handleSystemVerifyFlow_(payload.date, payload.flow);
+        break;
       default:
         result = { status: 'error', message: 'Action ไม่ถูกต้อง: ' + action };
     }
@@ -197,7 +247,13 @@ function displayValues_(spreadsheetId, sheetName) {
 
 function appendRows_(sheet, rows) {
   if (!rows || rows.length === 0) return;
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  // Column A is the required key/date column in every table written here.
+  // Use it to find the real end of data because checkboxes or formulas in
+  // other columns can make getLastRow() point thousands of rows too far down.
+  const maxRows = sheet.getMaxRows();
+  const keyCell = sheet.getRange(maxRows, 1).getNextDataCell(SpreadsheetApp.Direction.UP);
+  const lastDataRow = isBlank_(keyCell.getValue()) ? 0 : keyCell.getRow();
+  sheet.getRange(lastDataRow + 1, 1, rows.length, rows[0].length).setValues(rows);
 }
 
 function deleteRowsByPredicate_(sheet, predicate) {
@@ -289,6 +345,713 @@ function makeId_(prefix, date, suffix) {
     String(suffix || '').replace(/[^A-Za-z0-9ก-๙_-]/g, ''),
     Utilities.getUuid().slice(0, 8)
   ].filter(Boolean).join('-');
+}
+
+function tableObjects_(spreadsheetId, sheetName) {
+  const rows = values_(spreadsheetId, sheetName);
+  if (!rows.length) return [];
+  const headers = rows[0].map(function(value) { return normalizeText_(value); });
+  return rows.slice(1).map(function(row, index) {
+    const obj = { __rowNumber: index + 2 };
+    headers.forEach(function(header, columnIndex) {
+      if (header) obj[header] = row[columnIndex];
+    });
+    return obj;
+  });
+}
+
+function lookupKey_(value) {
+  return normalizeText_(value).toLowerCase();
+}
+
+function normalizedSheet_(sheetName, headers) {
+  const sh = ensureSheet_(CONFIG.spreadsheets.transactions, sheetName, headers);
+  const actual = sh.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  for (let i = 0; i < headers.length; i++) {
+    if (normalizeText_(actual[i]) !== headers[i]) {
+      throw new Error('หัวตาราง ' + sheetName + ' ไม่ตรงที่คอลัมน์ ' + (i + 1));
+    }
+  }
+  return sh;
+}
+
+function inspectSheetSchema_(spreadsheetId, sheetName, headers) {
+  const sh = ss_(spreadsheetId).getSheetByName(sheetName);
+  if (!sh) return { name: sheetName, ok: false, rows: 0, message: 'ไม่พบแท็บ' };
+  const lastRow = sh.getLastRow();
+  const dataRows = lastRow < 2 ? 0 : sh.getRange(2, 1, lastRow - 1, 1).getDisplayValues().reduce(function(total, row) {
+    return total + (normalizeText_(row[0]) ? 1 : 0);
+  }, 0);
+  if (!headers || !headers.length) {
+    return { name: sheetName, ok: true, rows: dataRows, message: 'พบแท็บ' };
+  }
+  const actual = sh.getRange(1, 1, 1, headers.length).getDisplayValues()[0];
+  const mismatches = [];
+  headers.forEach(function(header, index) {
+    if (normalizeText_(actual[index]) !== header) mismatches.push(index + 1);
+  });
+  return {
+    name: sheetName,
+    ok: mismatches.length === 0,
+    rows: dataRows,
+    message: mismatches.length ? 'หัวตารางไม่ตรงที่คอลัมน์ ' + mismatches.join(', ') : 'พร้อมใช้งาน'
+  };
+}
+
+function handleSystemHealthCheck_() {
+  const tables = [
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionLinesV2, TRANSACTION_V2_HEADERS.lines),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.paymentsV2, TRANSACTION_V2_HEADERS.payments),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.stockMovementsV2, TRANSACTION_V2_HEADERS.stockMovements),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.leavesV2, TRANSACTION_V2_HEADERS.leaves),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.payrollV2, TRANSACTION_V2_HEADERS.payroll),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, 'T_ตรวจนับสต็อก'),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.attachmentsV2),
+    inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.statusHistoryV2, TRANSACTION_V2_HEADERS.history)
+  ];
+  const masterTables = [
+    CONFIG.sheets.masterBranches,
+    CONFIG.sheets.masterItems,
+    CONFIG.sheets.masterUnits,
+    CONFIG.sheets.masterItemUnits,
+    CONFIG.sheets.masterExpenseItems,
+    CONFIG.sheets.masterEmployees
+  ].map(function(sheetName) {
+    return inspectSheetSchema_(CONFIG.spreadsheets.master, sheetName);
+  });
+  return {
+    status: 'success',
+    ok: tables.concat(masterTables).every(function(item) { return item.ok; }),
+    checkedAt: now_(),
+    tables: tables,
+    masterTables: masterTables
+  };
+}
+
+function preProductionResetSummary_() {
+  const ss = ss_(CONFIG.spreadsheets.transactions);
+  return PREPRODUCTION_RESET_TABS.map(function(sheetName) {
+    const sh = ss.getSheetByName(sheetName);
+    if (!sh) return { name: sheetName, exists: false, rows: 0 };
+    const lastRow = sh.getLastRow();
+    const rows = lastRow < 2 ? 0 : sh.getRange(2, 1, lastRow - 1, 1).getDisplayValues().reduce(function(total, row) {
+      return total + (normalizeText_(row[0]) ? 1 : 0);
+    }, 0);
+    return { name: sheetName, exists: true, rows: rows };
+  });
+}
+
+function previewPreProductionReset() {
+  const result = {
+    status: 'preview_only',
+    spreadsheet: 'BOY_Transactions',
+    tables: preProductionResetSummary_(),
+    note: 'ยังไม่มีข้อมูลถูกลบ ให้รัน armPreProductionReset แล้วจึงรัน runPreProductionReset ภายใน 10 นาที'
+  };
+  console.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function armPreProductionReset() {
+  const armedAt = now_();
+  PropertiesService.getScriptProperties().setProperty(PREPRODUCTION_RESET_ARM_PROPERTY, armedAt.toISOString());
+  const result = {
+    status: 'armed',
+    armedAt: armedAt,
+    expiresInMinutes: PREPRODUCTION_RESET_ARM_MINUTES,
+    nextStep: 'ตรวจผล preview แล้วรัน runPreProductionReset ภายใน 10 นาที'
+  };
+  console.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function copyTransactionWorkbookForReset_() {
+  const source = ss_(CONFIG.spreadsheets.transactions);
+  const timestamp = Utilities.formatDate(now_(), Session.getScriptTimeZone(), 'yyyyMMdd-HHmmss');
+  const backup = SpreadsheetApp.create('BOY_Transactions_PREPRODUCTION_BACKUP_' + timestamp);
+  const defaultSheet = backup.getSheets()[0];
+  source.getSheets().forEach(function(sourceSheet) {
+    sourceSheet.copyTo(backup).setName(sourceSheet.getName());
+  });
+  backup.deleteSheet(defaultSheet);
+  return { id: backup.getId(), url: backup.getUrl(), name: backup.getName() };
+}
+
+function clearPreProductionProperties_() {
+  const props = PropertiesService.getScriptProperties();
+  const all = props.getProperties();
+  let removed = 0;
+  Object.keys(all).forEach(function(key) {
+    if (key.indexOf('draft:') === 0 || key.indexOf('submitted:') === 0 || key.indexOf('order:') === 0 || key === PREPRODUCTION_RESET_ARM_PROPERTY) {
+      props.deleteProperty(key);
+      removed++;
+    }
+  });
+  return removed;
+}
+
+function runPreProductionReset() {
+  const props = PropertiesService.getScriptProperties();
+  const armedText = props.getProperty(PREPRODUCTION_RESET_ARM_PROPERTY);
+  const armedAt = armedText ? new Date(armedText) : null;
+  const ageMs = armedAt && !isNaN(armedAt.getTime()) ? now_().getTime() - armedAt.getTime() : Infinity;
+  if (ageMs < 0 || ageMs > PREPRODUCTION_RESET_ARM_MINUTES * 60 * 1000) {
+    throw new Error('Reset ยังไม่ได้เปิดใช้งานหรือหมดเวลา ให้รัน armPreProductionReset ก่อน');
+  }
+
+  const scriptLock = lock_();
+  scriptLock.waitLock(30000);
+  try {
+    const before = preProductionResetSummary_();
+    const backup = copyTransactionWorkbookForReset_();
+    const ss = ss_(CONFIG.spreadsheets.transactions);
+    PREPRODUCTION_RESET_TABS.forEach(function(sheetName) {
+      const sh = ss.getSheetByName(sheetName);
+      if (!sh || sh.getLastRow() < 2) return;
+      sh.getRange(2, 1, sh.getLastRow() - 1, sh.getMaxColumns()).clearContent();
+    });
+    const removedProperties = clearPreProductionProperties_();
+    const result = {
+      status: 'reset_complete',
+      backup: backup,
+      before: before,
+      after: preProductionResetSummary_(),
+      removedScriptProperties: removedProperties,
+      masterWasChanged: false
+    };
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  } finally {
+    scriptLock.releaseLock();
+  }
+}
+
+function systemFlowRules_(flow) {
+  const rules = {
+    tawana: [{ source: CONFIG.sourceName }],
+    bigcExpense: [{ source: 'BOY Operation System:BigC Expense', type: 'รายจ่าย' }],
+    bigcOrder: [{ source: 'BOY Operation System:BigC Order', type: 'สั่งซื้อ' }],
+    bigcReceive: [{ source: 'BOY Operation System:BigC Receive', type: 'รับสินค้า' }],
+    bigcReturn: [
+      { source: 'BOY Operation System:BigC Return', type: 'โอนสินค้า' },
+      { source: 'BOY Operation System:BigC Order', type: 'รายรับ' }
+    ]
+  };
+  return rules[normalizeText_(flow)] || [];
+}
+
+function countRowsByTransactionId_(rows, transactionId, transactionIdColumn) {
+  return rows.reduce(function(total, row) {
+    return total + (normalizeText_(row[transactionIdColumn]) === transactionId ? 1 : 0);
+  }, 0);
+}
+
+function handleSystemVerifyFlow_(date, flow) {
+  const dateObj = parseDate_(date);
+  const rules = systemFlowRules_(flow);
+  if (!rules.length) throw new Error('ไม่รู้จัก flow ที่ต้องการตรวจ');
+
+  const transactions = values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2).slice(1);
+  const lines = values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionLinesV2).slice(1);
+  const payments = values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.paymentsV2).slice(1);
+  const movements = values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.stockMovementsV2).slice(1);
+  const history = values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.statusHistoryV2).slice(1);
+  const matches = transactions.filter(function(row) {
+    if (!rowDateMatches_(row[1], dateObj)) return false;
+    const source = normalizeText_(row[19]);
+    const type = normalizeText_(row[3]);
+    return rules.some(function(rule) {
+      return source === rule.source && (!rule.type || type === rule.type);
+    });
+  }).slice(-20).reverse().map(function(row) {
+    const transactionId = normalizeText_(row[0]);
+    const type = normalizeText_(row[3]);
+    const status = normalizeText_(row[17]);
+    const affectsStock = toBool_(row[16], false);
+    const lineCount = countRowsByTransactionId_(lines, transactionId, 1);
+    const paymentCount = countRowsByTransactionId_(payments, transactionId, 1);
+    const movementCount = countRowsByTransactionId_(movements, transactionId, 1);
+    const historyCount = history.reduce(function(total, historyRow) {
+      return total + (normalizeText_(historyRow[1]) === 'ธุรกรรม' && normalizeText_(historyRow[2]) === transactionId ? 1 : 0);
+    }, 0);
+    const checks = [];
+    if (['รายจ่าย', 'สั่งซื้อ', 'รับสินค้า', 'เบิกสินค้า', 'คืนผู้ขาย', 'โอนสินค้า', 'ขายสินค้า'].indexOf(type) >= 0 && lineCount === 0) {
+      checks.push('ไม่มีรายละเอียดรายการ');
+    }
+    if (type === 'รายรับ' && toNumber_(row[14]) !== 0 && paymentCount === 0) {
+      checks.push('ไม่มีข้อมูลการชำระเงิน');
+    }
+    if (affectsStock && status !== 'รอรับสินค้า' && status !== 'ยกเลิก' && movementCount === 0) {
+      checks.push('ไม่มีการเคลื่อนไหวสต็อก');
+    }
+    if (historyCount === 0) checks.push('ไม่มีประวัติสถานะ');
+    return {
+      transactionId: transactionId,
+      type: type,
+      status: status,
+      source: normalizeText_(row[19]),
+      parentTransactionId: normalizeText_(row[9]),
+      lineCount: lineCount,
+      paymentCount: paymentCount,
+      movementCount: movementCount,
+      historyCount: historyCount,
+      ok: checks.length === 0,
+      checks: checks
+    };
+  });
+
+  return {
+    status: 'success',
+    ok: matches.length > 0 && matches.every(function(item) { return item.ok; }),
+    date: dateKey_(dateObj),
+    flow: flow,
+    found: matches.length,
+    transactions: matches,
+    message: matches.length ? 'ตรวจรายการล่าสุดแล้ว' : 'ยังไม่พบรายการของ flow นี้ในวันที่เลือก'
+  };
+}
+
+function normalizedMasterLookups_() {
+  const branches = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranches);
+  const items = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+  const units = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterUnits);
+  const itemUnits = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemUnits);
+  const expenseItems = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterExpenseItems);
+  const employees = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterEmployees);
+  const result = {
+    branchesByName: {},
+    itemsByName: {},
+    itemsById: {},
+    unitsByName: {},
+    unitsById: {},
+    itemUnitsByKey: {},
+    expenseItemsByName: {},
+    expenseItemsByItemId: {},
+    employeesByName: {}
+  };
+
+  branches.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    [row.branch_id, row['รหัสสาขา'], row['ชื่อสาขา']].forEach(function(value) {
+      if (!isBlank_(value)) result.branchesByName[lookupKey_(value)] = row;
+    });
+  });
+
+  items.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    result.itemsById[normalizeText_(row.item_id)] = row;
+    [row['ชื่อสินค้า'], row['ชื่อเดิม']].forEach(function(value) {
+      if (!isBlank_(value)) result.itemsByName[lookupKey_(value)] = row;
+    });
+  });
+
+  units.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    result.unitsById[normalizeText_(row.unit_id)] = row;
+    [row['ชื่อหน่วย'], row['สัญลักษณ์']].forEach(function(value) {
+      if (!isBlank_(value)) result.unitsByName[lookupKey_(value)] = row;
+    });
+  });
+
+  itemUnits.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    const itemId = normalizeText_(row.item_id);
+    const unitId = normalizeText_(row.unit_id);
+    const unit = result.unitsById[unitId];
+    if (!itemId || !unit) return;
+    [unit['ชื่อหน่วย'], unit['สัญลักษณ์'], row['หน่วยเดิม']].forEach(function(value) {
+      if (!isBlank_(value)) result.itemUnitsByKey[itemId + '|' + lookupKey_(value)] = row;
+    });
+  });
+
+  expenseItems.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    const name = lookupKey_(row['ชื่อรายการค่าใช้จ่าย']);
+    const itemId = normalizeText_(row.item_id);
+    if (name) result.expenseItemsByName[name] = row;
+    if (itemId) result.expenseItemsByItemId[itemId] = row;
+  });
+
+  employees.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    const fullName = [normalizeText_(row['ชื่อจริง']), normalizeText_(row['นามสกุล'])].filter(Boolean).join(' ');
+    [row.employee_id, row['รหัสพนักงาน'], row['ชื่อเล่น'], fullName].forEach(function(value) {
+      if (!isBlank_(value)) result.employeesByName[lookupKey_(value)] = row;
+    });
+  });
+
+  return result;
+}
+
+function normalizedBranchId_(lookups, branchName) {
+  const row = lookups.branchesByName[lookupKey_(canonicalBranch_(branchName))] ||
+    lookups.branchesByName[lookupKey_(branchName)];
+  return row ? normalizeText_(row.branch_id) : '';
+}
+
+function normalizedItemInfo_(lookups, itemName, unitName) {
+  const item = lookups.itemsByName[lookupKey_(itemName)] || null;
+  if (!item) {
+    return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
+  }
+  const itemId = normalizeText_(item.item_id);
+  const baseUnitId = normalizeText_(item.base_unit_id);
+  let unitId = '';
+  let conversion = 1;
+  const itemUnit = lookups.itemUnitsByKey[itemId + '|' + lookupKey_(unitName)];
+  if (itemUnit) {
+    unitId = normalizeText_(itemUnit.unit_id);
+    conversion = toNumber_(itemUnit['อัตราแปลงเป็นหน่วยฐาน']) || 1;
+  } else {
+    const unit = lookups.unitsByName[lookupKey_(unitName)];
+    unitId = unit ? normalizeText_(unit.unit_id) : baseUnitId;
+  }
+  return {
+    item: item,
+    itemId: itemId,
+    unitId: unitId || baseUnitId,
+    baseUnitId: baseUnitId,
+    conversion: conversion,
+    baseQtyFactor: conversion,
+    trackStock: toBool_(item['ติดตามสต็อก'], false)
+  };
+}
+
+function normalizedExpenseInfo_(lookups, itemName, itemId) {
+  return lookups.expenseItemsByName[lookupKey_(itemName)] ||
+    lookups.expenseItemsByItemId[normalizeText_(itemId)] || null;
+}
+
+function normalizedHistoryRow_(entityType, entityId, oldStatus, newStatus, reason, details, changedAt) {
+  const stamp = changedAt || now_();
+  return [
+    makeId_('HIST', stamp, entityId),
+    entityType,
+    entityId,
+    oldStatus || '',
+    newStatus || '',
+    'WEB',
+    stamp,
+    reason || '',
+    details || ''
+  ];
+}
+
+function appendNormalizedRows_(batch) {
+  batch = batch || {};
+  if (batch.transactions && batch.transactions.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions), batch.transactions);
+  }
+  if (batch.lines && batch.lines.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.transactionLinesV2, TRANSACTION_V2_HEADERS.lines), batch.lines);
+  }
+  if (batch.payments && batch.payments.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.paymentsV2, TRANSACTION_V2_HEADERS.payments), batch.payments);
+  }
+  if (batch.stockMovements && batch.stockMovements.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.stockMovementsV2, TRANSACTION_V2_HEADERS.stockMovements), batch.stockMovements);
+  }
+  if (batch.leaves && batch.leaves.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.leavesV2, TRANSACTION_V2_HEADERS.leaves), batch.leaves);
+  }
+  if (batch.payroll && batch.payroll.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.payrollV2, TRANSACTION_V2_HEADERS.payroll), batch.payroll);
+  }
+  if (batch.history && batch.history.length) {
+    appendRows_(normalizedSheet_(CONFIG.sheets.statusHistoryV2, TRANSACTION_V2_HEADERS.history), batch.history);
+  }
+}
+
+function cancelNormalizedTransactions_(date, branchId, sourceName, transactionType, reason) {
+  const sh = normalizedSheet_(CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions);
+  if (sh.getLastRow() < 2) return [];
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, TRANSACTION_V2_HEADERS.transactions.length).getValues();
+  const changedAt = now_();
+  const history = [];
+  const canceledTransactionIds = [];
+  rows.forEach(function(row, index) {
+    if (!rowDateMatches_(row[1], date)) return;
+    if (normalizeText_(row[5]) !== normalizeText_(branchId)) return;
+    if (normalizeText_(row[19]) !== normalizeText_(sourceName)) return;
+    if (transactionType && normalizeText_(row[3]) !== transactionType) return;
+    if (normalizeText_(row[17]) === 'ยกเลิก') return;
+    const oldStatus = normalizeText_(row[17]);
+    row[17] = 'ยกเลิก';
+    row[22] = 'WEB';
+    row[23] = changedAt;
+    row[24] = reason || 'แทนที่ด้วยการบันทึกใหม่';
+    sh.getRange(index + 2, 1, 1, row.length).setValues([row]);
+    canceledTransactionIds.push(normalizeText_(row[0]));
+    history.push(normalizedHistoryRow_('ธุรกรรม', normalizeText_(row[0]), oldStatus, 'ยกเลิก', row[24], sourceName, changedAt));
+  });
+  reverseStockMovementsV2_(canceledTransactionIds, reason || 'ย้อนกลับจากการยกเลิก', changedAt);
+  return history;
+}
+
+function reverseStockMovementsV2_(transactionIds, reason, changedAt) {
+  if (!transactionIds || !transactionIds.length) return 0;
+  const wanted = {};
+  transactionIds.forEach(function(id) { wanted[normalizeText_(id)] = true; });
+  const sh = normalizedSheet_(CONFIG.sheets.stockMovementsV2, TRANSACTION_V2_HEADERS.stockMovements);
+  if (sh.getLastRow() < 2) return 0;
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, TRANSACTION_V2_HEADERS.stockMovements.length).getValues();
+  const stamp = changedAt || now_();
+  const reversals = [];
+  rows.forEach(function(row, index) {
+    const transactionId = normalizeText_(row[1]);
+    if (!wanted[transactionId]) return;
+    const qty = toNumber_(row[7]);
+    if (!qty) return;
+    reversals.push([
+      makeId_('REV-MOV', stamp, String(index + 1)), transactionId, row[2], stamp, row[4], row[5],
+      qty > 0 ? 'ปรับลด' : 'ปรับเพิ่ม', -qty, row[8], row[9], -toNumber_(row[10]), row[11], row[12],
+      row[13], row[14], 'WEB', stamp, reason
+    ]);
+  });
+  appendRows_(sh, reversals);
+  return reversals.length;
+}
+
+function writeExpenseTransactionsV2_(date, data, options) {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, options.branchName);
+  if (!branchId) throw new Error('ไม่พบ branch_id สำหรับ ' + options.branchName + ' ใน BOY_Master');
+  const dateObj = parseDate_(date);
+  const createdAt = now_();
+  const batch = { transactions: [], lines: [], history: [] };
+  batch.history = cancelNormalizedTransactions_(dateObj, branchId, options.sourceName, 'รายจ่าย', 'บันทึกรายจ่ายใหม่ของวันเดียวกัน');
+  const expenses = Array.isArray(data && data.exp) ? data.exp : [];
+
+  expenses.forEach(function(entry, index) {
+    const name = normalizeText_(entry.i);
+    const qty = toNumber_(entry.q);
+    const unitName = normalizeText_(entry.u);
+    const amount = toNumber_(entry.p);
+    const note = normalizeText_(entry.n);
+    if (!name && qty === 0 && !unitName && amount === 0 && !note) return;
+
+    const itemInfo = normalizedItemInfo_(lookups, name, unitName);
+    const expenseInfo = normalizedExpenseInfo_(lookups, name, itemInfo.itemId);
+    const expenseItemId = expenseInfo ? normalizeText_(expenseInfo.expense_item_id) : '';
+    const baseQty = qty ? qty * itemInfo.conversion : '';
+    const affectsStock = !!(itemInfo.itemId && itemInfo.trackStock && qty);
+    const needsReview = !expenseItemId && !itemInfo.itemId;
+    const status = affectsStock ? 'รอรับสินค้า' : (needsReview ? 'รอตรวจสอบ' : 'ยืนยันแล้ว');
+    const mode = qty || unitName || itemInfo.itemId ? 'รายละเอียด' : 'บันทึกเร็ว';
+    const transactionId = makeId_(options.idPrefix + '-TXN', dateObj, String(index + 1));
+    const lineId = makeId_('LINE', dateObj, String(index + 1));
+    const unitPrice = qty ? amount / qty : '';
+    const categoryNote = [normalizeText_(entry.m), normalizeText_(entry.t)].filter(Boolean).join(' / ');
+    const combinedNote = [note, categoryNote].filter(Boolean).join(' | ');
+
+    batch.transactions.push([
+      transactionId, dateObj, createdAt, 'รายจ่าย', mode, branchId, '', '', expenseItemId, '',
+      options.sourceName + ':' + dateKey_(dateObj) + ':' + String(index + 1), amount || '', '', '', amount || '', '',
+      affectsStock, status, combinedNote, options.sourceName, 'WEB', createdAt, '', '', ''
+    ]);
+    batch.lines.push([
+      lineId, transactionId, index + 1, itemInfo.itemId, expenseItemId, name || 'ไม่ระบุรายการ', qty || '', itemInfo.unitId,
+      itemInfo.conversion || 1, baseQty, unitPrice, '', '', amount || '', '', '', '', note, createdAt
+    ]);
+    batch.history.push(normalizedHistoryRow_('ธุรกรรม', transactionId, '', status, 'สร้างรายการ', options.sourceName, createdAt));
+  });
+
+  appendNormalizedRows_(batch);
+  return batch.transactions.length;
+}
+
+function writeIncomeTransactionsV2_(date, branchName, sourceName, idPrefix, entries) {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, branchName);
+  if (!branchId) throw new Error('ไม่พบ branch_id สำหรับ ' + branchName + ' ใน BOY_Master');
+  const dateObj = parseDate_(date);
+  const createdAt = now_();
+  const batch = { transactions: [], payments: [], history: [] };
+  batch.history = cancelNormalizedTransactions_(dateObj, branchId, sourceName, 'รายรับ', 'บันทึกรายรับใหม่ของวันเดียวกัน');
+
+  (entries || []).forEach(function(entry, index) {
+    const amount = toNumber_(entry.amount);
+    const note = normalizeText_(entry.note);
+    if (amount === 0 && !note) return;
+    const transactionId = makeId_(idPrefix + '-TXN', dateObj, String(index + 1));
+    const paymentMethod = normalizeText_(entry.paymentMethod) || 'อื่นๆ';
+    batch.transactions.push([
+      transactionId, dateObj, createdAt, 'รายรับ', 'บันทึกเร็ว', branchId, '', '', '', '',
+      sourceName + ':' + dateKey_(dateObj) + ':' + String(index + 1), amount || '', '', '', amount || '', paymentMethod,
+      false, 'ยืนยันแล้ว', note, sourceName, 'WEB', createdAt, '', '', ''
+    ]);
+    if (amount) {
+      batch.payments.push([
+        makeId_('PAY', dateObj, String(index + 1)), transactionId, paymentMethod, amount, '', createdAt,
+        'ชำระแล้ว', '', createdAt, note
+      ]);
+    }
+    batch.history.push(normalizedHistoryRow_('ธุรกรรม', transactionId, '', 'ยืนยันแล้ว', 'สร้างรายการ', sourceName, createdAt));
+  });
+
+  appendNormalizedRows_(batch);
+  return batch.transactions.length;
+}
+
+function latestNormalizedTransactionId_(date, branchId, transactionType, sourceName) {
+  const sh = normalizedSheet_(CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions);
+  if (sh.getLastRow() < 2) return '';
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, TRANSACTION_V2_HEADERS.transactions.length).getValues();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const row = rows[i];
+    if (!rowDateMatches_(row[1], date)) continue;
+    if (normalizeText_(row[5]) !== normalizeText_(branchId)) continue;
+    if (normalizeText_(row[3]) !== transactionType) continue;
+    if (sourceName && normalizeText_(row[19]) !== sourceName) continue;
+    if (normalizeText_(row[17]) === 'ยกเลิก') continue;
+    return normalizeText_(row[0]);
+  }
+  return '';
+}
+
+function writeBigcOrderTransactionV2_(date, qtyData, options) {
+  const dateObj = parseDate_(date || now_());
+  const createdAt = now_();
+  const lookups = normalizedMasterLookups_();
+  const tawanaBranchId = normalizedBranchId_(lookups, CONFIG.branchName);
+  const bigcBranchId = normalizedBranchId_(lookups, CONFIG.bigcBranchName);
+  if (!tawanaBranchId || !bigcBranchId) throw new Error('ไม่พบ branch_id ของทาวน่าหรือบิ๊กซีใน BOY_Master');
+  const batch = { transactions: [], lines: [], stockMovements: [], history: [] };
+  batch.history = cancelNormalizedTransactions_(dateObj, bigcBranchId, options.sourceName, options.transactionType, 'บันทึกรายการใหม่ของวันเดียวกัน');
+  const parentId = options.transactionType === 'สั่งซื้อ' ? '' :
+    latestNormalizedTransactionId_(dateObj, bigcBranchId, 'สั่งซื้อ', 'BOY Operation System:BigC Order');
+  const transactionId = makeId_(options.idPrefix + '-TXN', dateObj, '1');
+  const metaByName = getDatabaseRowMap_();
+  const orderItemMap = getBigcOrderItemMap_();
+  let lineNumber = 0;
+
+  Object.keys(qtyData || {}).forEach(function(rawName) {
+    const qty = toNumber_(qtyData[rawName]);
+    if (!qty) return;
+    lineNumber++;
+    const resolved = resolveBigcOrderItem_(rawName, metaByName, orderItemMap);
+    const itemInfo = normalizedItemInfo_(lookups, resolved.name, resolved.unit);
+    const baseQty = qty * (itemInfo.conversion || 1);
+    const lineId = makeId_('LINE', dateObj, String(lineNumber));
+    batch.lines.push([
+      lineId, transactionId, lineNumber, itemInfo.itemId, '', resolved.name, qty, itemInfo.unitId,
+      itemInfo.conversion || 1, baseQty, '', '', '', '', '', '', '', options.note || '', createdAt
+    ]);
+
+    if (options.stockDirection && itemInfo.itemId) {
+      const fromBranchId = options.stockDirection === 'TO_BIGC' ? tawanaBranchId : bigcBranchId;
+      const toBranchId = options.stockDirection === 'TO_BIGC' ? bigcBranchId : tawanaBranchId;
+      batch.stockMovements.push([
+        makeId_('MOV-OUT', dateObj, String(lineNumber)), transactionId, lineId, createdAt, fromBranchId, itemInfo.itemId,
+        'โอนออก', -Math.abs(baseQty), itemInfo.baseUnitId, '', '', '', '', fromBranchId, toBranchId, 'WEB', createdAt, options.note || ''
+      ]);
+      batch.stockMovements.push([
+        makeId_('MOV-IN', dateObj, String(lineNumber)), transactionId, lineId, createdAt, toBranchId, itemInfo.itemId,
+        'โอนเข้า', Math.abs(baseQty), itemInfo.baseUnitId, '', '', '', '', fromBranchId, toBranchId, 'WEB', createdAt, options.note || ''
+      ]);
+    }
+  });
+
+  if (!lineNumber) return 0;
+  batch.transactions.push([
+    transactionId, dateObj, createdAt, options.transactionType, 'รายละเอียด', bigcBranchId, '', '', '', parentId,
+    options.sourceName + ':' + dateKey_(dateObj), '', '', '', '', '', !!options.stockDirection, 'ยืนยันแล้ว',
+    options.note || '', options.sourceName, 'WEB', createdAt, '', '', ''
+  ]);
+  batch.history.push(normalizedHistoryRow_('ธุรกรรม', transactionId, '', 'ยืนยันแล้ว', 'สร้างรายการ', options.sourceName, createdAt));
+  appendNormalizedRows_(batch);
+  return lineNumber;
+}
+
+function writeLeavesV2_(date, leaves) {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, CONFIG.branchName);
+  const dateObj = parseDate_(date);
+  const createdAt = now_();
+  const batch = { leaves: [], history: [] };
+  (leaves || []).forEach(function(leave) {
+    const employee = lookups.employeesByName[lookupKey_(leave.name)];
+    const employeeId = employee ? normalizeText_(employee.employee_id) : '';
+    const type = normalizeText_(leave.type) === 'Hourly' ? 'ลารายชั่วโมง' : 'ลาเต็มวัน';
+    const hours = type === 'ลารายชั่วโมง' ? toNumber_(leave.hours) : '';
+    const days = type === 'ลาเต็มวัน' ? 1 : '';
+    batch.leaves.push([
+      leave.leaveId, employeeId, branchId, type, dateObj, dateObj, '', '', hours, days,
+      'อนุมัติแล้ว', 'WEB', createdAt, 'WEB', createdAt, employeeId ? '' : 'ไม่พบ employee_id จากชื่อ: ' + normalizeText_(leave.name)
+    ]);
+    batch.history.push(normalizedHistoryRow_('การลา', leave.leaveId, '', 'อนุมัติแล้ว', 'สร้างรายการลา', normalizeText_(leave.name), createdAt));
+  });
+  appendNormalizedRows_(batch);
+}
+
+function cancelLeaveV2_(leaveId) {
+  if (!leaveId) return;
+  const sh = normalizedSheet_(CONFIG.sheets.leavesV2, TRANSACTION_V2_HEADERS.leaves);
+  if (sh.getLastRow() < 2) return;
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, TRANSACTION_V2_HEADERS.leaves.length).getValues();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (normalizeText_(rows[i][0]) !== normalizeText_(leaveId)) continue;
+    const oldStatus = normalizeText_(rows[i][10]);
+    rows[i][10] = 'ยกเลิก';
+    sh.getRange(i + 2, 1, 1, rows[i].length).setValues([rows[i]]);
+    appendNormalizedRows_({ history: [normalizedHistoryRow_('การลา', leaveId, oldStatus, 'ยกเลิก', 'ยกเลิกจากหน้าเว็บ', '', now_())] });
+    return;
+  }
+}
+
+function writePayrollFromExpensesV2_(date, data) {
+  const names = {};
+  (Array.isArray(data && data.exp) ? data.exp : []).forEach(function(entry) {
+    const name = normalizeText_(entry.i);
+    ['เงินเดือน ', 'เงินพิเศษ ', 'โบนัส '].some(function(prefix) {
+      if (name.indexOf(prefix) !== 0) return false;
+      const employeeName = normalizeText_(name.slice(prefix.length));
+      if (employeeName) names[employeeName] = true;
+      return true;
+    });
+  });
+  const staffNames = Object.keys(names);
+  if (!staffNames.length) return 0;
+
+  const dateObj = parseDate_(date);
+  const month = dateObj.getMonth() + 1;
+  const year = dateObj.getFullYear();
+  const period = monthKey_(year, month);
+  const createdAt = now_();
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, CONFIG.branchName);
+  const calculations = handleCalculateSalary_(month, year, staffNames);
+  const sh = normalizedSheet_(CONFIG.sheets.payrollV2, TRANSACTION_V2_HEADERS.payroll);
+  const history = [];
+
+  if (sh.getLastRow() >= 2) {
+    const existing = sh.getRange(2, 1, sh.getLastRow() - 1, TRANSACTION_V2_HEADERS.payroll.length).getValues();
+    existing.forEach(function(row, index) {
+      if (normalizeText_(row[1]) !== period || normalizeText_(row[2]) !== branchId) return;
+      if (normalizeText_(row[16]) === 'ยกเลิก') return;
+      const oldStatus = normalizeText_(row[16]);
+      row[16] = 'ยกเลิก';
+      row[21] = [normalizeText_(row[21]), 'แทนที่ด้วยการคำนวณใหม่'].filter(Boolean).join(' | ');
+      sh.getRange(index + 2, 1, 1, row.length).setValues([row]);
+      history.push(normalizedHistoryRow_('เงินเดือน', normalizeText_(row[0]), oldStatus, 'ยกเลิก', 'คำนวณเงินเดือนใหม่', period, createdAt));
+    });
+  }
+
+  const payrollRows = calculations.map(function(item, index) {
+    const employee = lookups.employeesByName[lookupKey_(item.name)];
+    const employeeId = employee ? normalizeText_(employee.employee_id) : '';
+    const status = employeeId ? 'อนุมัติแล้ว' : 'รอตรวจสอบ';
+    const payrollId = makeId_('PAYROLL', dateObj, String(index + 1));
+    history.push(normalizedHistoryRow_('เงินเดือน', payrollId, '', status, 'สร้างผลคำนวณเงินเดือน', item.name, createdAt));
+    return [
+      payrollId, period, branchId, employeeId, item.workedDays || '', '', item.basePay || '', '', item.bonusPay || '', '', '',
+      item.hourDeduction || '', '', '', '', item.totalNet || '', status, '', '', '', createdAt,
+      employeeId ? '' : 'ไม่พบ employee_id จากชื่อ: ' + normalizeText_(item.name)
+    ];
+  });
+  appendNormalizedRows_({ payroll: payrollRows, history: history });
+  return payrollRows.length;
 }
 
 function normalizeText_(value) {
@@ -730,6 +1493,17 @@ function handleSubmit_(date, data) {
     const txId = Utilities.getUuid().slice(0, 8);
     replaceIncomeRows_(date, data || {}, txId);
     replaceExpenseRows_(date, data || {}, txId);
+    writeIncomeTransactionsV2_(date, CONFIG.branchName, CONFIG.sourceName, 'TAWANA-INC', [
+      { amount: data && data.cash && data.cash.v, paymentMethod: 'เงินสด', note: 'รายรับหน้าร้านเงินสด' },
+      { amount: data && data.transfer && data.transfer.v, paymentMethod: 'โอนเงิน', note: 'รายรับหน้าร้านเงินโอน' },
+      { amount: data && data.other && data.other.v, paymentMethod: 'อื่นๆ', note: data && data.other && data.other.n }
+    ]);
+    writeExpenseTransactionsV2_(date, data || {}, {
+      branchName: CONFIG.branchName,
+      sourceName: CONFIG.sourceName,
+      idPrefix: 'TAWANA-EXP'
+    });
+    writePayrollFromExpensesV2_(date, data || {});
     const key = dateKey_(date);
     upsertDailyCache_(key, CONFIG.branchName, data || {}, true);
     PropertiesService.getScriptProperties().setProperty(propKey_('submitted', key), 'true');
@@ -937,6 +1711,11 @@ function handleBigcExpenseSubmit_(date, data) {
       sourceName: 'BOY Operation System:BigC Expense',
       idPrefix: 'BIGC-EXP',
       txId: txId
+    });
+    writeExpenseTransactionsV2_(date, data || {}, {
+      branchName: CONFIG.bigcBranchName,
+      sourceName: 'BOY Operation System:BigC Expense',
+      idPrefix: 'BIGC-EXP'
     });
     const key = dateKey_(date);
     PropertiesService.getScriptProperties().setProperty(scopedPropKey_('submitted', 'BigCExpense', key), 'true');
@@ -1197,6 +1976,12 @@ function handleBigcOrderSubmitOrder_(date, qtyData, categories) {
     scopedPropKey_('order', 'BigCOrder', key),
     JSON.stringify(orderData)
   );
+  writeBigcOrderTransactionV2_(dateObj, qtyData || {}, {
+    transactionType: 'สั่งซื้อ',
+    sourceName: 'BOY Operation System:BigC Order',
+    idPrefix: 'BIGC-ORDER',
+    note: 'คำสั่งเบิกของสำหรับบิ๊กซีพัทยากลาง'
+  });
   return { status: 'success', saved: Object.keys(qtyData || {}).length };
 }
 
@@ -1210,6 +1995,13 @@ function handleBigcOrderReceive_(date, qtyData) {
       note: 'รับสินค้าเข้าบิ๊กซีพัทยากลาง',
       sourceName: 'BOY Operation System:BigC Receive',
       idPrefix: 'BIGC-WITHDRAW'
+    });
+    writeBigcOrderTransactionV2_(dateObj, qtyData || {}, {
+      transactionType: 'รับสินค้า',
+      sourceName: 'BOY Operation System:BigC Receive',
+      idPrefix: 'BIGC-RECEIVE',
+      note: 'รับสินค้าเข้าบิ๊กซีพัทยากลาง',
+      stockDirection: 'TO_BIGC'
     });
     const key = dateKey_(dateObj);
     PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
@@ -1231,6 +2023,17 @@ function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
       idPrefix: 'BIGC-RETURN'
     });
     const incomeRows = replaceBigcOrderIncomeRows_(dateObj, cash, transfer);
+    writeBigcOrderTransactionV2_(dateObj, qtyData || {}, {
+      transactionType: 'โอนสินค้า',
+      sourceName: 'BOY Operation System:BigC Return',
+      idPrefix: 'BIGC-RETURN',
+      note: 'คืนสินค้าจากบิ๊กซีพัทยากลางให้ทาวน่า',
+      stockDirection: 'TO_TAWANA'
+    });
+    writeIncomeTransactionsV2_(dateObj, CONFIG.bigcBranchName, 'BOY Operation System:BigC Order', 'BIGC-INC', [
+      { amount: cash, paymentMethod: 'เงินสด', note: 'รายรับหน้าร้านบิ๊กซีเงินสด' },
+      { amount: transfer, paymentMethod: 'โอนเงิน', note: 'รายรับหน้าร้านบิ๊กซีเงินโอน' }
+    ]);
     const key = dateKey_(dateObj);
     PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
     return { status: 'success', saved: returned, incomeRows: incomeRows };
@@ -1494,6 +2297,7 @@ function handleSaveMultipleLeaves_(date, leaves) {
     const type = normalizeText_(leave.type || 'Full Day');
     const hours = type === 'Hourly' ? toNumber_(leave.hours) : 0;
     const dayCount = type === 'Full Day' ? 1 : 0;
+    const leaveId = makeId_('TAWANA-LEAVE', dateObj, String(index + 1));
     rows.push([
       dateObj,
       CONFIG.branchName,
@@ -1502,11 +2306,13 @@ function handleSaveMultipleLeaves_(date, leaves) {
       hours || '',
       dayCount || '',
       '',
-      makeId_('TAWANA-LEAVE', dateObj, String(index + 1))
+      leaveId
     ]);
+    leave.leaveId = leaveId;
   });
 
   appendRows_(sh, rows);
+  writeLeavesV2_(dateObj, leaves.filter(function(leave) { return leave.leaveId; }));
   return { status: 'success', saved: rows.length };
 }
 
@@ -1533,6 +2339,7 @@ function handleCancelLeaveRecord_(date, rowNumber) {
   if (!rowDateMatches_(row[0], date) || !isTawanaBranch_(row[1])) {
     throw new Error('รายการลานี้ไม่ตรงกับวันที่หรือสาขาที่เลือก');
   }
+  cancelLeaveV2_(normalizeText_(row[7]));
   sh.deleteRow(rn);
   return { status: 'success' };
 }

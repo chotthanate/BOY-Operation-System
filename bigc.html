@@ -139,6 +139,7 @@
       font-size: 1rem;
     }
     .expense-list { display: grid; gap: 8px; }
+    .quick-expense-hint { margin: -2px 0 10px; padding: 9px 11px; border-radius: 10px; background: #fff3bd; color: #795a05; font-size: .82rem; line-height: 1.45; font-weight: 800; }
     .expense-row {
       display: grid;
       grid-template-columns: minmax(0, 1.45fr) minmax(64px, .55fr) minmax(72px, .65fr) minmax(84px, .7fr) 42px;
@@ -192,6 +193,8 @@
       cursor: pointer;
     }
     .btn-secondary { background: #fff; color: var(--primary-dark); border: 1px solid var(--line); }
+    .test-mode-banner { position: sticky; top: 0; z-index: 10050; padding: 10px 14px; background: #f59e0b; color: #422006; text-align: center; font-weight: 900; box-shadow: 0 3px 10px rgba(0,0,0,.16); }
+    .test-mode-banner[hidden] { display: none; }
     .btn-primary { background: var(--primary); color: #2a1f00; }
     .btn-danger { background: #fff1f0; color: var(--danger); border: 1px solid #ffd0cc; }
     .status { min-height: 22px; font-size: .86rem; color: var(--muted); font-weight: 800; margin-top: 8px; }
@@ -216,13 +219,20 @@
     }
     .hidden { display: none !important; }
     @media (max-width: 520px) {
-      .expense-row { grid-template-columns: minmax(0, 1.25fr) 62px 70px 82px 38px; gap: 6px; padding: 7px; }
+      .expense-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr) 38px; gap: 6px; padding: 7px; }
+      .expense-row .item { grid-column: 1 / 4; }
+      .expense-row .delete-btn { grid-column: 4; grid-row: 1; }
+      .expense-row .qty { grid-column: 1; }
+      .expense-row .unit { grid-column: 2; }
+      .expense-row .amount { grid-column: 3 / 5; }
+      .expense-row .note, .expense-row .type-hint { grid-column: 1 / 5; }
       .expense-row input { padding: 10px 8px; font-size: 15px; }
       .delete-btn { width: 38px; height: 40px; }
     }
   </style>
 </head>
 <body>
+  <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
   <button class="app-switcher-toggle" type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูระบบ">☰</button>
   <div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
   <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
@@ -250,6 +260,7 @@
 
     <section class="panel">
       <h2 class="section-title">รายจ่าย</h2>
+      <div class="quick-expense-hint">บันทึกเร็ว: เลือก/พิมพ์รายการและใส่ยอดเงินได้เลย จำนวนกับหน่วยกรอกเฉพาะของที่ต้องติดตามสต็อก</div>
       <div id="expenseList" class="expense-list"></div>
       <button class="btn btn-secondary" type="button" style="width:100%; margin-top:10px;" onclick="addRow()">+ เพิ่มบรรทัด</button>
     </section>
@@ -276,7 +287,13 @@
   </div>
 
   <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
+    function resolveWebAppUrl(defaultUrl) {
+      const isLocal = location.protocol === 'file:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const override = isLocal ? new URLSearchParams(location.search).get('api') : '';
+      return override && /^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(override) ? override : defaultUrl;
+    }
+    const WEB_APP_URL = resolveWebAppUrl("https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec");
+    const TEST_MODE = new URLSearchParams(location.search).get('mode') === 'test';
     const STORAGE_ITEMS = "BOY_BIGC_EXPENSE_ITEMS";
     const STORAGE_META = "BOY_BIGC_EXPENSE_META";
 
@@ -286,6 +303,16 @@
     let appStarted = false;
     let isLoadingData = false;
     let rowCounter = 0;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!TEST_MODE) return;
+      document.getElementById('testModeBanner').hidden = false;
+      document.querySelector('.actions .btn-primary').textContent = '🧪 บันทึกรายจ่ายทดลอง';
+      document.querySelectorAll('#appSwitcherPanel a').forEach(function(link) {
+        if (!/(tawana|bigc|bigc-order)\.html$/.test(new URL(link.href, location.href).pathname)) link.style.display = 'none';
+        else link.href = link.getAttribute('href').split('?')[0] + location.search;
+      });
+    });
 
     function closeAppSwitcher() {
       document.getElementById('appSwitcherBackdrop').classList.add('app-switcher-hidden');
