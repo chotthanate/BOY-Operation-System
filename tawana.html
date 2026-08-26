@@ -499,11 +499,16 @@
     .swipe-wrapper.expanded .expense-chevron { transform: rotate(180deg); }
     .exp-row { display: grid; grid-template-columns: 1fr; gap: 10px; }
     .expense-compact-row { display: grid; grid-template-columns: .7fr 1fr 1.05fr; gap: 7px; }
-    .expense-category-row, .expense-extra-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .expense-category-row, .expense-extra-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+    .expense-category-row > .exp-field, .expense-extra-row > .exp-field { min-width: 0; }
+    .expense-details .exp-field input, .expense-details .exp-field select, .expense-details .exp-field textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+    .expense-category-row .exp-main-type, .expense-category-row .exp-sub-type { grid-column: auto; }
+    .expense-category-row select { height: 46px; min-height: 46px; }
     .exp-main-field, .exp-sub-field, .exp-item-field { grid-column: auto; }
     .unit-price-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 7px 9px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-strong); font-size: .7rem; }
     .unit-price-value { font-weight: 900; }
-    .expense-note-field textarea { min-height: 72px; resize: vertical; }
+    .expense-extra-row input, .expense-extra-row textarea { height: 54px; min-height: 54px; }
+    .expense-note-field textarea { resize: vertical; }
     .delete-action { min-height: 40px; margin-top: 1px; border-color: #f2cec5; background: #fff; }
     .section-actions { display: grid; grid-template-columns: 1.35fr .85fr; }
 
@@ -712,6 +717,7 @@
     var appStarted = false;
     var itemDict = {}; 
     var itemMetaDict = {};
+    var supplierList = [];
     var expenseCategories = { rows: [], mainTypes: [], subTypesByMain: {} };
     var databaseRows = [];
     var expenseRowCounter = 0;
@@ -1444,6 +1450,7 @@
         conversionRate: conversionRate,
         unitDetail: String(source.unitDetail || '').trim(),
         unitOptions: unitOptions,
+        supplierOptions: uniqueTextOptions(source.supplierOptions || []),
         useStock: source.useStock === true || String(source.useStock || '').toUpperCase() === 'TRUE',
         active: source.active !== false && String(source.active || 'TRUE').toUpperCase() !== 'FALSE'
       };
@@ -1503,10 +1510,56 @@
       });
     }
 
+    function uniqueTextOptions(options) {
+      var seen = {};
+      return (options || []).map(function(value) {
+        return String(value && value.name || value || '').trim();
+      }).filter(function(value) {
+        var key = value.toLowerCase();
+        if (!value || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+    }
+
+    function setSupplierList(rows) {
+      supplierList = uniqueTextOptions(rows || []);
+      localStorage.setItem('BOY_SUPPLIERS', JSON.stringify(supplierList));
+      refreshAllSupplierOptions();
+    }
+
+    function getSupplierOptionsForItem(itemName, currentSupplier) {
+      var meta = getExpenseMeta(itemName, '');
+      var mapped = uniqueTextOptions(meta.supplierOptions || []);
+      var options = mapped.length ? mapped : supplierList.slice();
+      return uniqueTextOptions(options.concat([currentSupplier]));
+    }
+
+    function updateSupplierOptions(wrapper) {
+      if (!wrapper) return;
+      var itemInput = wrapper.querySelector('.i');
+      var supplierInput = wrapper.querySelector('.exp-supplier');
+      if (!itemInput || !supplierInput) return;
+      var datalist = document.getElementById(supplierInput.getAttribute('list'));
+      if (!datalist) return;
+      var options = getSupplierOptionsForItem(itemInput.value, supplierInput.value);
+      datalist.innerHTML = options.map(function(option) {
+        return '<option value="' + escapeHtml(option) + '"></option>';
+      }).join('');
+      supplierInput.placeholder = options.length ? 'เลือกหรือพิมพ์ชื่อผู้ขาย' : 'พิมพ์ชื่อผู้ขาย';
+    }
+
+    function refreshAllSupplierOptions() {
+      document.querySelectorAll('#expenseList .swipe-wrapper').forEach(updateSupplierOptions);
+    }
+
     async function pullItems() {
       try {
         const sharedData = await apiCall('shared_loadDB');
         const database = sharedData && sharedData.database;
+        if (database && Array.isArray(database.suppliers)) {
+          setSupplierList(database.suppliers);
+        }
         if (database && database.expenseCategories) {
           applyExpenseCategories(database.expenseCategories);
         }
@@ -1554,6 +1607,8 @@
       if (savedMeta) { itemMetaDict = JSON.parse(savedMeta); }
       var savedCategories = localStorage.getItem('BOY_EXPENSE_CATEGORIES');
       if (savedCategories) { expenseCategories = normalizeExpenseCategories(JSON.parse(savedCategories)); }
+      var savedSuppliers = localStorage.getItem('BOY_SUPPLIERS');
+      if (savedSuppliers) { supplierList = JSON.parse(savedSuppliers); }
 
       var savedStaff = localStorage.getItem('BOY_STAFF');
       if (savedStaff) { staffList = JSON.parse(savedStaff); }
@@ -1618,6 +1673,7 @@
       }
       var wrapper = inputEl.closest('.swipe-wrapper');
       updateUnitOptions(wrapper);
+      updateSupplierOptions(wrapper);
       syncCategoryFromItem(wrapper);
       updateExpenseCard(wrapper);
       doSync(); 
@@ -1626,12 +1682,22 @@
     function toggleExpenseDetails(summary) {
       var wrapper = summary.closest('.swipe-wrapper');
       var willExpand = !wrapper.classList.contains('expanded');
+      if (willExpand) collapseOtherExpenseCards(wrapper);
       wrapper.classList.toggle('expanded', willExpand);
       summary.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
       if (willExpand) {
         var firstInput = wrapper.querySelector('.i');
         if (firstInput && !firstInput.value) setTimeout(function() { firstInput.focus(); }, 80);
       }
+    }
+
+    function collapseOtherExpenseCards(exceptWrapper) {
+      document.querySelectorAll('#expenseList .swipe-wrapper.expanded').forEach(function(wrapper) {
+        if (wrapper === exceptWrapper) return;
+        wrapper.classList.remove('expanded');
+        var summary = wrapper.querySelector('.expense-summary');
+        if (summary) summary.setAttribute('aria-expanded', 'false');
+      });
     }
 
     function handleExpenseSummaryKey(event, summary) {
@@ -1691,7 +1757,9 @@
       if(!supplier) supplier = ''; if(!note) note = '';
       expenseRowCounter++;
       var unitListId = 'unitOptions_' + expenseRowCounter;
+      var supplierListId = 'supplierOptions_' + expenseRowCounter;
       var hasExistingData = !!(i || q || u || p || mainType || subType || supplier || note);
+      collapseOtherExpenseCards();
       var wrapper = document.createElement('div');
       wrapper.className = 'swipe-wrapper' + (hasExistingData ? '' : ' expanded');
       wrapper.innerHTML = 
@@ -1709,17 +1777,19 @@
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
           '<div class="expense-category-row"><div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div><div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div></div>' +
-          '<div class="expense-extra-row"><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เช่น Makro" value="'+escapeHtml(supplier)+'" onchange="doSync()"></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
+          '<div class="expense-extra-row"><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
           '<button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button>' +
         '</div></div>';
       document.getElementById('expenseList').appendChild(wrapper);
       wrapper.querySelector('.i').addEventListener('input', function() {
         updateUnitOptions(wrapper);
+        updateSupplierOptions(wrapper);
       });
       wrapper.querySelector('.u').addEventListener('focus', function() {
         updateUnitOptions(wrapper);
       });
       updateUnitOptions(wrapper, u);
+      updateSupplierOptions(wrapper);
       updateCategoryOptions(wrapper, mainType, subType);
       if (!mainType && !subType) syncCategoryFromItem(wrapper);
       updateExpenseCard(wrapper);

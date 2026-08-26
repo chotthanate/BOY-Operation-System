@@ -28,6 +28,8 @@ const CONFIG = {
     masterUnits: 'M_หน่วย',
     masterItemUnits: 'M_หน่วยสินค้า',
     masterExpenseItems: 'M_รายการค่าใช้จ่าย',
+    masterSuppliers: 'M_ผู้ขาย',
+    masterItemSuppliers: 'M_ผู้ขายสินค้า',
     masterEmployees: 'M_พนักงาน',
     transactionsV2: 'T_Transactions',
     transactionLinesV2: 'T_รายละเอียด',
@@ -416,6 +418,8 @@ function handleSystemHealthCheck_() {
     CONFIG.sheets.masterUnits,
     CONFIG.sheets.masterItemUnits,
     CONFIG.sheets.masterExpenseItems,
+    CONFIG.sheets.masterSuppliers,
+    CONFIG.sheets.masterItemSuppliers,
     CONFIG.sheets.masterEmployees
   ].map(function(sheetName) {
     return inspectSheetSchema_(CONFIG.spreadsheets.master, sheetName);
@@ -618,6 +622,8 @@ function normalizedMasterLookups_() {
   const units = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterUnits);
   const itemUnits = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemUnits);
   const expenseItems = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterExpenseItems);
+  const suppliers = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterSuppliers);
+  const itemSuppliers = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemSuppliers);
   const employees = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterEmployees);
   const result = {
     branchesByName: {},
@@ -628,6 +634,9 @@ function normalizedMasterLookups_() {
     itemUnitsByKey: {},
     expenseItemsByName: {},
     expenseItemsByItemId: {},
+    suppliersByName: {},
+    suppliersById: {},
+    supplierIdsByItemId: {},
     employeesByName: {}
   };
 
@@ -673,6 +682,27 @@ function normalizedMasterLookups_() {
     if (itemId) result.expenseItemsByItemId[itemId] = row;
   });
 
+  suppliers.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    const supplierId = normalizeText_(row.supplier_id);
+    if (!supplierId) return;
+    result.suppliersById[supplierId] = row;
+    [row.supplier_id, row['รหัสผู้ขาย'], row['ชื่อผู้ขาย']].forEach(function(value) {
+      if (!isBlank_(value)) result.suppliersByName[lookupKey_(value)] = row;
+    });
+  });
+
+  itemSuppliers.forEach(function(row) {
+    if (!toBool_(row['เปิดใช้งาน'], true)) return;
+    const itemId = normalizeText_(row.item_id);
+    const supplierId = normalizeText_(row.supplier_id);
+    if (!itemId || !supplierId || !result.suppliersById[supplierId]) return;
+    if (!result.supplierIdsByItemId[itemId]) result.supplierIdsByItemId[itemId] = [];
+    if (result.supplierIdsByItemId[itemId].indexOf(supplierId) === -1) {
+      result.supplierIdsByItemId[itemId].push(supplierId);
+    }
+  });
+
   employees.forEach(function(row) {
     if (!toBool_(row['เปิดใช้งาน'], true)) return;
     const fullName = [normalizeText_(row['ชื่อจริง']), normalizeText_(row['นามสกุล'])].filter(Boolean).join(' ');
@@ -682,6 +712,15 @@ function normalizedMasterLookups_() {
   });
 
   return result;
+}
+
+function normalizedSupplierInfo_(lookups, supplierName) {
+  const supplier = lookups.suppliersByName[lookupKey_(supplierName)] || null;
+  return {
+    supplier: supplier,
+    supplierId: supplier ? normalizeText_(supplier.supplier_id) : '',
+    supplierName: supplier ? normalizeText_(supplier['ชื่อผู้ขาย']) : normalizeText_(supplierName)
+  };
 }
 
 function normalizedBranchId_(lookups, branchName) {
@@ -830,6 +869,7 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const amount = toNumber_(entry.p);
     const note = normalizeText_(entry.n);
     const supplierName = normalizeText_(entry.s);
+    const supplierInfo = normalizedSupplierInfo_(lookups, supplierName);
     if (!name && qty === 0 && !unitName && amount === 0 && !note && !supplierName) return;
 
     const itemInfo = normalizedItemInfo_(lookups, name, unitName);
@@ -847,7 +887,7 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const combinedNote = [supplierName ? 'ผู้ขาย: ' + supplierName : '', note, categoryNote].filter(Boolean).join(' | ');
 
     batch.transactions.push([
-      transactionId, dateObj, createdAt, 'รายจ่าย', mode, branchId, '', '', expenseItemId, '',
+      transactionId, dateObj, createdAt, 'รายจ่าย', mode, branchId, supplierInfo.supplierId, '', expenseItemId, '',
       options.sourceName + ':' + dateKey_(dateObj) + ':' + String(index + 1), amount || '', '', '', amount || '', '',
       affectsStock, status, combinedNote, options.sourceName, 'WEB', createdAt, '', '', ''
     ]);
@@ -1291,6 +1331,19 @@ function handleSharedLoadDb_() {
   });
   const categories = {};
   const itemMeta = {};
+  const lookups = normalizedMasterLookups_();
+  const suppliers = Object.keys(lookups.suppliersById).map(function(supplierId) {
+    const row = lookups.suppliersById[supplierId];
+    return {
+      id: supplierId,
+      code: normalizeText_(row['รหัสผู้ขาย']),
+      name: normalizeText_(row['ชื่อผู้ขาย'])
+    };
+  }).filter(function(row) {
+    return row.name;
+  }).sort(function(a, b) {
+    return a.name.localeCompare(b.name, 'th');
+  });
 
   rows.forEach(function(row) {
     const category = row.mainType || 'ไม่ระบุประเภท';
@@ -1308,8 +1361,15 @@ function handleSharedLoadDb_() {
       unitDetail: row.unitDetail,
       unitOptions: row.unitOptions || [],
       useStock: row.useStock,
-      active: row.active
+      active: row.active,
+      supplierOptions: []
     };
+    const normalizedItem = lookups.itemsByName[lookupKey_(row.name)];
+    const itemId = normalizedItem ? normalizeText_(normalizedItem.item_id) : '';
+    meta.supplierOptions = (lookups.supplierIdsByItemId[itemId] || []).map(function(supplierId) {
+      const supplier = lookups.suppliersById[supplierId];
+      return supplier ? normalizeText_(supplier['ชื่อผู้ขาย']) : '';
+    }).filter(Boolean);
     itemMeta[displayName] = meta;
     itemMeta[row.name] = meta;
   });
@@ -1325,6 +1385,7 @@ function handleSharedLoadDb_() {
     database: {
       categories: categories,
       itemMeta: itemMeta,
+      suppliers: suppliers,
       expenseCategories: getExpenseCategories_()
     }
   };
