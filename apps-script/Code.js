@@ -829,7 +829,8 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const unitName = normalizeText_(entry.u);
     const amount = toNumber_(entry.p);
     const note = normalizeText_(entry.n);
-    if (!name && qty === 0 && !unitName && amount === 0 && !note) return;
+    const supplierName = normalizeText_(entry.s);
+    if (!name && qty === 0 && !unitName && amount === 0 && !note && !supplierName) return;
 
     const itemInfo = normalizedItemInfo_(lookups, name, unitName);
     const expenseInfo = normalizedExpenseInfo_(lookups, name, itemInfo.itemId);
@@ -843,7 +844,7 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const lineId = makeId_('LINE', dateObj, String(index + 1));
     const unitPrice = qty ? amount / qty : '';
     const categoryNote = [normalizeText_(entry.m), normalizeText_(entry.t)].filter(Boolean).join(' / ');
-    const combinedNote = [note, categoryNote].filter(Boolean).join(' | ');
+    const combinedNote = [supplierName ? 'ผู้ขาย: ' + supplierName : '', note, categoryNote].filter(Boolean).join(' | ');
 
     batch.transactions.push([
       transactionId, dateObj, createdAt, 'รายจ่าย', mode, branchId, '', '', expenseItemId, '',
@@ -1573,7 +1574,9 @@ function replaceExpenseRows_(date, data, txId) {
     const qty = toNumber_(item.q);
     const unit = normalizeText_(item.u);
     const amount = toNumber_(item.p);
-    if (!name && qty === 0 && !unit && amount === 0) return;
+    const supplierName = normalizeText_(item.s);
+    const note = normalizeText_(item.n);
+    if (!name && qty === 0 && !unit && amount === 0 && !supplierName && !note) return;
 
     const unitPrice = qty ? amount / qty : '';
     const meta = metaByName[name] || {};
@@ -1587,7 +1590,7 @@ function replaceExpenseRows_(date, data, txId) {
       amount || '',
       normalizeText_(item.m) || meta.mainType || '',
       normalizeText_(item.t) || meta.subType || '',
-      '',
+      [supplierName ? 'ผู้ขาย: ' + supplierName : '', note].filter(Boolean).join(' | '),
       makeId_('TAWANA-EXP', dateObj, String(index + 1) + '-' + txId),
       CONFIG.sourceName
     ]);
@@ -1647,13 +1650,17 @@ function buildSnapshotFromRows_(dateKey, incomeRows, expenseRows) {
 
   expenseRows.slice(1).forEach(function(row) {
     if (!rowDateMatches_(row[0], dateKey) || !isTawanaBranch_(row[1])) return;
+    const legacyNote = normalizeText_(row[9]);
+    const supplierMatch = legacyNote.match(/^ผู้ขาย:\s*([^|]+?)(?:\s*\|\s*(.*))?$/);
     snapshot.exp.push({
       i: row[2] || '',
       u: row[3] || '',
       q: row[4] || '',
       p: row[6] || '',
       m: row[7] || '',
-      t: row[8] || ''
+      t: row[8] || '',
+      s: supplierMatch ? normalizeText_(supplierMatch[1]) : '',
+      n: supplierMatch ? normalizeText_(supplierMatch[2]) : legacyNote
     });
   });
 
