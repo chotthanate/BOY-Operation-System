@@ -12,7 +12,7 @@
 
 ## Pending
 
-- Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 26 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
+- Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
 - หน้าใช้งานที่เปิดจาก `system-test.html` มีแถบ Test Mode, ซ่อนการแก้ Master และรักษา query ทดสอบเมื่อสลับระหว่างหน้าทาวน่า/BigC
 - Apps Script มี maintenance functions `previewPreProductionReset`, `armPreProductionReset`, `runPreProductionReset`; ไม่เปิดผ่าน Web API และจะสำรอง BOY_Transactions ก่อนล้างข้อมูลธุรกรรมทดสอบ
@@ -26,7 +26,7 @@
 ## Manual steps
 
 - ใช้ `system-test.html` ทดสอบ flow จริงกับ deployment ทดสอบก่อนอัปเดต deployment เดิม
-- ต้อง push `apps-script/Code.js` และสร้าง Apps Script test deployment รุ่นใหม่ก่อนทดสอบ Supplier แบบครบทาง; เครื่องรอบนี้ไม่มี credentials ของ clasp จึงยังไม่ได้ deploy
+- เครื่อง Mac นี้ติดตั้ง `clasp` และล็อกอินบัญชีที่เข้าถึง BOY Apps Script แล้ว สามารถ `clasp push`, สร้าง version และอัปเดต deployment ได้ โดย credentials อยู่ที่ home directory และไม่อยู่ใน repository
 - เมื่อทุก flow ผ่านแล้วจึงอัปเดต deployment เดิมที่หน้า BOY ออนไลน์ใช้อยู่
 
 ## Notes
