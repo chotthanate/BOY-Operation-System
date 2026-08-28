@@ -1,0 +1,4 @@
+interface:
+  display_name: "BOY Operation UI"
+  short_description: "ออกแบบหน้าระบบ BOY ให้กระชับและมืออาชีพ"
+  default_prompt: "Use $boy-operation-ui to refine this BOY operations screen for clear, professional daily use."

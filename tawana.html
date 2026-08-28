@@ -404,11 +404,12 @@
     .settings-btn { position: static; width: auto; height: auto; font-size: inherit; }
     .full-overlay { padding: max(16px, env(safe-area-inset-top)) 14px calc(16px + env(safe-area-inset-bottom)); background: rgba(15,27,22,.66); }
     .overlay-card { width: min(100%, 620px); padding: 22px; border-radius: 24px; box-shadow: 0 22px 56px rgba(0,0,0,.22); }
-    .review-list { display: grid; gap: 8px; margin: 16px 0; text-align: left; }
-    .review-row { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-    .review-row:last-child { border-bottom: 0; }
-    .review-row span { color: var(--muted); }
-    .review-row strong { color: var(--ink); }
+    .review-count-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 12px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-soft); text-align: left; }
+    .review-count-card span { color: var(--muted); font-size: .82rem; font-weight: 750; }
+    .review-count-card strong { color: var(--primary-strong); font-size: 1.08rem; }
+    .review-warnings { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #f1d18a; border-radius: 14px; background: var(--accent-soft); color: #72500f; text-align: left; }
+    .review-warnings strong { display: block; font-size: .82rem; }
+    .review-warnings ul { margin: 7px 0 0; padding-left: 20px; font-size: .8rem; line-height: 1.55; }
     .test-mode-banner { margin: calc(-1 * max(14px, env(safe-area-inset-top))) calc(-1 * max(14px, env(safe-area-inset-right))) 14px calc(-1 * max(14px, env(safe-area-inset-left))); box-shadow: none; }
     @media (max-width: 640px) {
       .date-status-card { grid-template-columns: 1fr; }
@@ -567,7 +568,7 @@
             <div class="field"><label for="val-transfer">เงินโอน</label><input type="number" inputmode="decimal" id="val-transfer" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
             <div class="field wide"><label>รายรับอื่น</label><div class="other-income-grid"><input type="text" id="otherIncomeNote" placeholder="รายละเอียด เช่น ค่าส่ง" onchange="doSync()"><input type="number" inputmode="decimal" id="otherIncomeVal" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div></div>
           </div></div>
-          <div class="card expense-card"><div class="section-heading"><div><h2 class="section-title">รายจ่าย</h2><p class="section-description">แตะรายการเพื่อดูหรือแก้รายละเอียด</p></div></div><div class="quick-expense-hint">ด้านนอกแสดงเฉพาะรายการ ยอด หมวด และสถานะสต็อก</div><div id="expenseList"></div><div class="section-actions"><button class="btn-main btn-soft" type="button" onclick="addRow()">+ เพิ่มรายการ</button><button class="btn-main btn-danger-quiet" type="button" onclick="clearAllData()">ล้างทั้งหมด</button></div></div>
+          <div class="card expense-card"><div class="section-heading"><div><h2 class="section-title">รายจ่าย</h2><p class="section-description">แตะรายการเพื่อดูหรือแก้รายละเอียด</p></div></div><div id="expenseList"></div><div class="section-actions"><button class="btn-main btn-soft" type="button" onclick="addRow()">+ เพิ่มรายการ</button><button class="btn-main btn-danger-quiet" type="button" onclick="clearAllData()">ล้างทั้งหมด</button></div></div>
         </div>
         <button class="btn-main btn-submit" id="btnSubmit" type="button" onclick="openSubmitReview()">ตรวจสอบและส่งข้อมูลประจำวัน</button>
       </section>
@@ -591,7 +592,7 @@
     <button class="bottom-nav-item" type="button" aria-label="สรุปเงินเดือน" onclick="switchAppView('payrollView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v13H4zM7 10h4M7 14h2M15 11h2v4h-2z"/></svg><span class="bottom-nav-label">เงินเดือน</span></button>
     <button class="bottom-nav-item" type="button" aria-label="เมนูเพิ่มเติม" onclick="switchAppView('moreView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg><span class="bottom-nav-label">เพิ่มเติม</span></button>
   </div></nav>
-  <div id="reviewOverlay" class="full-overlay hidden"><div class="overlay-card"><h2 style="margin:0;">ตรวจสอบก่อนส่ง</h2><p style="color:var(--muted); margin:8px 0 0;">หลังส่งแล้ว วันนี้จะถูกล็อกเพื่อป้องกันการแก้โดยไม่ตั้งใจ</p><div class="review-list"><div class="review-row"><span>รายรับรวม</span><strong id="reviewIncome">฿0.00</strong></div><div class="review-row"><span>รายจ่ายรวม</span><strong id="reviewExpense">฿0.00</strong></div><div class="review-row"><span>คงเหลือ</span><strong id="reviewNet">฿0.00</strong></div><div class="review-row"><span>จำนวนรายการรายจ่าย</span><strong id="reviewExpenseCount">0 รายการ</strong></div></div><button class="btn-main btn-primary" type="button" onclick="confirmSubmitReview()">ยืนยันและส่งข้อมูล</button><button class="btn-main btn-secondary" type="button" onclick="closeSubmitReview()">กลับไปตรวจสอบ</button></div></div>
+  <div id="reviewOverlay" class="full-overlay hidden"><div class="overlay-card"><h2 style="margin:0;">ตรวจสอบก่อนส่ง</h2><div class="review-count-card"><span>รายการรายจ่าย</span><strong id="reviewExpenseCount">0 รายการ</strong></div><div id="reviewWarnings" class="review-warnings hidden" role="alert"><strong>ข้อมูลรายรับยังไม่ครบ</strong><ul id="reviewWarningList"></ul></div><button class="btn-main btn-primary" type="button" onclick="confirmSubmitReview()">ยืนยันและส่งข้อมูล</button><button class="btn-main btn-secondary" type="button" onclick="closeSubmitReview()">กลับไปตรวจสอบ</button></div></div>
 
   <div id="settingsOverlay" class="full-overlay hidden">
     <div class="overlay-card">
@@ -778,11 +779,15 @@
 
     function openSubmitReview() {
       if (!document.getElementById('mainDate').value) return alert('กรุณาระบุวันที่');
-      var totals = updateDailySummary();
-      document.getElementById('reviewIncome').textContent = formatMoney(totals.income);
-      document.getElementById('reviewExpense').textContent = formatMoney(totals.expense);
-      document.getElementById('reviewNet').textContent = formatMoney(totals.net);
-      document.getElementById('reviewExpenseCount').textContent = totals.expenseCount + ' รายการ';
+      var data = collectFormDataSnapshot();
+      var warnings = [];
+      if (!String(data.cash && data.cash.v || '').trim()) warnings.push('ยังไม่ได้กรอกยอดเงินสด');
+      if (!String(data.transfer && data.transfer.v || '').trim()) warnings.push('ยังไม่ได้กรอกยอดเงินโอน');
+      document.getElementById('reviewExpenseCount').textContent = (data.exp || []).length + ' รายการ';
+      document.getElementById('reviewWarningList').innerHTML = warnings.map(function(message) {
+        return '<li>' + escapeHtml(message) + '</li>';
+      }).join('');
+      document.getElementById('reviewWarnings').classList.toggle('hidden', warnings.length === 0);
       document.getElementById('reviewOverlay').classList.remove('hidden');
     }
 
