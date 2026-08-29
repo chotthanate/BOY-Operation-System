@@ -1,0 +1,21 @@
+{
+  "company_id": "00000000-0000-0000-0000-000000000000",
+  "branch_id": null,
+  "import_type": "external_statement",
+  "source_system": "google_sheets",
+  "source_file_id": "BOY_TRANSACTIONS_SHEET_ID",
+  "source_sheet_name": "I_Statement_ช่องทางขาย",
+  "idempotency_key": "statement-example-2026-08",
+  "rows": [
+    {
+      "source_row_number": 2,
+      "branch_code": "BURGER",
+      "channel_code": "GRAB",
+      "statement_no": "EXAMPLE-001",
+      "pos_sales_included": true,
+      "record_mode": "reconcile_only",
+      "validation_status": "valid",
+      "validation_messages": []
+    }
+  ]
+}

@@ -2,6 +2,11 @@
 
 ## Current state
 
+- เตรียม BOY Central บน Supabase แบบแยกจากฐาน `BOY Burger POS` แล้วใน `supabase/`: มีโครงบริษัท/สาขา, Master ร่วม, ธุรกรรม, การชำระเงิน, Stock Ledger, ต้นทุนเฉลี่ยต่อสาขา, Statement, POS shadow data, Import และ Audit Log
+- เพิ่ม RLS แยกสิทธิ์ตามสาขา, API บันทึกรายจ่ายแบบ atomic, API รับ POS order/void แบบ idempotent และ API รับข้อมูลที่ตรวจแล้วจาก Google Sheets
+- เพิ่ม Edge Function `sheet-import` และ `pos-shadow-sync`; รหัสลับอยู่ใน Supabase secrets เท่านั้นและไม่มีค่าจริงใน repository
+- `BOY_Master` เพิ่มแท็บเตรียมนำเข้า `I_แก้ไขสินค้า`, `I_แก้ไข Supplier`, `I_แก้ไขพนักงาน`, `I_แก้ไขสาขา`, `I_ผลการนำเข้า` แล้ว โดยไม่แก้ข้อมูลแท็บเดิม
+- `BOY_Transactions` เพิ่มแท็บ `I_รายรับภายนอก`, `I_Statement_ช่องทางขาย`, `I_ค่าธรรมเนียม`, `I_รายการปรับปรุง`, `I_ประวัตินำเข้า` แล้ว พร้อมช่องกันยอด Grab/คนละครึ่งซ้ำกับ POS
 - `BOY_Transactions` มีโครงสร้างใหม่แล้ว: `_คู่มือระบบใหม่`, `T_Transactions`, `T_รายละเอียด`, `T_การชำระเงิน`, `T_สต็อกเคลื่อนไหว`, `T_ตรวจนับสต็อก`, `T_การลา`, `T_เงินเดือน`, `T_ไฟล์แนบ`, `T_ประวัติสถานะ`
 - แท็บเดิมยังอยู่ครบและยังเป็นแหล่งข้อมูลของ Dashboard ระหว่างช่วงเปลี่ยนระบบ
 - โค้ด Apps Script ในเครื่องเพิ่ม dual-write จาก flow เดิมไปยัง `T_*` สำหรับรายรับ รายจ่าย คำสั่งซื้อ รับ/คืนสินค้า การลา และเงินเดือน
@@ -13,6 +18,10 @@
 
 ## Pending
 
+- ยังไม่ได้สร้าง Supabase project `BOY Central` บน Cloud และยังไม่ได้ apply migrations เพราะต้องยืนยัน organization/region และค่าใช้จ่ายของโปรเจกต์ก่อน
+- หลังสร้าง Cloud project ต้อง apply migrations, รัน `supabase/tests/001_schema_contract.sql`, ทดสอบ Auth/RLS ข้ามสาขา และรัน Supabase security/performance advisors
+- ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
+- ยังไม่ได้ย้ายข้อมูลจาก Sheets หรือ Supabase Burger POS ตัวจริง ขณะนี้มีเฉพาะโครงนำเข้าและยังไม่แตะฐานเดิม
 - Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
 - หน้าใช้งานที่เปิดจาก `system-test.html` มีแถบ Test Mode, ซ่อนการแก้ Master และรักษา query ทดสอบเมื่อสลับระหว่างหน้าทาวน่า/BigC
@@ -32,6 +41,8 @@
 
 ## Notes
 
+- รายละเอียด BOY Central, บทบาท Google Sheets และลำดับ Cutover อยู่ใน `docs/BOY_CENTRAL.md`
+- ข้อมูลในแท็บ `I_*` เป็น staging เท่านั้น ไม่ใช่ข้อมูลจริงจนกว่าจะตรวจ อนุมัติ และนำเข้า Supabase สำเร็จ
 - การแก้รายการที่เคยยืนยันแล้วจะเปลี่ยนรายการเดิมเป็น `ยกเลิก` และสร้างรายการใหม่ ไม่ลบประวัติใน `T_*`
 - ธุรกรรมรับ/คืนสินค้าที่ถูกแทนที่จะสร้าง stock movement ย้อนกลับ เพื่อไม่ให้ยอดสต็อกถูกนับซ้ำ
 - รายจ่ายที่จับคู่สินค้าและติดตามสต็อกจะอยู่สถานะ `รอรับสินค้า`; รายการที่หา ID ไม่เจอจะอยู่สถานะ `รอตรวจสอบ`

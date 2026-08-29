@@ -1,0 +1,2 @@
+-- Reference branches are seeded by the foundation migration so hosted and local
+-- environments receive the same identifiers and setup.

@@ -1,5 +1,7 @@
 # BOY Operation System
 
+เอกสารโครงฐานข้อมูลกลางและแผนย้ายระบบอยู่ที่ [docs/BOY_CENTRAL.md](docs/BOY_CENTRAL.md)
+
 Staging repo for the next BOY business workflow.
 
 ## Pages

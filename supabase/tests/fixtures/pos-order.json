@@ -1,0 +1,14 @@
+{
+  "event_type": "order",
+  "payload": {
+    "branch_id": "00000000-0000-0000-0000-000000000000",
+    "external_id": "burger-pos-order-example",
+    "idempotency_key": "burger-pos-order-example-v1",
+    "source_system": "burger_pos",
+    "ordered_at": "2026-08-29T12:00:00+07:00",
+    "total_amount": 100,
+    "lines": [],
+    "payments": [],
+    "stock_movements": []
+  }
+}
