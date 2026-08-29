@@ -9,6 +9,7 @@ declare
   target_branch public.branches%rowtype;
   target_company_id uuid;
   target_supplier_id uuid;
+  line_supplier_id uuid;
   target_location_id uuid;
   target_transaction_id uuid;
   existing_transaction_id uuid;
@@ -140,6 +141,17 @@ begin
       raise exception 'expense item not found at line %', line_number;
     end if;
 
+    line_supplier_id := coalesce(nullif(line->>'supplier_id', '')::uuid, target_supplier_id);
+    if line_supplier_id is not null and not exists (
+      select 1
+      from public.suppliers s
+      where s.id = line_supplier_id
+        and s.company_id = target_company_id
+        and s.active
+    ) then
+      raise exception 'supplier not found at line %', line_number;
+    end if;
+
     if nullif(line->>'unit_id', '') is not null and not exists (
       select 1
       from public.units u
@@ -170,7 +182,7 @@ begin
     end;
 
     insert into public.transaction_lines (
-      company_id, transaction_id, line_no, item_id, expense_item_id,
+      company_id, transaction_id, line_no, item_id, expense_item_id, supplier_id, supplier_name_raw,
       description, quantity, unit_id, conversion_to_base, base_quantity,
       unit_price, line_total, unit_cost_base, lot_no, manufactured_on,
       expires_on, note
@@ -180,6 +192,8 @@ begin
       line_number,
       target_item.id,
       nullif(line->>'expense_item_id', '')::uuid,
+      line_supplier_id,
+      case when line_supplier_id is null then nullif(trim(line->>'supplier_name'), '') else null end,
       coalesce(nullif(trim(line->>'description'), ''), target_item.name, 'ไม่ระบุรายการ'),
       quantity_value,
       nullif(line->>'unit_id', '')::uuid,

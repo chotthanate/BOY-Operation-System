@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff8ed">
+  <title>ร้านเบอร์เกอร์ | BOY Operations</title>
+  <link rel="stylesheet" href="assets/css/burger.css">
+  <link rel="stylesheet" href="assets/css/burger-history.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="store-button" id="storeButton" type="button" aria-haspopup="dialog">
+        <span class="store-mark">BG</span>
+        <span><small>กำลังทำงานที่</small><strong>ร้านเบอร์เกอร์</strong></span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      <span class="connection-badge" id="connectionBadge">กำลังเชื่อมต่อ</span>
+    </header>
+
+    <main>
+      <section class="auth-card" id="authCard" hidden>
+        <div class="section-heading"><div><small>BOY CENTRAL</small><h1>เข้าสู่ระบบ</h1></div></div>
+        <form id="loginForm" class="form-stack">
+          <label>อีเมล<input id="loginEmail" type="email" autocomplete="username" required></label>
+          <label>รหัสผ่าน<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+          <p class="form-error" id="loginError" role="alert"></p>
+          <button class="primary-button" type="submit">เข้าสู่ระบบ</button>
+        </form>
+      </section>
+
+      <section class="page active" id="expensePage" data-page="expense">
+        <div class="section-heading compact">
+          <div><small>ร้านเบอร์เกอร์</small><h1>บันทึกรายจ่าย</h1></div>
+          <span class="count-pill" id="expenseCount">1 รายการ</span>
+        </div>
+        <div class="toolbar-card">
+          <label>วันที่<input id="expenseDate" type="date"></label>
+          <label>ชำระด้วย<select id="paymentMethod"><option value="cash">เงินสด</option><option value="transfer">เงินโอน</option><option value="other">อื่น ๆ</option></select></label>
+        </div>
+        <div id="expenseLines" class="expense-list"></div>
+        <div class="action-row">
+          <button class="secondary-button" id="addExpenseButton" type="button">+ เพิ่มรายการ</button>
+          <button class="primary-button" id="reviewExpenseButton" type="button">ตรวจสอบและบันทึก</button>
+        </div>
+        <section class="panel recent-panel"><h2>รายจ่ายล่าสุด</h2><div id="expenseHistory" class="history-list"></div></section>
+      </section>
+
+      <section class="page" id="stockPage" data-page="stock">
+        <div class="section-heading compact"><div><small>คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div>
+        <label class="search-field"><span>⌕</span><input id="stockSearch" type="search" placeholder="ค้นหาสินค้า"></label>
+        <div class="stock-list" id="stockList"></div>
+      </section>
+
+      <section class="page" id="dashboardPage" data-page="dashboard">
+        <div class="section-heading compact"><div><small>ผลประกอบการ</small><h1>Dashboard</h1></div><input id="dashboardMonth" class="month-input" type="month"></div>
+        <div class="metric-grid" id="metricGrid"></div>
+        <section class="panel"><h2>ช่องทางรายรับ</h2><div id="channelBreakdown" class="breakdown-list"></div></section>
+      </section>
+
+      <section class="page" id="accountPage" data-page="account">
+        <div class="section-heading compact"><div><small>บัญชีผู้ใช้</small><h1>บัญชี</h1></div></div>
+        <section class="panel account-panel"><div class="account-avatar">BOY</div><strong id="accountName">—</strong><span id="accountEmail">—</span><button class="secondary-button" id="logoutButton" type="button">ออกจากระบบ</button></section>
+      </section>
+    </main>
+  </div>
+
+  <nav class="bottom-nav" aria-label="เมนูหลัก">
+    <button class="active" type="button" data-target="expense"><span>＋</span><strong>รายจ่าย</strong></button>
+    <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
+    <button type="button" data-target="dashboard"><span>▥</span><strong>Dashboard</strong></button>
+    <button type="button" data-target="account"><span>○</span><strong>บัญชี</strong></button>
+  </nav>
+
+  <dialog id="storeDialog" class="sheet-dialog">
+    <div class="dialog-handle"></div><h2>เลือกร้าน</h2>
+    <a href="tawana.html"><span>TW</span><strong>ทาวน่า</strong><small>ร้านน้ำ</small></a>
+    <a href="bigc.html"><span>BC</span><strong>บิ๊กซี พัทยากลาง</strong><small>ค่าใช้จ่ายสาขา</small></a>
+    <a class="active" href="burger.html"><span>BG</span><strong>ร้านเบอร์เกอร์</strong><small>กำลังใช้</small></a>
+    <button type="button" disabled><span>GR</span><strong>ร้านเนื้อ / Grill</strong><small>เร็ว ๆ นี้</small></button>
+    <button class="dialog-close" type="button" data-close-dialog="storeDialog">ปิด</button>
+  </dialog>
+
+  <dialog id="reviewDialog" class="review-dialog">
+    <div class="review-icon">✓</div><h2>ตรวจสอบรายจ่าย</h2><p id="reviewSummary"></p><div id="reviewErrors" class="review-errors"></div>
+    <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="reviewDialog">กลับไปแก้</button><button class="primary-button" id="confirmExpenseButton" type="button">บันทึก</button></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/burger.js"></script>
+</body>
+</html>

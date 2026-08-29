@@ -7,6 +7,8 @@
 - เพิ่ม Edge Function `sheet-import` และ `pos-shadow-sync`; รหัสลับอยู่ใน Supabase secrets เท่านั้นและไม่มีค่าจริงใน repository
 - `BOY_Master` เพิ่มแท็บเตรียมนำเข้า `I_แก้ไขสินค้า`, `I_แก้ไข Supplier`, `I_แก้ไขพนักงาน`, `I_แก้ไขสาขา`, `I_ผลการนำเข้า` แล้ว โดยไม่แก้ข้อมูลแท็บเดิม
 - `BOY_Transactions` เพิ่มแท็บ `I_รายรับภายนอก`, `I_Statement_ช่องทางขาย`, `I_ค่าธรรมเนียม`, `I_รายการปรับปรุง`, `I_ประวัตินำเข้า` แล้ว พร้อมช่องกันยอด Grab/คนละครึ่งซ้ำกับ POS
+- เพิ่ม `burger.html` ใน BOY สำหรับล็อกอิน บันทึก/ดูประวัติรายจ่าย ดูสต็อก และ Dashboard ร้านเบอร์เกอร์ พร้อมเมนูสลับร้านและ Supplier ที่กรองตามสินค้าแต่พิมพ์ชื่อใหม่ได้
+- รายจ่าย BOY Central รองรับ Supplier แยกต่อรายการแล้ว และเก็บชื่อ Supplier ที่พิมพ์ใหม่ไว้ตรวจสอบโดยไม่สร้าง Master อัตโนมัติ
 - `BOY_Transactions` มีโครงสร้างใหม่แล้ว: `_คู่มือระบบใหม่`, `T_Transactions`, `T_รายละเอียด`, `T_การชำระเงิน`, `T_สต็อกเคลื่อนไหว`, `T_ตรวจนับสต็อก`, `T_การลา`, `T_เงินเดือน`, `T_ไฟล์แนบ`, `T_ประวัติสถานะ`
 - แท็บเดิมยังอยู่ครบและยังเป็นแหล่งข้อมูลของ Dashboard ระหว่างช่วงเปลี่ยนระบบ
 - โค้ด Apps Script ในเครื่องเพิ่ม dual-write จาก flow เดิมไปยัง `T_*` สำหรับรายรับ รายจ่าย คำสั่งซื้อ รับ/คืนสินค้า การลา และเงินเดือน
@@ -22,6 +24,7 @@
 - หลังสร้าง Cloud project ต้อง apply migrations, รัน `supabase/tests/001_schema_contract.sql`, ทดสอบ Auth/RLS ข้ามสาขา และรัน Supabase security/performance advisors
 - ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
 - ยังไม่ได้ย้ายข้อมูลจาก Sheets หรือ Supabase Burger POS ตัวจริง ขณะนี้มีเฉพาะโครงนำเข้าและยังไม่แตะฐานเดิม
+- หน้า Burger จะแสดงสถานะรอตั้งค่าและยังบันทึกจริงไม่ได้จนกว่าจะสร้าง Cloud project, ใส่ Public URL/Key และสร้างผู้ใช้/สิทธิ์สาขา Burger
 - Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
 - หน้าใช้งานที่เปิดจาก `system-test.html` มีแถบ Test Mode, ซ่อนการแก้ Master และรักษา query ทดสอบเมื่อสลับระหว่างหน้าทาวน่า/BigC

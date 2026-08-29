@@ -260,6 +260,8 @@ create table public.transaction_lines (
   line_no integer not null check (line_no > 0),
   item_id uuid references public.items(id),
   expense_item_id uuid references public.expense_items(id),
+  supplier_id uuid references public.suppliers(id),
+  supplier_name_raw text,
   description text not null,
   quantity numeric(18,6) not null default 0,
   unit_id uuid references public.units(id),
@@ -615,6 +617,7 @@ create index transactions_branch_date_idx on public.transactions (branch_id, tra
 create index transactions_parent_id_idx on public.transactions (parent_transaction_id);
 create index transaction_lines_transaction_id_idx on public.transaction_lines (transaction_id);
 create index transaction_lines_item_id_idx on public.transaction_lines (item_id);
+create index transaction_lines_supplier_id_idx on public.transaction_lines (supplier_id);
 create index payments_transaction_id_idx on public.payments (transaction_id);
 create index inventory_balances_branch_item_idx on public.inventory_balances (branch_id, item_id);
 create index stock_movements_branch_item_time_idx on public.stock_movements (branch_id, item_id, occurred_at desc);
