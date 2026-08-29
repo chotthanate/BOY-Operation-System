@@ -22,7 +22,7 @@
 ## Pending
 
 - ติดตั้ง migration BOY Central บน Cloud และรัน schema contract ผ่านแล้ว; Data API มองเห็น `boy_central` แต่ผู้ใช้ anonymous ไม่มีสิทธิ์อ่านข้อมูลตามที่ออกแบบ
-- สร้างผู้ใช้ Supabase Auth คนแรกและส่ง Magic Link ไปยังอีเมลผู้ดูแลแล้ว; ยังรอผู้ดูแลกดลิงก์เพื่อยืนยันอีเมล จากนั้นหน้า Burger จะสร้างโปรไฟล์ Admin และสิทธิ์ครบ 4 สาขาให้อัตโนมัติ
+- สร้างผู้ใช้ Supabase Auth คนแรกแล้ว ตั้ง Site URL และ Redirect URL เป็นหน้า `burger.html` บน GitHub Pages และส่ง Magic Link ฉบับใหม่สำเร็จ; ยังรอผู้ดูแลกดอีเมลฉบับล่าสุด จากนั้นหน้า Burger จะสร้างโปรไฟล์ Admin และสิทธิ์ครบ 4 สาขาให้อัตโนมัติ
 - Supabase Advisor ไม่พบคำเตือนด้านความปลอดภัยใน `boy_central`; Foreign Key ของฐานกลางมีดัชนีรองรับครบแล้ว ส่วนคำเตือนที่ยังเหลืออยู่เป็นของตาราง POS เดิมใน `public` จึงยังไม่แก้ในรอบนี้เพื่อไม่ให้กระทบระบบเดิม
 - ขั้นตอนสร้าง Admin คนแรกจำกัดเฉพาะอีเมลผู้ดูแลที่ยืนยันแล้วด้วยค่า hash ในฐานข้อมูล และหน้า Burger รองรับการเข้าใช้งานแบบ Magic Link โดยไม่ต้องส่งรหัสผ่านให้ผู้อื่น
 - ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
