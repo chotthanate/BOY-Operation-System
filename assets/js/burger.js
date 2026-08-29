@@ -205,14 +205,60 @@
     $("#channelBreakdown").innerHTML = channels.length ? channels.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.name)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, row.total / max * 100)}%"></span></span><strong>${money.format(row.total)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
   }
 
+  async function ensureProfile(session) {
+    const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("display_name,company_role").eq("user_id", session.user.id).maybeSingle();
+    if (profileError) throw profileError;
+    if (profile) return profile;
+
+    const fallbackName = session.user.user_metadata?.display_name || session.user.email?.split("@")[0] || "ผู้ดูแล BOY";
+    const { data: createdProfile, error: bootstrapError } = await client.schema("boy_central").rpc("bootstrap_first_admin", { display_name: fallbackName });
+    if (bootstrapError) {
+      if (bootstrapError.message.includes("initial admin already exists")) throw new Error("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน BOY");
+      throw bootstrapError;
+    }
+    return createdProfile;
+  }
+
   async function enterApp(session) {
     state.session = session;
+    setConnection("กำลังตรวจสิทธิ์");
+    let profile;
+    try {
+      profile = await ensureProfile(session);
+    } catch (error) {
+      state.session = null;
+      await client.auth.signOut();
+      $("#authCard").hidden = false;
+      $$(".page,.bottom-nav").forEach((element) => element.hidden = true);
+      $("#loginError").textContent = error.message;
+      setConnection("ไม่มีสิทธิ์", "error");
+      return;
+    }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
-    $("#accountName").textContent = session.user.user_metadata?.display_name || "ผู้ใช้งาน BOY";
+    $("#accountName").textContent = profile.display_name || "ผู้ใช้งาน BOY";
     setConnection("เชื่อมต่อแล้ว", "online");
     try { await loadMaster(); await loadExpenseHistory(); } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
+  }
+
+  async function requestMagicLink() {
+    const email = $("#loginEmail").value.trim();
+    const button = $("#magicLinkButton");
+    $("#loginError").textContent = "";
+    if (!email || !$("#loginEmail").checkValidity()) {
+      $("#loginError").textContent = "กรุณากรอกอีเมลให้ถูกต้อง";
+      return;
+    }
+    button.disabled = true;
+    button.textContent = "กำลังส่ง";
+    const { error } = await client.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, emailRedirectTo: `${location.origin}${location.pathname}` }
+    });
+    button.disabled = false;
+    button.textContent = "ส่งลิงก์เข้าอีเมล";
+    $("#loginError").textContent = error ? error.message : "ส่งลิงก์แล้ว กรุณาตรวจอีเมล";
   }
 
   async function init() {
@@ -250,5 +296,6 @@
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#logoutButton").addEventListener("click", async () => { await client.auth.signOut(); location.reload(); });
   $("#loginForm").addEventListener("submit", async (event) => { event.preventDefault(); $("#loginError").textContent = ""; const { data, error } = await client.auth.signInWithPassword({ email: $("#loginEmail").value, password: $("#loginPassword").value }); if (error) { $("#loginError").textContent = error.message; return; } await enterApp(data.session); });
+  $("#magicLinkButton").addEventListener("click", requestMagicLink);
   init();
 })();
