@@ -149,23 +149,25 @@
   }
 
   async function loadMaster() {
-    const [branchResult, unitsResult, expenseResult, supplierResult] = await Promise.all([
+    const [branchResult, unitsResult] = await Promise.all([
       client.schema("boy_central").from("branches").select("id,company_id,code,name").eq("code", "BURGER").eq("active", true).single(),
-      client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name"),
-      client.schema("boy_central").from("expense_items").select("id,name,code").eq("active", true).order("name"),
-      client.schema("boy_central").from("suppliers").select("id,name,code").eq("active", true).order("name")
+      client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name")
     ]);
     if (branchResult.error) throw branchResult.error;
+    if (unitsResult.error) throw unitsResult.error;
     state.branch = branchResult.data;
     state.units = unitsResult.data || [];
-    state.expenseItems = expenseResult.data || [];
-    state.suppliers = supplierResult.data || [];
-    const [itemsResult, linksResult] = await Promise.all([
+    const [itemsResult, expenseResult, supplierResult, linksResult] = await Promise.all([
       client.schema("boy_central").from("branch_items").select("item_id,items(id,name,code,base_unit_id,track_stock)").eq("branch_id", state.branch.id).eq("active", true),
-      client.schema("boy_central").from("item_suppliers").select("item_id,supplier_id,active").eq("active", true)
+      client.schema("boy_central").from("branch_expense_items").select("sort_order,expense_items(id,name,code)").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
+      client.schema("boy_central").from("branch_suppliers").select("is_preferred,suppliers(id,name,code)").eq("branch_id", state.branch.id).eq("active", true).order("is_preferred", { ascending: false }),
+      client.schema("boy_central").from("branch_item_suppliers").select("item_id,supplier_id,active,is_primary").eq("branch_id", state.branch.id).eq("active", true).order("is_primary", { ascending: false })
     ]);
-    if (itemsResult.error) throw itemsResult.error;
+    const masterError = [itemsResult, expenseResult, supplierResult, linksResult].find((result) => result.error)?.error;
+    if (masterError) throw masterError;
     state.items = (itemsResult.data || []).map((row) => row.items).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, "th"));
+    state.expenseItems = (expenseResult.data || []).map((row) => row.expense_items).filter(Boolean);
+    state.suppliers = (supplierResult.data || []).map((row) => row.suppliers).filter(Boolean);
     state.itemSuppliers = linksResult.data || [];
     renderLines();
   }

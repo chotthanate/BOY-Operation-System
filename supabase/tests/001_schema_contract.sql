@@ -9,7 +9,8 @@ begin
   from unnest(array[
     'companies', 'branches', 'inventory_locations', 'profiles', 'user_branch_roles',
     'categories', 'units', 'items', 'item_units', 'branch_items', 'suppliers',
-    'item_suppliers', 'expense_items', 'menus', 'recipes', 'transactions',
+    'item_suppliers', 'expense_items', 'branch_expense_items', 'branch_suppliers',
+    'branch_item_suppliers', 'menus', 'recipes', 'transactions',
     'transaction_lines', 'payments', 'inventory_balances', 'stock_movements',
     'stock_counts', 'stock_count_lines', 'stock_transfers', 'stock_transfer_lines',
     'external_statements', 'external_statement_lines', 'attachments',
@@ -31,7 +32,8 @@ begin
     and c.relname in (
       'companies', 'branches', 'inventory_locations', 'profiles', 'user_branch_roles',
       'categories', 'units', 'items', 'item_units', 'branch_items', 'suppliers',
-      'item_suppliers', 'expense_items', 'menus', 'recipes', 'transactions',
+      'item_suppliers', 'expense_items', 'branch_expense_items', 'branch_suppliers',
+      'branch_item_suppliers', 'menus', 'recipes', 'transactions',
       'transaction_lines', 'payments', 'inventory_balances', 'stock_movements',
       'stock_counts', 'stock_count_lines', 'stock_transfers', 'stock_transfer_lines',
       'external_statements', 'external_statement_lines', 'attachments',

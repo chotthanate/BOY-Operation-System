@@ -3,10 +3,11 @@
 ## Current state
 
 - ติดตั้ง BOY Central ใน Supabase โปรเจกต์ `BOY Burger POS` เดิมแล้ว โดยแยกตารางใหม่ทั้งหมดไว้ใน schema `boy_central` และฟังก์ชันภายในไว้ใน `boy_central_private`; ไม่แก้ตาราง POS เดิมใน `public`
-- `boy_central` มีตารางฐาน 35 ตารางและข้อมูลสาขาเริ่มต้น 4 สาขา ครอบคลุมบริษัท/สาขา, Master ร่วม, ธุรกรรม, การชำระเงิน, Stock Ledger, ต้นทุนเฉลี่ยต่อสาขา, Statement, POS shadow data, Import และ Audit Log
+- `boy_central` มีตารางฐาน 38 ตารางและข้อมูลสาขาเริ่มต้น 4 สาขา ครอบคลุมบริษัท/สาขา, Master ร่วม, การกำหนดรายการรายจ่าย/Supplier/Supplier ต่อสินค้าแยกสาขา, ธุรกรรม, การชำระเงิน, Stock Ledger, ต้นทุนเฉลี่ยต่อสาขา, Statement, POS shadow data, Import และ Audit Log
 - เพิ่ม RLS แยกสิทธิ์ตามสาขา, API บันทึกรายจ่ายแบบ atomic, API รับ POS order/void แบบ idempotent และ API รับข้อมูลที่ตรวจแล้วจาก Google Sheets
 - เพิ่ม Edge Function `sheet-import` และ `pos-shadow-sync`; รหัสลับอยู่ใน Supabase secrets เท่านั้นและไม่มีค่าจริงใน repository
 - `BOY_Master` เพิ่มแท็บเตรียมนำเข้า `I_แก้ไขสินค้า`, `I_แก้ไข Supplier`, `I_แก้ไขพนักงาน`, `I_แก้ไขสาขา`, `I_ผลการนำเข้า` แล้ว โดยไม่แก้ข้อมูลแท็บเดิม
+- `BOY_Master` เพิ่มแท็บกรอกสินค้าและรายการรายจ่ายแยกสำหรับร้านน้ำ/เบอร์เกอร์/เนื้อย่าง พร้อมแท็บผูก Supplier ต่อสาขาและต่อสินค้า โดย Master จริงยังรวมอยู่ใน BOY Central ชุดเดียว
 - `BOY_Transactions` เพิ่มแท็บ `I_รายรับภายนอก`, `I_Statement_ช่องทางขาย`, `I_ค่าธรรมเนียม`, `I_รายการปรับปรุง`, `I_ประวัตินำเข้า` แล้ว พร้อมช่องกันยอด Grab/คนละครึ่งซ้ำกับ POS
 - เพิ่ม `burger.html` ใน BOY สำหรับล็อกอิน บันทึก/ดูประวัติรายจ่าย ดูสต็อก และ Dashboard ร้านเบอร์เกอร์ พร้อมเมนูสลับร้านและ Supplier ที่กรองตามสินค้าแต่พิมพ์ชื่อใหม่ได้
 - รายจ่าย BOY Central รองรับ Supplier แยกต่อรายการแล้ว และเก็บชื่อ Supplier ที่พิมพ์ใหม่ไว้ตรวจสอบโดยไม่สร้าง Master อัตโนมัติ
@@ -23,13 +24,13 @@
 
 - ติดตั้ง migration BOY Central บน Cloud และรัน schema contract ผ่านแล้ว; Data API มองเห็น `boy_central` แต่ผู้ใช้ anonymous ไม่มีสิทธิ์อ่านข้อมูลตามที่ออกแบบ
 - ผู้ดูแลยืนยันอีเมลและล็อกอินสำเร็จแล้ว โปรไฟล์มีบทบาท `admin` และสิทธิ์ Admin ครบ 4 สาขา; หน้า Burger เชื่อมต่อและอ่านข้อมูลผ่าน RLS ได้จริง
-- Master ใน `boy_central` ยังว่างทั้งหมด จึงต้องนำเข้าหน่วย หมวดรายจ่าย Supplier สินค้า และการผูกสินค้ากับสาขาก่อนทดสอบบันทึกรายจ่ายและสต็อก
+- Master ใน `boy_central` ยังว่างทั้งหมด จึงต้องกรอกและตรวจข้อมูลในแท็บ staging ใหม่ แล้วนำเข้าหน่วย หมวดรายจ่าย Supplier สินค้า และการผูกข้อมูลกับสาขาก่อนทดสอบบันทึกรายจ่ายและสต็อก
 - Supabase Advisor ไม่พบคำเตือนด้านความปลอดภัยใน `boy_central`; Foreign Key ของฐานกลางมีดัชนีรองรับครบแล้ว ส่วนคำเตือนที่ยังเหลืออยู่เป็นของตาราง POS เดิมใน `public` จึงยังไม่แก้ในรอบนี้เพื่อไม่ให้กระทบระบบเดิม
 - ขั้นตอนสร้าง Admin คนแรกจำกัดเฉพาะอีเมลผู้ดูแลที่ยืนยันแล้วด้วยค่า hash ในฐานข้อมูล และหน้า Burger รองรับการเข้าใช้งานแบบ Magic Link โดยไม่ต้องส่งรหัสผ่านให้ผู้อื่น
 - ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
 - ยังไม่ได้ deploy Edge Functions `sheet-import` และ `pos-shadow-sync` หรือกำหนด secrets จริงบน Cloud
 - ยังไม่ได้ย้ายข้อมูลจาก Sheets หรือข้อมูล Burger POS เดิม ขณะนี้มีโครงนำเข้าและยังรักษาฐานเดิมไว้เหมือนเดิม
-- หน้า Burger ใส่ Supabase URL และ Public Publishable Key แล้ว แต่ยังบันทึกจริงไม่ได้จนกว่าจะสร้างผู้ใช้และสิทธิ์สาขา Burger
+- หน้า Burger ใส่ Supabase URL และ Public Publishable Key แล้ว ผู้ดูแลล็อกอินและอ่านข้อมูลผ่าน RLS ได้จริง แต่ยังบันทึกข้อมูลธุรกิจไม่ได้จนกว่าจะนำเข้า Master ของสาขา Burger
 - Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
 - หน้าใช้งานที่เปิดจาก `system-test.html` มีแถบ Test Mode, ซ่อนการแก้ Master และรักษา query ทดสอบเมื่อสลับระหว่างหน้าทาวน่า/BigC
