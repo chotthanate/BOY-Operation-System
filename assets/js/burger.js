@@ -131,7 +131,7 @@
       }),
       payments: [{ method: $("#paymentMethod").value, amount: total }]
     };
-    const { data, error } = await client.rpc("record_expense", { payload });
+    const { data, error } = await client.schema("boy_central").rpc("record_expense", { payload });
     button.textContent = "บันทึก";
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#reviewDialog").close();
@@ -143,17 +143,17 @@
 
   async function loadExpenseHistory() {
     if (!state.branch) return;
-    const { data, error } = await client.from("transactions").select("id,transaction_date,total_amount,status,transaction_lines(description)").eq("branch_id", state.branch.id).eq("transaction_type", "expense").order("occurred_at", { ascending: false }).limit(12);
+    const { data, error } = await client.schema("boy_central").from("transactions").select("id,transaction_date,total_amount,status,transaction_lines(description)").eq("branch_id", state.branch.id).eq("transaction_type", "expense").order("occurred_at", { ascending: false }).limit(12);
     if (error) { $("#expenseHistory").innerHTML = '<div class="empty-state">โหลดประวัติไม่สำเร็จ</div>'; return; }
     $("#expenseHistory").innerHTML = (data || []).length ? data.map((row) => `<article class="history-row"><span><strong>${escapeHtml(row.transaction_lines?.[0]?.description || "รายจ่าย")}</strong><small>${escapeHtml(row.transaction_date)} · ${escapeHtml(row.status)}</small></span><span class="history-amount">${money.format(row.total_amount || 0)}</span></article>`).join("") : '<div class="empty-state">ยังไม่มีรายจ่าย</div>';
   }
 
   async function loadMaster() {
     const [branchResult, unitsResult, expenseResult, supplierResult] = await Promise.all([
-      client.from("branches").select("id,company_id,code,name").eq("code", "BURGER").eq("active", true).single(),
-      client.from("units").select("id,name,code").eq("active", true).order("name"),
-      client.from("expense_items").select("id,name,code").eq("active", true).order("name"),
-      client.from("suppliers").select("id,name,code").eq("active", true).order("name")
+      client.schema("boy_central").from("branches").select("id,company_id,code,name").eq("code", "BURGER").eq("active", true).single(),
+      client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name"),
+      client.schema("boy_central").from("expense_items").select("id,name,code").eq("active", true).order("name"),
+      client.schema("boy_central").from("suppliers").select("id,name,code").eq("active", true).order("name")
     ]);
     if (branchResult.error) throw branchResult.error;
     state.branch = branchResult.data;
@@ -161,8 +161,8 @@
     state.expenseItems = expenseResult.data || [];
     state.suppliers = supplierResult.data || [];
     const [itemsResult, linksResult] = await Promise.all([
-      client.from("branch_items").select("item_id,items(id,name,code,base_unit_id,track_stock)").eq("branch_id", state.branch.id).eq("active", true),
-      client.from("item_suppliers").select("item_id,supplier_id,active").eq("active", true)
+      client.schema("boy_central").from("branch_items").select("item_id,items(id,name,code,base_unit_id,track_stock)").eq("branch_id", state.branch.id).eq("active", true),
+      client.schema("boy_central").from("item_suppliers").select("item_id,supplier_id,active").eq("active", true)
     ]);
     if (itemsResult.error) throw itemsResult.error;
     state.items = (itemsResult.data || []).map((row) => row.items).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, "th"));
@@ -173,7 +173,7 @@
   async function loadStock() {
     if (!state.branch) return;
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
-    const { data, error } = await client.from("v_stock_on_hand").select("item_id,item_code,item_name,unit_name,quantity_on_hand,average_unit_cost,inventory_value").eq("branch_id", state.branch.id).order("item_name");
+    const { data, error } = await client.schema("boy_central").from("v_stock_on_hand").select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value").eq("branch_id", state.branch.id).order("item_name");
     if (error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; return; }
     state.stock = data || [];
     renderStock();
@@ -182,20 +182,27 @@
   function renderStock() {
     const query = $("#stockSearch").value.trim().toLocaleLowerCase("th");
     const rows = state.stock.filter((row) => `${row.item_code} ${row.item_name}`.toLocaleLowerCase("th").includes(query));
-    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ต้นทุน ${money.format(row.average_unit_cost || 0)}</small></span><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ต้นทุน ${money.format(row.average_unit_cost || 0)}</small></span><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
   }
 
   async function loadDashboard() {
     if (!state.branch) return;
     const period = `${$("#dashboardMonth").value}-01`;
-    const { data, error } = await client.from("v_monthly_branch_summary").select("*").eq("branch_id", state.branch.id).eq("period_month", period);
-    if (error) { toast(error.message); return; }
-    const rows = data || [];
-    const income = rows.filter((row) => row.transaction_type === "income" || row.transaction_type === "sale").reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
-    const expense = rows.filter((row) => row.transaction_type === "expense").reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
-    $("#metricGrid").innerHTML = `<article class="metric accent"><small>รายรับ</small><strong>${money.format(income)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(expense)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(income - expense)}</strong></article><article class="metric"><small>จำนวนธุรกรรม</small><strong>${number.format(rows.reduce((sum, row) => sum + Number(row.transaction_count || 0), 0))}</strong></article>`;
-    const max = Math.max(...rows.map((row) => Number(row.total_amount || 0)), 1);
-    $("#channelBreakdown").innerHTML = rows.length ? rows.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.source_system || row.transaction_type)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, Number(row.total_amount || 0) / max * 100)}%"></span></span><strong>${money.format(row.total_amount || 0)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
+    const [year, month] = $("#dashboardMonth").value.split("-").map(Number);
+    const nextPeriod = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+    const [summaryResult, transactionsResult] = await Promise.all([
+      client.schema("boy_central").from("v_monthly_branch_summary").select("income,expense,net_profit").eq("branch_id", state.branch.id).eq("month_start", period).maybeSingle(),
+      client.schema("boy_central").from("transactions").select("source_system,transaction_type,total_amount,status").eq("branch_id", state.branch.id).gte("transaction_date", period).lt("transaction_date", nextPeriod)
+    ]);
+    if (summaryResult.error || transactionsResult.error) { toast(summaryResult.error?.message || transactionsResult.error?.message); return; }
+    const summary = summaryResult.data || { income: 0, expense: 0, net_profit: 0 };
+    const transactions = transactionsResult.data || [];
+    $("#metricGrid").innerHTML = `<article class="metric accent"><small>รายรับ</small><strong>${money.format(summary.income || 0)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(summary.net_profit || 0)}</strong></article><article class="metric"><small>จำนวนธุรกรรม</small><strong>${number.format(transactions.length)}</strong></article>`;
+    const channelMap = new Map();
+    transactions.filter((row) => row.status === "confirmed" && ["income", "sale", "settlement"].includes(row.transaction_type)).forEach((row) => channelMap.set(row.source_system, (channelMap.get(row.source_system) || 0) + Number(row.total_amount || 0)));
+    const channels = [...channelMap.entries()].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
+    const max = Math.max(...channels.map((row) => row.total), 1);
+    $("#channelBreakdown").innerHTML = channels.length ? channels.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.name)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, row.total / max * 100)}%"></span></span><strong>${money.format(row.total)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
   }
 
   async function enterApp(session) {

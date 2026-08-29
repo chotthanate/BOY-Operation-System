@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const functionName = eventType === "order" ? "ingest_pos_order" : "ingest_pos_void";
-    const { data, error } = await supabase.rpc(functionName, { payload: body.payload });
+    const { data, error } = await supabase.schema("boy_central").rpc(functionName, { payload: body.payload });
     if (error) {
       console.error("POS shadow sync failed", error.code, error.message);
       return jsonResponse({ error: "sync_failed", message: error.message }, 400);

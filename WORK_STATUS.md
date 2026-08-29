@@ -2,7 +2,8 @@
 
 ## Current state
 
-- เตรียม BOY Central บน Supabase แบบแยกจากฐาน `BOY Burger POS` แล้วใน `supabase/`: มีโครงบริษัท/สาขา, Master ร่วม, ธุรกรรม, การชำระเงิน, Stock Ledger, ต้นทุนเฉลี่ยต่อสาขา, Statement, POS shadow data, Import และ Audit Log
+- ติดตั้ง BOY Central ใน Supabase โปรเจกต์ `BOY Burger POS` เดิมแล้ว โดยแยกตารางใหม่ทั้งหมดไว้ใน schema `boy_central` และฟังก์ชันภายในไว้ใน `boy_central_private`; ไม่แก้ตาราง POS เดิมใน `public`
+- `boy_central` มีตารางฐาน 35 ตารางและข้อมูลสาขาเริ่มต้น 4 สาขา ครอบคลุมบริษัท/สาขา, Master ร่วม, ธุรกรรม, การชำระเงิน, Stock Ledger, ต้นทุนเฉลี่ยต่อสาขา, Statement, POS shadow data, Import และ Audit Log
 - เพิ่ม RLS แยกสิทธิ์ตามสาขา, API บันทึกรายจ่ายแบบ atomic, API รับ POS order/void แบบ idempotent และ API รับข้อมูลที่ตรวจแล้วจาก Google Sheets
 - เพิ่ม Edge Function `sheet-import` และ `pos-shadow-sync`; รหัสลับอยู่ใน Supabase secrets เท่านั้นและไม่มีค่าจริงใน repository
 - `BOY_Master` เพิ่มแท็บเตรียมนำเข้า `I_แก้ไขสินค้า`, `I_แก้ไข Supplier`, `I_แก้ไขพนักงาน`, `I_แก้ไขสาขา`, `I_ผลการนำเข้า` แล้ว โดยไม่แก้ข้อมูลแท็บเดิม
@@ -20,11 +21,13 @@
 
 ## Pending
 
-- ยังไม่ได้สร้าง Supabase project `BOY Central` บน Cloud และยังไม่ได้ apply migrations เพราะต้องยืนยัน organization/region และค่าใช้จ่ายของโปรเจกต์ก่อน
-- หลังสร้าง Cloud project ต้อง apply migrations, รัน `supabase/tests/001_schema_contract.sql`, ทดสอบ Auth/RLS ข้ามสาขา และรัน Supabase security/performance advisors
+- ติดตั้ง migration BOY Central บน Cloud และรัน schema contract ผ่านแล้ว; Data API มองเห็น `boy_central` แต่ผู้ใช้ anonymous ไม่มีสิทธิ์อ่านข้อมูลตามที่ออกแบบ
+- ยังไม่มีผู้ใช้ใน Supabase Auth จึงยังต้องสร้างผู้ดูแล BOY คนแรกและผูกสิทธิ์สาขา ก่อนทดสอบ RLS แบบล็อกอินและใช้งาน `burger.html` จริง
+- Supabase Advisor ไม่พบคำเตือนด้านความปลอดภัยใน `boy_central`; Foreign Key ของฐานกลางมีดัชนีรองรับครบแล้ว ส่วนคำเตือนที่ยังเหลืออยู่เป็นของตาราง POS เดิมใน `public` จึงยังไม่แก้ในรอบนี้เพื่อไม่ให้กระทบระบบเดิม
 - ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
-- ยังไม่ได้ย้ายข้อมูลจาก Sheets หรือ Supabase Burger POS ตัวจริง ขณะนี้มีเฉพาะโครงนำเข้าและยังไม่แตะฐานเดิม
-- หน้า Burger จะแสดงสถานะรอตั้งค่าและยังบันทึกจริงไม่ได้จนกว่าจะสร้าง Cloud project, ใส่ Public URL/Key และสร้างผู้ใช้/สิทธิ์สาขา Burger
+- ยังไม่ได้ deploy Edge Functions `sheet-import` และ `pos-shadow-sync` หรือกำหนด secrets จริงบน Cloud
+- ยังไม่ได้ย้ายข้อมูลจาก Sheets หรือข้อมูล Burger POS เดิม ขณะนี้มีโครงนำเข้าและยังรักษาฐานเดิมไว้เหมือนเดิม
+- หน้า Burger ใส่ Supabase URL และ Public Publishable Key แล้ว แต่ยังบันทึกจริงไม่ได้จนกว่าจะสร้างผู้ใช้และสิทธิ์สาขา Burger
 - Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
 - หน้าใช้งานที่เปิดจาก `system-test.html` มีแถบ Test Mode, ซ่อนการแก้ Master และรักษา query ทดสอบเมื่อสลับระหว่างหน้าทาวน่า/BigC
@@ -39,6 +42,8 @@
 ## Manual steps
 
 - ใช้ `system-test.html` ทดสอบ flow จริงกับ deployment ทดสอบก่อนอัปเดต deployment เดิม
+- สร้างผู้ใช้ Supabase Auth คนแรกด้วยอีเมลของผู้ดูแล จากนั้นผูกเป็น Admin ของบริษัทและสาขา ก่อนเปิดทดสอบหน้า Burger
+- Deploy Edge Functions และตั้ง `SHEET_IMPORT_SECRET`/`POS_SYNC_SECRET` ใน Supabase secrets ก่อนเริ่มนำเข้าชีตหรือ Shadow Sync; ห้ามเก็บค่าเหล่านี้ในเว็บหรือ GitHub
 - เครื่อง Mac นี้ติดตั้ง `clasp` และล็อกอินบัญชีที่เข้าถึง BOY Apps Script แล้ว สามารถ `clasp push`, สร้าง version และอัปเดต deployment ได้ โดย credentials อยู่ที่ home directory และไม่อยู่ใน repository
 - เมื่อทุก flow ผ่านแล้วจึงอัปเดต deployment เดิมที่หน้า BOY ออนไลน์ใช้อยู่
 

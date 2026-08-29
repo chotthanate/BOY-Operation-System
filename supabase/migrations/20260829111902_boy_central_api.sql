@@ -1,4 +1,4 @@
-create or replace function public.record_expense(payload jsonb)
+create or replace function boy_central.record_expense(payload jsonb)
 returns jsonb
 language plpgsql
 security definer
@@ -6,7 +6,7 @@ set search_path = ''
 as $$
 declare
   actor_id uuid := (select auth.uid());
-  target_branch public.branches%rowtype;
+  target_branch boy_central.branches%rowtype;
   target_company_id uuid;
   target_supplier_id uuid;
   line_supplier_id uuid;
@@ -14,8 +14,8 @@ declare
   target_transaction_id uuid;
   existing_transaction_id uuid;
   target_line_id uuid;
-  target_item public.items%rowtype;
-  current_balance public.inventory_balances%rowtype;
+  target_item boy_central.items%rowtype;
+  current_balance boy_central.inventory_balances%rowtype;
   line jsonb;
   payment jsonb;
   source_name text := coalesce(nullif(trim(payload->>'source_system'), ''), 'boy_web');
@@ -42,14 +42,14 @@ begin
   end if;
 
   select * into target_branch
-  from public.branches
+  from boy_central.branches
   where id = nullif(payload->>'branch_id', '')::uuid and active;
 
   if target_branch.id is null then
     raise exception 'active branch not found';
   end if;
 
-  if not private.has_branch_access(target_branch.id, array['admin', 'manager', 'staff']) then
+  if not boy_central_private.has_branch_access(target_branch.id, array['admin', 'manager', 'staff']) then
     raise exception 'branch access denied';
   end if;
 
@@ -58,7 +58,7 @@ begin
   target_supplier_id := nullif(payload->>'supplier_id', '')::uuid;
 
   select id into existing_transaction_id
-  from public.transactions
+  from boy_central.transactions
   where company_id = target_company_id
     and source_system = source_name
     and idempotency_key = request_key;
@@ -76,13 +76,13 @@ begin
   end if;
 
   if target_supplier_id is not null and not exists (
-    select 1 from public.suppliers s
+    select 1 from boy_central.suppliers s
     where s.id = target_supplier_id and s.company_id = target_company_id and s.active
   ) then
     raise exception 'supplier not found';
   end if;
 
-  insert into public.transactions (
+  insert into boy_central.transactions (
     company_id, branch_id, transaction_no, transaction_type, transaction_date,
     occurred_at, supplier_id, status, source_system, external_id,
     idempotency_key, created_by, updated_by, note
@@ -121,7 +121,7 @@ begin
     target_item.track_stock := false;
     if nullif(line->>'item_id', '') is not null then
       select * into target_item
-      from public.items
+      from boy_central.items
       where id = (line->>'item_id')::uuid
         and company_id = target_company_id
         and active;
@@ -133,7 +133,7 @@ begin
 
     if nullif(line->>'expense_item_id', '') is not null and not exists (
       select 1
-      from public.expense_items ei
+      from boy_central.expense_items ei
       where ei.id = (line->>'expense_item_id')::uuid
         and ei.company_id = target_company_id
         and ei.active
@@ -144,7 +144,7 @@ begin
     line_supplier_id := coalesce(nullif(line->>'supplier_id', '')::uuid, target_supplier_id);
     if line_supplier_id is not null and not exists (
       select 1
-      from public.suppliers s
+      from boy_central.suppliers s
       where s.id = line_supplier_id
         and s.company_id = target_company_id
         and s.active
@@ -154,7 +154,7 @@ begin
 
     if nullif(line->>'unit_id', '') is not null and not exists (
       select 1
-      from public.units u
+      from boy_central.units u
       where u.id = (line->>'unit_id')::uuid
         and u.company_id = target_company_id
         and u.active
@@ -165,7 +165,7 @@ begin
     conversion_value := 1;
     if target_item.id is not null and nullif(line->>'unit_id', '') is not null then
       select iu.conversion_to_base into conversion_value
-      from public.item_units iu
+      from boy_central.item_units iu
       where iu.item_id = target_item.id
         and iu.unit_id = (line->>'unit_id')::uuid
         and iu.active;
@@ -181,7 +181,7 @@ begin
       else 0
     end;
 
-    insert into public.transaction_lines (
+    insert into boy_central.transaction_lines (
       company_id, transaction_id, line_no, item_id, expense_item_id, supplier_id, supplier_name_raw,
       description, quantity, unit_id, conversion_to_base, base_quantity,
       unit_price, line_total, unit_cost_base, lot_no, manufactured_on,
@@ -221,20 +221,20 @@ begin
         bi.default_location_id,
         (
           select il.id
-          from public.inventory_locations il
+          from boy_central.inventory_locations il
           where il.branch_id = target_branch.id and il.active
           order by il.created_at, il.id
           limit 1
         )
       ) into target_location_id
-      from public.branch_items bi
+      from boy_central.branch_items bi
       where bi.branch_id = target_branch.id
         and bi.item_id = target_item.id
         and bi.active;
 
       if target_location_id is null then
         select il.id into target_location_id
-        from public.inventory_locations il
+        from boy_central.inventory_locations il
         where il.branch_id = target_branch.id and il.active
         order by il.created_at, il.id
         limit 1;
@@ -244,14 +244,14 @@ begin
         raise exception 'inventory location not configured for branch';
       end if;
 
-      insert into public.inventory_balances (
+      insert into boy_central.inventory_balances (
         company_id, branch_id, location_id, item_id
       ) values (
         target_company_id, target_branch.id, target_location_id, target_item.id
       ) on conflict (location_id, item_id) do nothing;
 
       select * into current_balance
-      from public.inventory_balances
+      from boy_central.inventory_balances
       where location_id = target_location_id and item_id = target_item.id
       for update;
 
@@ -259,14 +259,14 @@ begin
       next_value := round((current_balance.inventory_value + line_total_value)::numeric, 2);
       next_average := case when next_quantity = 0 then 0 else next_value / next_quantity end;
 
-      update public.inventory_balances
+      update boy_central.inventory_balances
       set quantity_on_hand = next_quantity,
           average_unit_cost = next_average,
           inventory_value = next_value,
           updated_at = now()
       where id = current_balance.id;
 
-      insert into public.stock_movements (
+      insert into boy_central.stock_movements (
         company_id, branch_id, location_id, item_id, transaction_id,
         transaction_line_id, movement_type, quantity_before, quantity_delta,
         quantity_after, unit_cost_base, movement_value, lot_no, expires_on,
@@ -283,7 +283,7 @@ begin
         actor_id, coalesce(nullif(line->>'stock_reason', ''), 'บันทึกรายจ่ายซื้อสินค้า')
       );
 
-      update public.item_suppliers
+      update boy_central.item_suppliers
       set last_purchase_price = line_total_value /
           nullif(quantity_value, 0),
           updated_at = now()
@@ -294,7 +294,7 @@ begin
     end if;
   end loop;
 
-  update public.transactions
+  update boy_central.transactions
   set subtotal = grand_total,
       total_amount = grand_total,
       affects_stock = affects_stock_value,
@@ -303,7 +303,7 @@ begin
 
   payment := payload->'payment';
   if jsonb_typeof(payment) = 'object' and coalesce(nullif(payment->>'amount', '')::numeric, 0) > 0 then
-    insert into public.payments (
+    insert into boy_central.payments (
       company_id, transaction_id, method, amount, reference_no,
       paid_at, status, created_by, note
     ) values (
@@ -319,7 +319,7 @@ begin
     );
   end if;
 
-  insert into public.status_history (
+  insert into boy_central.status_history (
     company_id, branch_id, entity_type, entity_id, new_status,
     changed_by, reason
   ) values (
@@ -327,7 +327,7 @@ begin
     'confirmed', actor_id, 'บันทึกรายจ่าย'
   );
 
-  insert into public.audit_log (
+  insert into boy_central.audit_log (
     company_id, branch_id, actor_user_id, action, entity_type, entity_id,
     source_system, request_id, after_data
   ) values (
@@ -347,10 +347,10 @@ begin
 end;
 $$;
 
-revoke all on function public.record_expense(jsonb) from public, anon;
-grant execute on function public.record_expense(jsonb) to authenticated;
+revoke all on function boy_central.record_expense(jsonb) from public, anon;
+grant execute on function boy_central.record_expense(jsonb) to authenticated;
 
-create or replace function public.ingest_pos_order(payload jsonb)
+create or replace function boy_central.ingest_pos_order(payload jsonb)
 returns jsonb
 language plpgsql
 security definer
@@ -359,7 +359,7 @@ as $$
 declare
   actor_id uuid := (select auth.uid());
   caller_role text := coalesce((select auth.jwt()->>'role'), '');
-  target_branch public.branches%rowtype;
+  target_branch boy_central.branches%rowtype;
   target_company_id uuid;
   target_transaction_id uuid;
   target_pos_order_id uuid;
@@ -367,7 +367,7 @@ declare
   target_shift_id uuid;
   target_location_id uuid;
   target_line_id uuid;
-  current_balance public.inventory_balances%rowtype;
+  current_balance boy_central.inventory_balances%rowtype;
   order_line jsonb;
   modifier_line jsonb;
   movement_line jsonb;
@@ -388,7 +388,7 @@ begin
   end if;
 
   select * into target_branch
-  from public.branches
+  from boy_central.branches
   where id = nullif(payload->>'branch_id', '')::uuid and active;
 
   if target_branch.id is null then
@@ -396,14 +396,14 @@ begin
   end if;
 
   if caller_role <> 'service_role'
-    and not private.has_branch_access(target_branch.id, array['admin', 'manager', 'staff']) then
+    and not boy_central_private.has_branch_access(target_branch.id, array['admin', 'manager', 'staff']) then
     raise exception 'branch access denied';
   end if;
 
   target_company_id := target_branch.company_id;
 
   select id into existing_order_id
-  from public.pos_orders
+  from boy_central.pos_orders
   where company_id = target_company_id
     and source_system = source_name
     and external_id = source_order_id;
@@ -413,7 +413,7 @@ begin
   end if;
 
   if nullif(payload->>'shift_external_id', '') is not null then
-    insert into public.pos_shifts (
+    insert into boy_central.pos_shifts (
       company_id, branch_id, source_system, external_id, opened_at,
       closed_at, opening_cash, closing_cash, expected_cash, cash_difference,
       status, raw_payload
@@ -430,17 +430,17 @@ begin
       coalesce(payload->'shift_payload', '{}'::jsonb)
     ) on conflict (company_id, source_system, external_id)
       do update set
-        closed_at = coalesce(excluded.closed_at, public.pos_shifts.closed_at),
-        closing_cash = coalesce(excluded.closing_cash, public.pos_shifts.closing_cash),
-        expected_cash = coalesce(excluded.expected_cash, public.pos_shifts.expected_cash),
-        cash_difference = coalesce(excluded.cash_difference, public.pos_shifts.cash_difference),
+        closed_at = coalesce(excluded.closed_at, boy_central.pos_shifts.closed_at),
+        closing_cash = coalesce(excluded.closing_cash, boy_central.pos_shifts.closing_cash),
+        expected_cash = coalesce(excluded.expected_cash, boy_central.pos_shifts.expected_cash),
+        cash_difference = coalesce(excluded.cash_difference, boy_central.pos_shifts.cash_difference),
         status = excluded.status,
         raw_payload = excluded.raw_payload,
         updated_at = now()
     returning id into target_shift_id;
   end if;
 
-  insert into public.transactions (
+  insert into boy_central.transactions (
     company_id, branch_id, transaction_no, transaction_type, transaction_date,
     occurred_at, subtotal, discount, total_amount, status, affects_stock,
     source_system, external_id, idempotency_key, created_by, updated_by, note
@@ -464,7 +464,7 @@ begin
     nullif(payload->>'note', '')
   ) returning id into target_transaction_id;
 
-  insert into public.pos_orders (
+  insert into boy_central.pos_orders (
     company_id, branch_id, shift_id, transaction_id, source_system,
     external_id, order_no, sales_channel, payment_method, subtotal,
     discount, total_amount, payment_status, ordered_at, raw_payload
@@ -484,7 +484,7 @@ begin
   for order_line in select value from jsonb_array_elements(coalesce(payload->'lines', '[]'::jsonb))
   loop
     line_no_value := line_no_value + 1;
-    insert into public.pos_order_lines (
+    insert into boy_central.pos_order_lines (
       company_id, pos_order_id, external_id, menu_id, item_name,
       quantity, unit_price, line_total, note
     ) values (
@@ -501,7 +501,7 @@ begin
 
     for modifier_line in select value from jsonb_array_elements(coalesce(order_line->'modifiers', '[]'::jsonb))
     loop
-      insert into public.pos_order_modifiers (
+      insert into boy_central.pos_order_modifiers (
         company_id, pos_order_line_id, external_id, name, quantity, price_delta
       ) values (
         target_company_id,
@@ -527,13 +527,13 @@ begin
     target_location_id := coalesce(
       nullif(movement_line->>'location_id', '')::uuid,
       (
-        select il.id from public.inventory_locations il
+        select il.id from boy_central.inventory_locations il
         where il.branch_id = target_branch.id and il.active
         order by il.created_at, il.id limit 1
       )
     );
 
-    insert into public.inventory_balances (
+    insert into boy_central.inventory_balances (
       company_id, branch_id, location_id, item_id
     ) values (
       target_company_id, target_branch.id, target_location_id,
@@ -541,7 +541,7 @@ begin
     ) on conflict (location_id, item_id) do nothing;
 
     select * into current_balance
-    from public.inventory_balances
+    from boy_central.inventory_balances
     where location_id = target_location_id
       and item_id = (movement_line->>'item_id')::uuid
     for update;
@@ -549,13 +549,13 @@ begin
     next_quantity := current_balance.quantity_on_hand + quantity_delta_value;
     movement_cost := current_balance.average_unit_cost;
 
-    update public.inventory_balances
+    update boy_central.inventory_balances
     set quantity_on_hand = next_quantity,
         inventory_value = round((next_quantity * movement_cost)::numeric, 2),
         updated_at = now()
     where id = current_balance.id;
 
-    insert into public.stock_movements (
+    insert into boy_central.stock_movements (
       company_id, branch_id, location_id, item_id, transaction_id,
       movement_type, quantity_before, quantity_delta, quantity_after,
       unit_cost_base, movement_value, source_system, external_id,
@@ -572,7 +572,7 @@ begin
   end loop;
 
   if coalesce(nullif(payload->>'total_amount', '')::numeric, 0) > 0 then
-    insert into public.payments (
+    insert into boy_central.payments (
       company_id, transaction_id, method, amount, reference_no,
       paid_at, status, created_by
     ) values (
@@ -592,7 +592,7 @@ begin
     );
   end if;
 
-  insert into public.audit_log (
+  insert into boy_central.audit_log (
     company_id, branch_id, actor_user_id, action, entity_type, entity_id,
     source_system, request_id, after_data
   ) values (
@@ -609,10 +609,10 @@ begin
 end;
 $$;
 
-revoke all on function public.ingest_pos_order(jsonb) from public, anon;
-grant execute on function public.ingest_pos_order(jsonb) to authenticated, service_role;
+revoke all on function boy_central.ingest_pos_order(jsonb) from public, anon;
+grant execute on function boy_central.ingest_pos_order(jsonb) to authenticated, service_role;
 
-create or replace function public.ingest_pos_void(payload jsonb)
+create or replace function boy_central.ingest_pos_void(payload jsonb)
 returns jsonb
 language plpgsql
 security definer
@@ -624,11 +624,11 @@ declare
   source_name text := coalesce(nullif(payload->>'source_system', ''), 'burger_pos');
   source_order_id text := nullif(payload->>'external_id', '');
   request_key text := nullif(payload->>'idempotency_key', '');
-  target_order public.pos_orders%rowtype;
-  target_transaction public.transactions%rowtype;
+  target_order boy_central.pos_orders%rowtype;
+  target_transaction boy_central.transactions%rowtype;
   void_transaction_id uuid;
-  original_movement public.stock_movements%rowtype;
-  current_balance public.inventory_balances%rowtype;
+  original_movement boy_central.stock_movements%rowtype;
+  current_balance boy_central.inventory_balances%rowtype;
   next_quantity numeric(18,6);
 begin
   if actor_id is null and caller_role <> 'service_role' then
@@ -640,7 +640,7 @@ begin
   end if;
 
   select * into target_order
-  from public.pos_orders
+  from boy_central.pos_orders
   where source_system = source_name and external_id = source_order_id
   for update;
 
@@ -649,7 +649,7 @@ begin
   end if;
 
   if caller_role <> 'service_role'
-    and not private.has_branch_access(target_order.branch_id, array['admin', 'manager']) then
+    and not boy_central_private.has_branch_access(target_order.branch_id, array['admin', 'manager']) then
     raise exception 'branch access denied';
   end if;
 
@@ -658,11 +658,11 @@ begin
   end if;
 
   select * into target_transaction
-  from public.transactions
+  from boy_central.transactions
   where id = target_order.transaction_id
   for update;
 
-  insert into public.transactions (
+  insert into boy_central.transactions (
     company_id, branch_id, transaction_no, transaction_type, transaction_date,
     occurred_at, parent_transaction_id, subtotal, total_amount, status,
     affects_stock, source_system, external_id, idempotency_key,
@@ -689,27 +689,27 @@ begin
 
   for original_movement in
     select sm.*
-    from public.stock_movements sm
+    from boy_central.stock_movements sm
     where sm.transaction_id = target_transaction.id
       and sm.movement_type = 'sale'
     order by sm.item_id
     for update
   loop
     select * into current_balance
-    from public.inventory_balances
+    from boy_central.inventory_balances
     where location_id = original_movement.location_id
       and item_id = original_movement.item_id
     for update;
 
     next_quantity := current_balance.quantity_on_hand - original_movement.quantity_delta;
 
-    update public.inventory_balances
+    update boy_central.inventory_balances
     set quantity_on_hand = next_quantity,
         inventory_value = round((next_quantity * current_balance.average_unit_cost)::numeric, 2),
         updated_at = now()
     where id = current_balance.id;
 
-    insert into public.stock_movements (
+    insert into boy_central.stock_movements (
       company_id, branch_id, location_id, item_id, transaction_id,
       movement_type, quantity_before, quantity_delta, quantity_after,
       unit_cost_base, movement_value, source_system, external_id,
@@ -734,25 +734,25 @@ begin
     );
   end loop;
 
-  update public.transactions
+  update boy_central.transactions
   set status = 'voided',
       void_reason = nullif(payload->>'void_reason', ''),
       updated_by = actor_id,
       updated_at = now()
   where id = target_transaction.id;
 
-  update public.payments
+  update boy_central.payments
   set status = 'voided'
   where transaction_id = target_transaction.id;
 
-  update public.pos_orders
+  update boy_central.pos_orders
   set payment_status = 'voided',
       voided_at = coalesce(nullif(payload->>'voided_at', '')::timestamptz, now()),
       void_reason = nullif(payload->>'void_reason', ''),
       updated_at = now()
   where id = target_order.id;
 
-  insert into public.audit_log (
+  insert into boy_central.audit_log (
     company_id, branch_id, actor_user_id, action, entity_type, entity_id,
     source_system, request_id, before_data, after_data
   ) values (
@@ -771,10 +771,10 @@ begin
 end;
 $$;
 
-revoke all on function public.ingest_pos_void(jsonb) from public, anon;
-grant execute on function public.ingest_pos_void(jsonb) to authenticated, service_role;
+revoke all on function boy_central.ingest_pos_void(jsonb) from public, anon;
+grant execute on function boy_central.ingest_pos_void(jsonb) to authenticated, service_role;
 
-create or replace function public.upsert_import_batch(payload jsonb)
+create or replace function boy_central.upsert_import_batch(payload jsonb)
 returns jsonb
 language plpgsql
 security definer
@@ -798,17 +798,17 @@ begin
     raise exception 'company_id and idempotency_key are required';
   end if;
 
-  if caller_role <> 'service_role' and not private.is_company_member(target_company_id) then
+  if caller_role <> 'service_role' and not boy_central_private.is_company_member(target_company_id) then
     raise exception 'company access denied';
   end if;
 
   if target_branch_id is not null
     and caller_role <> 'service_role'
-    and not private.has_branch_access(target_branch_id, array['admin', 'manager']) then
+    and not boy_central_private.has_branch_access(target_branch_id, array['admin', 'manager']) then
     raise exception 'branch access denied';
   end if;
 
-  insert into public.import_batches (
+  insert into boy_central.import_batches (
     company_id, branch_id, import_type, source_system, source_file_id,
     source_sheet_name, status, row_count, idempotency_key, requested_by
   ) values (
@@ -829,12 +829,12 @@ begin
       updated_at = now()
   returning id into target_batch_id;
 
-  delete from public.import_rows where import_batch_id = target_batch_id;
+  delete from boy_central.import_rows where import_batch_id = target_batch_id;
 
   for row_value in select value from jsonb_array_elements(coalesce(payload->'rows', '[]'::jsonb))
   loop
     row_number_value := row_number_value + 1;
-    insert into public.import_rows (
+    insert into boy_central.import_rows (
       company_id, import_batch_id, source_row_number, payload,
       validation_status, validation_messages
     ) values (
@@ -848,7 +848,7 @@ begin
     );
   end loop;
 
-  update public.import_batches ib
+  update boy_central.import_batches ib
   set valid_count = counts.valid_count,
       error_count = counts.error_count,
       status = case when counts.error_count > 0 then 'needs_review' else 'approved' end,
@@ -857,7 +857,7 @@ begin
     select
       count(*) filter (where validation_status in ('valid', 'warning'))::integer as valid_count,
       count(*) filter (where validation_status = 'error')::integer as error_count
-    from public.import_rows
+    from boy_central.import_rows
     where import_batch_id = target_batch_id
   ) counts
   where ib.id = target_batch_id;
@@ -870,5 +870,5 @@ begin
 end;
 $$;
 
-revoke all on function public.upsert_import_batch(jsonb) from public, anon;
-grant execute on function public.upsert_import_batch(jsonb) to authenticated, service_role;
+revoke all on function boy_central.upsert_import_batch(jsonb) from public, anon;
+grant execute on function boy_central.upsert_import_batch(jsonb) to authenticated, service_role;

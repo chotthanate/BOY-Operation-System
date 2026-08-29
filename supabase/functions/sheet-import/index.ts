@@ -25,7 +25,7 @@ Deno.serve(async (request) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data, error } = await supabase.rpc("upsert_import_batch", { payload });
+    const { data, error } = await supabase.schema("boy_central").rpc("upsert_import_batch", { payload });
     if (error) {
       console.error("sheet import failed", error.code, error.message);
       return jsonResponse({ error: "import_failed", message: error.message }, 400);
