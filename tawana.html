@@ -540,6 +540,7 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
+  <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
@@ -1988,5 +1989,8 @@
     
     window.onload = initApp;
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
 </body>
 </html>

@@ -1,0 +1,2 @@
+create index expense_drafts_company_id_idx on boy_central.expense_drafts(company_id);
+create index pos_ingredient_mappings_company_id_idx on boy_central.pos_ingredient_mappings(company_id);

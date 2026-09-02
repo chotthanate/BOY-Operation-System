@@ -5,10 +5,12 @@
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
-  const client = configured ? window.supabase.createClient(config.url, config.publishableKey) : null;
+  const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "boy-operation-auth" }
+  }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, branch: null, items: [], units: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [] };
+  const state = { session: null, profile: null, branch: null, items: [], units: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
@@ -35,6 +37,62 @@
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
     if (page === "stock" && state.session) loadStock();
     if (page === "dashboard" && state.session) loadDashboard();
+    if (page === "settings" && state.session) renderMasterList();
+  }
+
+  const draftKey = () => `boy-burger-draft:${state.session?.user?.id || "guest"}:${$("#expenseDate").value || today()}`;
+
+  function draftPayload() {
+    return { version: 1, transaction_date: $("#expenseDate").value, lines: state.lines, saved_at: new Date().toISOString() };
+  }
+
+  function setDraftStatus(message, type = "") {
+    const node = $("#draftStatus");
+    node.textContent = message;
+    node.className = `draft-status ${type}`;
+  }
+
+  async function saveDraftNow() {
+    if (!state.session || !state.branch || !$("#expenseDate").value) return;
+    const payload = draftPayload();
+    localStorage.setItem(draftKey(), JSON.stringify(payload));
+    setDraftStatus("กำลังบันทึก…");
+    const { error } = await client.schema("boy_central").from("expense_drafts").upsert({
+      company_id: state.branch.company_id,
+      branch_id: state.branch.id,
+      user_id: state.session.user.id,
+      transaction_date: payload.transaction_date,
+      payload
+    }, { onConflict: "branch_id,user_id,transaction_date" });
+    setDraftStatus(error ? "เก็บไว้ในเครื่องแล้ว" : "บันทึกร่างแล้ว", error ? "local" : "saved");
+  }
+
+  function scheduleDraftSave() {
+    localStorage.setItem(draftKey(), JSON.stringify(draftPayload()));
+    setDraftStatus("มีการแก้ไข");
+    clearTimeout(state.draftTimer);
+    state.draftTimer = setTimeout(saveDraftNow, 650);
+  }
+
+  async function loadDraftForDate() {
+    if (!state.session || !state.branch) return;
+    let payload = null;
+    const local = localStorage.getItem(draftKey());
+    if (local) try { payload = JSON.parse(local); } catch (_) { localStorage.removeItem(draftKey()); }
+    const { data } = await client.schema("boy_central").from("expense_drafts")
+      .select("payload,updated_at").eq("branch_id", state.branch.id).eq("user_id", state.session.user.id)
+      .eq("transaction_date", $("#expenseDate").value).maybeSingle();
+    if (data?.payload && (!payload?.saved_at || new Date(data.updated_at) > new Date(payload.saved_at))) payload = data.payload;
+    state.lines = Array.isArray(payload?.lines) && payload.lines.length ? payload.lines.map((line) => ({ ...newLine(), ...line, expanded: false })) : [newLine()];
+    state.lines[0].expanded = true;
+    renderLines();
+    setDraftStatus(payload ? "เปิดร่างล่าสุดแล้ว" : "พร้อมบันทึกร่าง", payload ? "saved" : "");
+  }
+
+  async function clearDraft() {
+    localStorage.removeItem(draftKey());
+    if (state.session && state.branch) await client.schema("boy_central").from("expense_drafts").delete()
+      .eq("branch_id", state.branch.id).eq("user_id", state.session.user.id).eq("transaction_date", $("#expenseDate").value);
   }
 
   function itemById(id) { return state.items.find((item) => item.id === id); }
@@ -86,11 +144,25 @@
       if (item) {
         line.description = item.name;
         line.unit_id = item.base_unit_id || line.unit_id;
+        const linkedExpense = state.expenseItems.find((row) => row.item_id === item.id);
+        if (linkedExpense) line.expense_item_id = linkedExpense.id;
         const choices = supplierChoices(value);
         if (choices.length === 1) line.supplier_name = choices[0].name;
       }
     }
+    if (field === "expense_item_id") {
+      const expense = state.expenseItems.find((row) => row.id === value);
+      if (expense) {
+        line.description = expense.name;
+        if (expense.item_id) {
+          const linkedItem = itemById(expense.item_id);
+          line.item_id = expense.item_id;
+          line.unit_id = linkedItem?.base_unit_id || line.unit_id;
+        } else line.item_id = "";
+      }
+    }
     renderLines();
+    scheduleDraftSave();
   }
 
   function validateExpense() {
@@ -108,8 +180,7 @@
 
   function openReview() {
     const errors = validateExpense();
-    const total = state.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
-    $("#reviewSummary").textContent = `${state.lines.length} รายการ · ${money.format(total)}`;
+    $("#reviewSummary").textContent = `${state.lines.length} รายการ`;
     $("#reviewErrors").innerHTML = errors.map((error) => `<div>• ${escapeHtml(error)}</div>`).join("");
     $("#confirmExpenseButton").disabled = errors.length > 0 || !state.session;
     $("#reviewDialog").showModal();
@@ -119,7 +190,6 @@
     const button = $("#confirmExpenseButton");
     button.disabled = true;
     button.textContent = "กำลังบันทึก";
-    const total = state.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
     const payload = {
       branch_id: state.branch.id,
       transaction_date: $("#expenseDate").value,
@@ -128,13 +198,13 @@
       lines: state.lines.map((line) => {
         const supplier = state.suppliers.find((row) => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
         return { item_id: line.item_id || null, expense_item_id: line.expense_item_id, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: line.quantity, unit_id: line.unit_id || null, line_total: line.line_total, note: line.note || null };
-      }),
-      payments: [{ method: $("#paymentMethod").value, amount: total }]
+      })
     };
     const { data, error } = await client.schema("boy_central").rpc("record_expense", { payload });
     button.textContent = "บันทึก";
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#reviewDialog").close();
+    await clearDraft();
     state.lines = [newLine()];
     renderLines();
     loadExpenseHistory();
@@ -143,23 +213,26 @@
 
   async function loadExpenseHistory() {
     if (!state.branch) return;
-    const { data, error } = await client.schema("boy_central").from("transactions").select("id,transaction_date,total_amount,status,transaction_lines(description)").eq("branch_id", state.branch.id).eq("transaction_type", "expense").order("occurred_at", { ascending: false }).limit(12);
+    const { data, error } = await client.schema("boy_central").from("transactions").select("id,transaction_date,total_amount,status,transaction_lines(description)").eq("branch_id", state.branch.id).eq("transaction_type", "expense").eq("transaction_date", $("#expenseDate").value).order("occurred_at", { ascending: false }).limit(30);
     if (error) { $("#expenseHistory").innerHTML = '<div class="empty-state">โหลดประวัติไม่สำเร็จ</div>'; return; }
     $("#expenseHistory").innerHTML = (data || []).length ? data.map((row) => `<article class="history-row"><span><strong>${escapeHtml(row.transaction_lines?.[0]?.description || "รายจ่าย")}</strong><small>${escapeHtml(row.transaction_date)} · ${escapeHtml(row.status)}</small></span><span class="history-amount">${money.format(row.total_amount || 0)}</span></article>`).join("") : '<div class="empty-state">ยังไม่มีรายจ่าย</div>';
   }
 
   async function loadMaster() {
-    const [branchResult, unitsResult] = await Promise.all([
+    const [branchResult, unitsResult, categoriesResult] = await Promise.all([
       client.schema("boy_central").from("branches").select("id,company_id,code,name").eq("code", "BURGER").eq("active", true).single(),
-      client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name")
+      client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name"),
+      client.schema("boy_central").from("categories").select("id,name,code,parent_id,category_type").eq("active", true).order("sort_order")
     ]);
     if (branchResult.error) throw branchResult.error;
     if (unitsResult.error) throw unitsResult.error;
+    if (categoriesResult.error) throw categoriesResult.error;
     state.branch = branchResult.data;
     state.units = unitsResult.data || [];
+    state.categories = categoriesResult.data || [];
     const [itemsResult, expenseResult, supplierResult, linksResult] = await Promise.all([
-      client.schema("boy_central").from("branch_items").select("item_id,items(id,name,code,base_unit_id,track_stock)").eq("branch_id", state.branch.id).eq("active", true),
-      client.schema("boy_central").from("branch_expense_items").select("sort_order,expense_items(id,name,code)").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
+      client.schema("boy_central").from("branch_items").select("item_id,items(id,name,code,base_unit_id,category_id,track_stock,active)").eq("branch_id", state.branch.id).eq("active", true),
+      client.schema("boy_central").from("branch_expense_items").select("sort_order,expense_items(id,name,code,category_id,item_id,affects_stock,active)").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
       client.schema("boy_central").from("branch_suppliers").select("is_preferred,suppliers(id,name,code)").eq("branch_id", state.branch.id).eq("active", true).order("is_preferred", { ascending: false }),
       client.schema("boy_central").from("branch_item_suppliers").select("item_id,supplier_id,active,is_primary").eq("branch_id", state.branch.id).eq("active", true).order("is_primary", { ascending: false })
     ]);
@@ -170,21 +243,30 @@
     state.suppliers = (supplierResult.data || []).map((row) => row.suppliers).filter(Boolean);
     state.itemSuppliers = linksResult.data || [];
     renderLines();
+    renderMasterList();
   }
 
   async function loadStock() {
     if (!state.branch) return;
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
-    const { data, error } = await client.schema("boy_central").from("v_stock_on_hand").select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value").eq("branch_id", state.branch.id).order("item_name");
-    if (error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`; return; }
-    state.stock = data || [];
+    const [centralResult, posResult] = await Promise.all([
+      client.schema("boy_central").from("v_stock_on_hand").select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value").eq("branch_id", state.branch.id).order("item_name"),
+      client.schema("boy_central").rpc("get_burger_pos_stock")
+    ]);
+    if (centralResult.error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(centralResult.error.message)}</div>`; return; }
+    state.stock = centralResult.data || [];
+    (posResult.data || []).forEach((pos) => {
+      const match = state.stock.find((row) => row.item_name.trim().toLocaleLowerCase("th") === pos.item_name.trim().toLocaleLowerCase("th"));
+      if (match) { match.quantity_on_hand = pos.quantity_on_hand; match.base_unit_name = pos.unit_name; match.stock_source = "Burger POS"; }
+      else state.stock.push({ item_id: `pos-${pos.legacy_ingredient_id}`, item_code: "POS", item_name: pos.item_name, base_unit_name: pos.unit_name, quantity_on_hand: pos.quantity_on_hand, average_unit_cost: 0, inventory_value: 0, stock_source: "Burger POS" });
+    });
     renderStock();
   }
 
   function renderStock() {
     const query = $("#stockSearch").value.trim().toLocaleLowerCase("th");
     const rows = state.stock.filter((row) => `${row.item_code} ${row.item_name}`.toLocaleLowerCase("th").includes(query));
-    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ต้นทุน ${money.format(row.average_unit_cost || 0)}</small></span><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ${row.stock_source ? escapeHtml(row.stock_source) : `ต้นทุน ${money.format(row.average_unit_cost || 0)}`}</small></span><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
   }
 
   async function loadDashboard() {
@@ -192,19 +274,69 @@
     const period = `${$("#dashboardMonth").value}-01`;
     const [year, month] = $("#dashboardMonth").value.split("-").map(Number);
     const nextPeriod = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-    const [summaryResult, transactionsResult] = await Promise.all([
+    const [summaryResult, transactionsResult, posResult] = await Promise.all([
       client.schema("boy_central").from("v_monthly_branch_summary").select("income,expense,net_profit").eq("branch_id", state.branch.id).eq("month_start", period).maybeSingle(),
-      client.schema("boy_central").from("transactions").select("source_system,transaction_type,total_amount,status").eq("branch_id", state.branch.id).gte("transaction_date", period).lt("transaction_date", nextPeriod)
+      client.schema("boy_central").from("transactions").select("source_system,transaction_type,total_amount,status").eq("branch_id", state.branch.id).gte("transaction_date", period).lt("transaction_date", nextPeriod),
+      client.schema("boy_central").rpc("get_burger_pos_monthly_sales", { month_start: period })
     ]);
     if (summaryResult.error || transactionsResult.error) { toast(summaryResult.error?.message || transactionsResult.error?.message); return; }
     const summary = summaryResult.data || { income: 0, expense: 0, net_profit: 0 };
     const transactions = transactionsResult.data || [];
-    $("#metricGrid").innerHTML = `<article class="metric accent"><small>รายรับ</small><strong>${money.format(summary.income || 0)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(summary.net_profit || 0)}</strong></article><article class="metric"><small>จำนวนธุรกรรม</small><strong>${number.format(transactions.length)}</strong></article>`;
+    const hasShadowSales = transactions.some((row) => row.source_system === "burger_pos" && ["income","sale"].includes(row.transaction_type));
+    const posSales = hasShadowSales ? 0 : Number(posResult.data?.sales || 0);
+    const posOrders = hasShadowSales ? 0 : Number(posResult.data?.orders || 0);
+    const income = Number(summary.income || 0) + posSales;
+    const net = income - Number(summary.expense || 0);
+    $("#metricGrid").innerHTML = `<article class="metric accent"><small>รายรับ</small><strong>${money.format(income)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(net)}</strong></article><article class="metric"><small>จำนวนธุรกรรม</small><strong>${number.format(transactions.length + posOrders)}</strong></article>`;
     const channelMap = new Map();
     transactions.filter((row) => row.status === "confirmed" && ["income", "sale", "settlement"].includes(row.transaction_type)).forEach((row) => channelMap.set(row.source_system, (channelMap.get(row.source_system) || 0) + Number(row.total_amount || 0)));
+    if (posSales > 0) channelMap.set("Burger POS", posSales);
     const channels = [...channelMap.entries()].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
     const max = Math.max(...channels.map((row) => row.total), 1);
     $("#channelBreakdown").innerHTML = channels.length ? channels.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.name)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, row.total / max * 100)}%"></span></span><strong>${money.format(row.total)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
+  }
+
+  function categoryName(id) { return state.categories.find((row) => row.id === id)?.name || "ไม่ระบุหมวด"; }
+
+  function renderMasterList() {
+    const list = $("#masterList");
+    if (!list) return;
+    const query = $("#masterSearch").value.trim().toLocaleLowerCase("th");
+    const rows = (state.masterTab === "items" ? state.items : state.expenseItems)
+      .filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("th").includes(query));
+    list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="${state.masterTab === "items" ? "item" : "expense_item"}">
+      <span><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.code)} · ${escapeHtml(categoryName(row.category_id))}</small></span>
+      <span class="master-badges"><small>${state.masterTab === "items" ? (row.track_stock ? "ติดตามสต็อก" : "ไม่ติดตามสต็อก") : (row.affects_stock ? "เพิ่มสต็อก" : "รายจ่ายทั่วไป")}</small><b>แก้ไข</b></span>
+    </button>`).join("") : '<div class="empty-state">ไม่พบรายการ</div>';
+  }
+
+  function openMaster(id, kind) {
+    const row = (kind === "item" ? state.items : state.expenseItems).find((entry) => entry.id === id) || {};
+    $("#masterId").value = row.id || "";
+    $("#masterKind").value = kind;
+    $("#masterName").value = row.name || "";
+    $("#masterDialogTitle").textContent = `${row.id ? "แก้ไข" : "เพิ่ม"}${kind === "item" ? "สินค้า / วัตถุดิบ" : "รายการรายจ่าย"}`;
+    $("#masterUnitField").hidden = kind !== "item";
+    $("#masterUnit").innerHTML = optionHtml(state.units, row.base_unit_id);
+    $("#masterCategory").innerHTML = optionHtml(state.categories.filter((category) => kind === "item" ? category.category_type === "item" && category.parent_id : category.category_type === "expense" || (category.category_type === "item" && category.parent_id)), row.category_id);
+    $("#masterStock").checked = kind === "item" ? Boolean(row.track_stock) : Boolean(row.affects_stock);
+    $("#masterStockLabel").textContent = kind === "item" ? "ติดตามสต็อก" : "รายการนี้เพิ่มสต็อก";
+    $("#masterActive").checked = row.active !== false;
+    $("#masterDialog").showModal();
+  }
+
+  async function saveMaster(event) {
+    event.preventDefault();
+    if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่แก้รายการตั้งต้นได้"); return; }
+    const kind = $("#masterKind").value;
+    const payload = { kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value, active: $("#masterActive").checked };
+    if (kind === "item") { payload.base_unit_id = $("#masterUnit").value; payload.track_stock = $("#masterStock").checked; }
+    else payload.affects_stock = $("#masterStock").checked;
+    const { error } = await client.schema("boy_central").rpc("admin_update_burger_master", { payload });
+    if (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
+    $("#masterDialog").close();
+    await loadMaster();
+    toast("อัปเดตรายการแล้ว");
   }
 
   async function ensureProfile(session) {
@@ -236,12 +368,18 @@
       setConnection("ไม่มีสิทธิ์", "error");
       return;
     }
+    state.profile = profile;
+    const next = new URLSearchParams(location.search).get("next");
+    if (next && /^(tawana|bigc|bigc-order|dashboard)\.html(?:[?#].*)?$/.test(next)) {
+      location.replace(next);
+      return;
+    }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = profile.display_name || "ผู้ใช้งาน BOY";
     setConnection("เชื่อมต่อแล้ว", "online");
-    try { await loadMaster(); await loadExpenseHistory(); } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
+    try { await loadMaster(); await loadDraftForDate(); await loadExpenseHistory(); } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
   }
 
   async function requestMagicLink() {
@@ -283,19 +421,37 @@
   $$(".bottom-nav button").forEach((button) => button.addEventListener("click", () => setPage(button.dataset.target)));
   $("#storeButton").addEventListener("click", () => $("#storeDialog").showModal());
   $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close()));
-  $("#addExpenseButton").addEventListener("click", () => { state.lines.forEach((line) => line.expanded = false); state.lines.push(newLine()); renderLines(); });
+  $("#addExpenseButton").addEventListener("click", () => { state.lines.forEach((line) => line.expanded = false); state.lines.push(newLine()); renderLines(); scheduleDraftSave(); });
   $("#expenseLines").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]"); if (!button) return;
     const card = button.closest(".expense-card"); const line = state.lines.find((row) => row.id === card.dataset.lineId); if (!line) return;
     if (button.dataset.action === "toggle-line") { state.lines.forEach((row) => row.expanded = row.id === line.id ? !row.expanded : false); renderLines(); }
-    if (button.dataset.action === "remove-line" && confirm("ลบรายการนี้ใช่ไหม")) { state.lines = state.lines.filter((row) => row.id !== line.id); if (!state.lines.length) state.lines.push(newLine()); renderLines(); }
+    if (button.dataset.action === "remove-line" && confirm("ลบรายการนี้ใช่ไหม")) { state.lines = state.lines.filter((row) => row.id !== line.id); if (!state.lines.length) state.lines.push(newLine()); renderLines(); scheduleDraftSave(); }
   });
   $("#expenseLines").addEventListener("change", (event) => { const field = event.target.dataset.field; if (field) updateLine(event.target.closest(".expense-card"), field, event.target.value); });
+  $("#expenseLines").addEventListener("input", (event) => {
+    const field = event.target.dataset.field;
+    const card = event.target.closest(".expense-card");
+    const line = card && state.lines.find((row) => row.id === card.dataset.lineId);
+    if (!field || !line || event.target.matches("select")) return;
+    line[field] = ["quantity", "line_total"].includes(field) ? Number(event.target.value) : event.target.value;
+    scheduleDraftSave();
+  });
+  $("#expenseDate").addEventListener("change", async () => { await loadDraftForDate(); await loadExpenseHistory(); });
   $("#reviewExpenseButton").addEventListener("click", openReview);
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
+  $("#masterSearch").addEventListener("input", renderMasterList);
+  $$("[data-master-tab]").forEach((button) => button.addEventListener("click", () => {
+    state.masterTab = button.dataset.masterTab;
+    $$("[data-master-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
+    renderMasterList();
+  }));
+  $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
+  $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterTab === "items" ? "item" : "expense_item"));
+  $("#masterForm").addEventListener("submit", saveMaster);
   $("#logoutButton").addEventListener("click", async () => { await client.auth.signOut(); location.reload(); });
   $("#loginForm").addEventListener("submit", async (event) => { event.preventDefault(); $("#loginError").textContent = ""; const { data, error } = await client.auth.signInWithPassword({ email: $("#loginEmail").value, password: $("#loginPassword").value }); if (error) { $("#loginError").textContent = error.message; return; } await enterApp(data.session); });
   $("#magicLinkButton").addEventListener("click", requestMagicLink);

@@ -85,6 +85,7 @@
         .test-mode-banner { position: sticky; top: 0; z-index: 10050; padding: 10px 14px; background: #f59e0b; color: #422006; text-align: center; font-weight: 900; box-shadow: 0 3px 10px rgba(0,0,0,.16); }
         .test-mode-banner[hidden] { display: none; }
     </style>
+  <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
 
@@ -864,5 +865,8 @@ document.addEventListener('keydown', function(event) {
 
     window.onload = initApp;
 </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
 </body>
 </html>

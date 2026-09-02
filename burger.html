@@ -7,6 +7,7 @@
   <title>ร้านเบอร์เกอร์ | BOY Operations</title>
   <link rel="stylesheet" href="assets/css/burger.css">
   <link rel="stylesheet" href="assets/css/burger-history.css">
+  <link rel="stylesheet" href="assets/css/burger-central.css">
 </head>
 <body>
   <div class="app-shell">
@@ -38,7 +39,7 @@
         </div>
         <div class="toolbar-card">
           <label>วันที่<input id="expenseDate" type="date"></label>
-          <label>ชำระด้วย<select id="paymentMethod"><option value="cash">เงินสด</option><option value="transfer">เงินโอน</option><option value="other">อื่น ๆ</option></select></label>
+          <span class="draft-status" id="draftStatus">พร้อมบันทึกร่าง</span>
         </div>
         <div id="expenseLines" class="expense-list"></div>
         <div class="action-row">
@@ -64,6 +65,16 @@
         <div class="section-heading compact"><div><small>บัญชีผู้ใช้</small><h1>บัญชี</h1></div></div>
         <section class="panel account-panel"><div class="account-avatar">BOY</div><strong id="accountName">—</strong><span id="accountEmail">—</span><button class="secondary-button" id="logoutButton" type="button">ออกจากระบบ</button></section>
       </section>
+
+      <section class="page" id="settingsPage" data-page="settings">
+        <div class="section-heading compact"><div><small>ข้อมูลร้านเบอร์เกอร์</small><h1>รายการตั้งต้น</h1></div><button class="secondary-button compact-button" id="addMasterButton" type="button">+ เพิ่ม</button></div>
+        <div class="master-tabs" role="tablist">
+          <button class="active" type="button" data-master-tab="items">สินค้าและวัตถุดิบ</button>
+          <button type="button" data-master-tab="expenses">รายการรายจ่าย</button>
+        </div>
+        <label class="search-field"><span>⌕</span><input id="masterSearch" type="search" placeholder="ค้นหารายการ"></label>
+        <div class="master-list" id="masterList"></div>
+      </section>
     </main>
   </div>
 
@@ -71,6 +82,7 @@
     <button class="active" type="button" data-target="expense"><span>＋</span><strong>รายจ่าย</strong></button>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
     <button type="button" data-target="dashboard"><span>▥</span><strong>Dashboard</strong></button>
+    <button type="button" data-target="settings"><span>⚙</span><strong>ตั้งค่า</strong></button>
     <button type="button" data-target="account"><span>○</span><strong>บัญชี</strong></button>
   </nav>
 
@@ -86,6 +98,20 @@
   <dialog id="reviewDialog" class="review-dialog">
     <div class="review-icon">✓</div><h2>ตรวจสอบรายจ่าย</h2><p id="reviewSummary"></p><div id="reviewErrors" class="review-errors"></div>
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="reviewDialog">กลับไปแก้</button><button class="primary-button" id="confirmExpenseButton" type="button">บันทึก</button></div>
+  </dialog>
+
+  <dialog id="masterDialog" class="review-dialog master-dialog">
+    <h2 id="masterDialogTitle">แก้ไขรายการ</h2>
+    <form id="masterForm" class="form-stack">
+      <input id="masterId" type="hidden">
+      <input id="masterKind" type="hidden">
+      <label>ชื่อรายการ<input id="masterName" required></label>
+      <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
+      <label>หมวด<select id="masterCategory"></select></label>
+      <label class="check-row"><input id="masterStock" type="checkbox"><span id="masterStockLabel">ติดตามสต็อก</span></label>
+      <label class="check-row"><input id="masterActive" type="checkbox"><span>เปิดใช้งาน</span></label>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="masterDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึก</button></div>
+    </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
