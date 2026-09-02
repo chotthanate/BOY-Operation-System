@@ -15,6 +15,9 @@
 - เพิ่มหน้าตั้งค่า Burger สำหรับค้นหา เพิ่ม และแก้สินค้า/วัตถุดิบกับรายการรายจ่าย โดยการเขียน Master จำกัดเฉพาะ Admin ผ่าน RPC
 - ใช้ Supabase session ชุดเดียวกันกับ Tawana, BigC, BigC Order และ Dashboard; เครื่องเดิมจำการเข้าสู่ระบบจนกว่าจะกดออกจากระบบ
 - เพิ่ม POS bridge แบบปลอดภัย: อ่านยอดขาย/สต็อก POS ผ่าน RPC และเตรียมตารางจับคู่สินค้า BOY กับวัตถุดิบ POS; การซื้อจาก BOY จะเติม POS ต่อเมื่อ Admin สร้าง mapping แล้วเท่านั้น
+- ตรวจพบข้อมูลจริงของ Burger POS อยู่ใน `public.pos_app_state`: วัตถุดิบ 23, เมนู 22, สูตร 37, ออเดอร์ที่แอปเก็บ 200 และ Stock Movement 500 รายการ
+- เพิ่ม `pos_master_mappings` สำหรับรหัส string ของ POS รุ่นปัจจุบัน และนำ Master snapshot แรกเข้าแล้ว: วัตถุดิบ 23 + เมนู 22 จับคู่สำเร็จ 45/45; สร้างเมนูและสูตรใน BOY Central โดยไม่แตะสต็อกหรือออเดอร์เดิม
+- Burger POS ส่งออเดอร์/ยกเลิกใหม่เข้า BOY Central ผ่านคิวออฟไลน์และ RPC ที่ตรวจ Auth, สิทธิ์สาขา และ idempotency key
 - รายจ่าย BOY Central รองรับ Supplier แยกต่อรายการแล้ว และเก็บชื่อ Supplier ที่พิมพ์ใหม่ไว้ตรวจสอบโดยไม่สร้าง Master อัตโนมัติ
 - `BOY_Transactions` มีโครงสร้างใหม่แล้ว: `_คู่มือระบบใหม่`, `T_Transactions`, `T_รายละเอียด`, `T_การชำระเงิน`, `T_สต็อกเคลื่อนไหว`, `T_ตรวจนับสต็อก`, `T_การลา`, `T_เงินเดือน`, `T_ไฟล์แนบ`, `T_ประวัติสถานะ`
 - แท็บเดิมยังอยู่ครบและยังเป็นแหล่งข้อมูลของ Dashboard ระหว่างช่วงเปลี่ยนระบบ
@@ -32,10 +35,10 @@
 - Master ร้านเบอร์เกอร์พร้อมใช้ใน `boy_central` แล้ว แต่ Master ร้านน้ำและร้านเนื้อย่างยังต้องตรวจและนำเข้าตามลำดับ
 - Supabase Advisor ไม่พบคำเตือนด้านความปลอดภัยใน `boy_central`; Foreign Key ของฐานกลางมีดัชนีรองรับครบแล้ว ส่วนคำเตือนที่ยังเหลืออยู่เป็นของตาราง POS เดิมใน `public` จึงยังไม่แก้ในรอบนี้เพื่อไม่ให้กระทบระบบเดิม
 - ขั้นตอนสร้าง Admin คนแรกจำกัดเฉพาะอีเมลผู้ดูแลที่ยืนยันแล้วด้วยค่า hash ในฐานข้อมูล และหน้า Burger รองรับการเข้าใช้งานแบบ Magic Link โดยไม่ต้องส่งรหัสผ่านให้ผู้อื่น
-- ยังไม่เปิด POS Shadow Sync จริง เพราะ Burger POS ปัจจุบันเป็น client-side; ห้ามนำ shared secret ไปใส่ใน Vite หรือหน้าเว็บ ต้องมี server-side relay หรือ Supabase Auth ก่อน
+- เปิดทาง POS Shadow Sync สำหรับออเดอร์ใหม่แล้วโดยใช้ Supabase Auth; ไม่มี shared secret หรือ Service Role Key ใน Vite
 - ยังไม่ได้ deploy Edge Functions `sheet-import` และ `pos-shadow-sync` หรือกำหนด secrets จริงบน Cloud
-- ฐาน Burger POS เดิมใน `public` ยังไม่มีแถว `ingredients` และ `orders` จึงยังไม่มีข้อมูล POS จริงให้ซิงก์; POS bridge พร้อมอ่านเมื่อ POS เริ่มเขียนข้อมูล และยังไม่กระทบ flow เดิม
-- ต้องจับคู่ `pos_ingredient_mappings` หลัง Burger POS มีวัตถุดิบจริง ก่อนเปิดการเติมสต็อกข้ามระบบ; ห้ามจับคู่ด้วยชื่ออัตโนมัติเมื่อกำกวม
+- ตาราง normalized เดิม `public.ingredients/orders` ยังว่าง แต่แอปจริงใช้ JSON ใน `public.pos_app_state`; bridge รุ่นใหม่รองรับรูปแบบนี้แล้ว
+- ยังไม่ย้ายออเดอร์ย้อนหลัง 200 รายการและไม่ใช้ยอดสต็อกเดิมเป็น opening balance จนกว่าจะตรวจช่วงวันที่และยืนยันวัน Cutover
 - หน้า Burger ใส่ Supabase URL และ Public Publishable Key แล้ว ผู้ดูแลล็อกอินและอ่านข้อมูลผ่าน RLS ได้จริง แต่ยังบันทึกข้อมูลธุรกิจไม่ได้จนกว่าจะนำเข้า Master ของสาขา Burger
 - Apps Script รุ่นทดสอบ deploy เป็นเวอร์ชัน 28 แล้วที่ deployment แยก URL `AKfycbxZ-...q3nrcg`; ทดสอบโหลด Supplier จริงผ่านหน้า Tawana แล้ว ส่วน deployment เดิมที่หน้าเว็บออนไลน์ใช้อยู่ยังไม่ได้เปลี่ยน
 - หน้า `system-test.html` ชี้ไป deployment ทดสอบ และส่ง URL นี้ให้หน้าใช้งานเฉพาะเมื่อเปิดจาก `file:`, `localhost` หรือ `127.0.0.1`
@@ -55,6 +58,7 @@
 - Deploy Edge Functions และตั้ง `SHEET_IMPORT_SECRET`/`POS_SYNC_SECRET` ใน Supabase secrets ก่อนเริ่มนำเข้าชีตหรือ Shadow Sync; ห้ามเก็บค่าเหล่านี้ในเว็บหรือ GitHub
 - เครื่อง Mac นี้ติดตั้ง `clasp` และล็อกอินบัญชีที่เข้าถึง BOY Apps Script แล้ว สามารถ `clasp push`, สร้าง version และอัปเดต deployment ได้ โดย credentials อยู่ที่ home directory และไม่อยู่ใน repository
 - เมื่อทุก flow ผ่านแล้วจึงอัปเดต deployment เดิมที่หน้า BOY ออนไลน์ใช้อยู่
+- บนอุปกรณ์ Burger POS ให้เข้า Settings > BOY Central และยืนยัน Magic Link หนึ่งครั้ง จากนั้นกด “ซิงก์ตอนนี้” เพื่อส่ง Master snapshot และคิวออเดอร์ใหม่
 
 ## Notes
 
