@@ -230,20 +230,49 @@
     state.branch = branchResult.data;
     state.units = unitsResult.data || [];
     state.categories = categoriesResult.data || [];
-    const [itemsResult, expenseResult, supplierResult, linksResult] = await Promise.all([
-      client.schema("boy_central").from("branch_items").select("item_id,items(id,name,code,base_unit_id,category_id,track_stock,active)").eq("branch_id", state.branch.id).eq("active", true),
-      client.schema("boy_central").from("branch_expense_items").select("sort_order,expense_items(id,name,code,category_id,item_id,affects_stock,active)").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
-      client.schema("boy_central").from("branch_suppliers").select("is_preferred,suppliers(id,name,code)").eq("branch_id", state.branch.id).eq("active", true).order("is_preferred", { ascending: false }),
+    const [itemLinksResult, expenseLinksResult, supplierLinksResult, linksResult] = await Promise.all([
+      client.schema("boy_central").from("branch_items").select("item_id").eq("branch_id", state.branch.id).eq("active", true),
+      client.schema("boy_central").from("branch_expense_items").select("expense_item_id,sort_order").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
+      client.schema("boy_central").from("branch_suppliers").select("supplier_id,is_preferred").eq("branch_id", state.branch.id).eq("active", true).order("is_preferred", { ascending: false }),
       client.schema("boy_central").from("branch_item_suppliers").select("item_id,supplier_id,active,is_primary").eq("branch_id", state.branch.id).eq("active", true).order("is_primary", { ascending: false })
     ]);
-    const masterError = [itemsResult, expenseResult, supplierResult, linksResult].find((result) => result.error)?.error;
-    if (masterError) throw masterError;
-    state.items = (itemsResult.data || []).map((row) => row.items).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, "th"));
-    state.expenseItems = (expenseResult.data || []).map((row) => row.expense_items).filter(Boolean);
-    state.suppliers = (supplierResult.data || []).map((row) => row.suppliers).filter(Boolean);
-    state.itemSuppliers = linksResult.data || [];
+    if (itemLinksResult.error) throw itemLinksResult.error;
+    if (expenseLinksResult.error) throw expenseLinksResult.error;
+
+    const itemIds = (itemLinksResult.data || []).map((row) => row.item_id);
+    const expenseIds = (expenseLinksResult.data || []).map((row) => row.expense_item_id);
+    const supplierIds = (supplierLinksResult.data || []).map((row) => row.supplier_id);
+    const [itemsResult, expenseResult, supplierResult] = await Promise.all([
+      itemIds.length
+        ? client.schema("boy_central").from("items").select("id,name,code,base_unit_id,category_id,track_stock,active").in("id", itemIds).eq("active", true).order("name")
+        : Promise.resolve({ data: [], error: null }),
+      expenseIds.length
+        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,active").in("id", expenseIds).eq("active", true)
+        : Promise.resolve({ data: [], error: null }),
+      !supplierLinksResult.error && supplierIds.length
+        ? client.schema("boy_central").from("suppliers").select("id,name,code").in("id", supplierIds).eq("active", true)
+        : Promise.resolve({ data: [], error: null })
+    ]);
+    if (itemsResult.error) throw itemsResult.error;
+    if (expenseResult.error) throw expenseResult.error;
+
+    const expenseOrder = new Map((expenseLinksResult.data || []).map((row, index) => [row.expense_item_id, [row.sort_order ?? 0, index]]));
+    const supplierOrder = new Map((supplierLinksResult.data || []).map((row, index) => [row.supplier_id, [row.is_preferred ? 0 : 1, index]]));
+    state.items = (itemsResult.data || []).sort((a, b) => a.name.localeCompare(b.name, "th"));
+    state.expenseItems = (expenseResult.data || []).sort((a, b) => {
+      const left = expenseOrder.get(a.id) || [0, 0];
+      const right = expenseOrder.get(b.id) || [0, 0];
+      return left[0] - right[0] || left[1] - right[1];
+    });
+    state.suppliers = supplierResult.error ? [] : (supplierResult.data || []).sort((a, b) => {
+      const left = supplierOrder.get(a.id) || [1, 0];
+      const right = supplierOrder.get(b.id) || [1, 0];
+      return left[0] - right[0] || left[1] - right[1];
+    });
+    state.itemSuppliers = linksResult.error ? [] : (linksResult.data || []);
     renderLines();
     renderMasterList();
+    setConnection(`เชื่อมต่อแล้ว · ${state.items.length} สินค้า`, "online");
   }
 
   async function loadStock() {
