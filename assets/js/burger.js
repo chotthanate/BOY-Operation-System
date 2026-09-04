@@ -6,7 +6,7 @@
   const config = window.BOY_CENTRAL_CONFIG || {};
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "boy-operation-auth" }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
@@ -16,7 +16,7 @@
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", item_search: "", expense_item_id: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
 
   function toast(message) {
     const element = $("#toast");
@@ -97,6 +97,10 @@
 
   function itemById(id) { return state.items.find((item) => item.id === id); }
   function unitById(id) { return state.units.find((unit) => unit.id === id); }
+  function itemBySearch(value) {
+    const query = String(value || "").trim().toLocaleLowerCase("th");
+    return state.items.find((item) => item.name.trim().toLocaleLowerCase("th") === query || item.code.toLocaleLowerCase("th") === query);
+  }
   function supplierChoices(itemId) {
     const linkedIds = state.itemSuppliers.filter((link) => link.item_id === itemId && link.active !== false).map((link) => link.supplier_id);
     return linkedIds.length ? state.suppliers.filter((supplier) => linkedIds.includes(supplier.id)) : state.suppliers;
@@ -116,7 +120,7 @@
           <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${item?.track_stock ? "" : "off"}">${item?.track_stock ? "เข้าสต็อก" : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
-          <label>สินค้า (ถ้ามี)<select data-field="item_id"><option value="">ไม่ผูกสินค้า</option>${optionHtml(state.items, line.item_id)}</select></label>
+          <label>สินค้า (ถ้ามี)<input class="typeable-select" data-field="item_search" list="items-${line.id}" value="${escapeHtml(item?.name || line.item_search)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off"><datalist id="items-${line.id}">${state.items.map((row) => `<option value="${escapeHtml(row.name)}">${escapeHtml(row.code)}</option>`).join("")}</datalist></label>
           <label>ชื่อรายการ<input data-field="description" value="${escapeHtml(line.description)}" placeholder="เช่น ขนมปังเบอร์เกอร์"></label>
           <div class="field-grid three">
             <label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" value="${escapeHtml(line.quantity)}"></label>
@@ -138,16 +142,22 @@
   function updateLine(card, field, value) {
     const line = state.lines.find((row) => row.id === card.dataset.lineId);
     if (!line) return;
+    const previousItem = itemById(line.item_id);
     line[field] = ["quantity", "line_total"].includes(field) ? Number(value) : value;
-    if (field === "item_id") {
-      const item = itemById(value);
+    if (field === "item_search") {
+      const item = itemBySearch(value);
+      line.item_id = item?.id || "";
       if (item) {
+        line.item_search = item.name;
         line.description = item.name;
         line.unit_id = item.base_unit_id || line.unit_id;
         const linkedExpense = state.expenseItems.find((row) => row.item_id === item.id);
         if (linkedExpense) line.expense_item_id = linkedExpense.id;
-        const choices = supplierChoices(value);
+        const choices = supplierChoices(item.id);
         if (choices.length === 1) line.supplier_name = choices[0].name;
+      } else if (!line.description || line.description === previousItem?.name) {
+        line.description = String(value).trim();
+        line.unit_id = "";
       }
     }
     if (field === "expense_item_id") {
@@ -283,7 +293,17 @@
       client.schema("boy_central").rpc("get_burger_pos_stock")
     ]);
     if (centralResult.error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(centralResult.error.message)}</div>`; return; }
-    state.stock = centralResult.data || [];
+    const stockByItem = new Map(state.items.filter((item) => item.track_stock).map((item) => [item.id, {
+      item_id: item.id,
+      item_code: item.code,
+      item_name: item.name,
+      base_unit_name: unitById(item.base_unit_id)?.name || "",
+      quantity_on_hand: 0,
+      average_unit_cost: 0,
+      inventory_value: 0
+    }]));
+    (centralResult.data || []).forEach((row) => stockByItem.set(row.item_id, row));
+    state.stock = [...stockByItem.values()];
     (posResult.data || []).forEach((pos) => {
       const match = state.stock.find((row) => row.item_name.trim().toLocaleLowerCase("th") === pos.item_name.trim().toLocaleLowerCase("th"));
       if (match) { match.quantity_on_hand = pos.quantity_on_hand; match.base_unit_name = pos.unit_name; match.stock_source = "Burger POS"; }

@@ -11,6 +11,13 @@
 }
 .draft-status.saved { background: #def6ec; color: #086b57; }
 .draft-status.local { background: #fff0ea; color: #a4472c; }
+.typeable-select {
+  padding-right: 42px;
+  background-image: linear-gradient(45deg, transparent 50%, #71817c 50%), linear-gradient(135deg, #71817c 50%, transparent 50%);
+  background-position: calc(100% - 19px) 20px, calc(100% - 14px) 20px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
 .master-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; padding: 4px; border-radius: 15px; background: #e8f3ef; }
 .master-tabs button { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: #57716a; font-weight: 800; }
 .master-tabs button.active { background: #fff; color: #08735e; box-shadow: 0 4px 14px rgba(20,72,59,.1); }

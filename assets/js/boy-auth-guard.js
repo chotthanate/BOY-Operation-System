@@ -9,7 +9,7 @@
   const config = window.BOY_CENTRAL_CONFIG || {};
   if (!window.supabase || !config.url || !config.publishableKey) { block("ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ"); return; }
   const client = window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "boy-operation-auth" }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
   client.auth.getSession().then(({ data, error }) => {
     if (!error && data.session) { reveal(); return; }
