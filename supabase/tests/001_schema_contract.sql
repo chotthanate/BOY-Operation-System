@@ -63,6 +63,19 @@ begin
     raise exception 'one or more BOY Central API functions are missing';
   end if;
 
+  if to_regprocedure('boy_central.record_expense_v2(jsonb)') is null then
+    raise exception 'record_expense_v2(jsonb) is missing';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central'
+      and table_name = 'transaction_lines'
+      and column_name = 'category_id'
+  ) then
+    raise exception 'transaction_lines.category_id is missing';
+  end if;
+
   if (select count(*) from boy_central.branches where code in (
     'TAWANA', 'BIGC-CENTRAL-PATTAYA', 'BURGER', 'GRILL'
   )) <> 4 then

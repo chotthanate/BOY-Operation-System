@@ -18,8 +18,15 @@
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
-.expense-category { min-width: 0; min-height: 46px; align-items: center; }
-.expense-category strong { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.expense-picker { min-width: 0; }
+.expense-picker-options { display: grid; gap: 5px; max-height: 250px; margin-top: 7px; padding: 6px; overflow-y: auto; border: 1px solid #cfe0da; border-radius: 15px; background: #fff; box-shadow: 0 12px 30px rgba(23,50,44,.12); }
+.expense-picker-options[hidden] { display: none; }
+.expense-picker-options button { width: 100%; min-height: 50px; padding: 9px 11px; border: 0; border-radius: 11px; background: transparent; color: var(--ink); text-align: left; }
+.expense-picker-options button:active,.expense-picker-options button:hover { background: var(--green-soft); }
+.expense-picker-options strong,.expense-picker-options small { display: block; }
+.expense-picker-options small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
+.expense-picker-options .custom-expense-option { background: #fff7df; color: #765713; }
+.expense-picker-empty { padding: 14px; color: var(--muted); text-align: center; font-size: .78rem; }
 .master-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; padding: 4px; border-radius: 15px; background: #e8f3ef; }
 .master-tabs button { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: #57716a; font-weight: 800; }
 .master-tabs button.active { background: #fff; color: #08735e; box-shadow: 0 4px 14px rgba(20,72,59,.1); }
@@ -41,5 +48,4 @@
   .toolbar-card { grid-template-columns: minmax(0, 1fr) auto; }
   .draft-status { max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
   .master-row { padding: 12px; }
-  .expense-category { font-size: .74rem; }
 }

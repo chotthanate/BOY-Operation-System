@@ -16,7 +16,7 @@
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", expense_search: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
 
   function toast(message) {
     const element = $("#toast");
@@ -102,6 +102,21 @@
     const query = String(value || "").trim().toLocaleLowerCase("th");
     return state.expenseItems.find((expense) => expense.name.trim().toLocaleLowerCase("th") === query || expense.code.toLocaleLowerCase("th") === query);
   }
+  function mainCategories() {
+    return state.categories.filter((category) => category.category_type === "item" && !category.parent_id && /^CAT-\d+$/.test(category.code));
+  }
+  function mainCategoryId(categoryId) {
+    const category = state.categories.find((row) => row.id === categoryId);
+    if (!category) return "";
+    if (category.parent_id) return category.parent_id;
+    if (category.code.startsWith("EXP-CAT-")) {
+      return state.categories.find((row) => row.category_type === "item" && row.code === category.code.replace("EXP-", ""))?.id || "";
+    }
+    return category.category_type === "item" ? category.id : "";
+  }
+  function lineCategoryId(line, expense = expenseById(line.expense_item_id)) {
+    return line.category_id || mainCategoryId(expense?.category_id);
+  }
   function supplierChoices(itemId) {
     const linkedIds = state.itemSuppliers.filter((link) => link.item_id === itemId && link.active !== false).map((link) => link.supplier_id);
     return linkedIds.length ? state.suppliers.filter((supplier) => linkedIds.includes(supplier.id)) : state.suppliers;
@@ -112,17 +127,21 @@
     $("#expenseLines").innerHTML = state.lines.map((line, index) => {
       const item = itemById(line.item_id);
       const expense = expenseById(line.expense_item_id);
+      const categoryId = lineCategoryId(line, expense);
       const unit = unitById(line.unit_id);
       const suppliers = supplierChoices(line.item_id);
       const perUnit = Number(line.quantity) > 0 ? Number(line.line_total) / Number(line.quantity) : 0;
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line">
           <span class="line-number">${index + 1}</span>
-          <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(expense ? categoryName(expense.category_id) : "ยังไม่เลือกรายการ")}</small></span>
+          <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
           <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${item?.track_stock ? "" : "off"}">${item?.track_stock ? "เข้าสต็อก" : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
-          <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" list="expenses-${line.id}" value="${escapeHtml(expense?.name || line.expense_search || line.description)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off"><datalist id="expenses-${line.id}">${state.expenseItems.map((row) => `<option value="${escapeHtml(row.name)}">${escapeHtml(row.item_id || row.affects_stock ? "วัตถุดิบ / สต็อก" : "รายจ่ายทั่วไป")} · ${escapeHtml(categoryName(row.category_id))}</option>`).join("")}</datalist></label>
+          <div class="expense-picker">
+            <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" value="${escapeHtml(line.expense_search || line.description || expense?.name)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off" aria-autocomplete="list" aria-expanded="false"></label>
+            <div class="expense-picker-options" role="listbox" hidden></div>
+          </div>
           <div class="field-grid three">
             <label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" value="${escapeHtml(line.quantity)}"></label>
             <label>หน่วย<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(state.units, line.unit_id)}</select></label>
@@ -130,7 +149,7 @@
           </div>
           <div class="unit-price"><span>ราคาต่อหน่วย</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>
           <div class="field-grid">
-            <div class="unit-price expense-category"><span>หมวด</span><strong>${escapeHtml(expense ? categoryName(expense.category_id) : "เลือกจากรายการด้านบน")}</strong></div>
+            <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
             <label>Supplier<input data-field="supplier_name" list="suppliers-${line.id}" value="${escapeHtml(line.supplier_name)}" placeholder="เลือกหรือพิมพ์ชื่อ"><datalist id="suppliers-${line.id}">${suppliers.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("")}</datalist></label>
           </div>
           <label>หมายเหตุ<textarea data-field="note" placeholder="ไม่บังคับ">${escapeHtml(line.note)}</textarea></label>
@@ -140,36 +159,88 @@
     }).join("");
   }
 
+  function renderExpenseOptions(card, queryValue = "") {
+    const panel = card.querySelector(".expense-picker-options");
+    const input = card.querySelector('[data-field="expense_search"]');
+    if (!panel || !input) return;
+    const query = String(queryValue || "").trim().toLocaleLowerCase("th");
+    const rows = state.expenseItems.filter((row) => {
+      const mainCategory = categoryName(mainCategoryId(row.category_id));
+      return `${row.name} ${row.code} ${mainCategory}`.toLocaleLowerCase("th").includes(query);
+    }).slice(0, 30);
+    panel.innerHTML = rows.map((row) => `<button type="button" role="option" data-action="select-expense" data-expense-id="${escapeHtml(row.id)}"><span><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(categoryName(mainCategoryId(row.category_id)))} · ${row.item_id || row.affects_stock ? "เข้าสต็อก" : "รายจ่ายทั่วไป"}</small></span></button>`).join("")
+      + (query && !expenseBySearch(queryValue) ? `<button type="button" class="custom-expense-option" data-action="use-custom-expense"><span><strong>ใช้ “${escapeHtml(queryValue.trim())}”</strong><small>รายการใหม่ · เลือกหมวดหลักด้านล่าง</small></span></button>` : "")
+      + (!rows.length && !query ? '<div class="expense-picker-empty">ยังไม่มีรายการรายจ่าย</div>' : "");
+    panel.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function closeExpensePickers(exceptCard = null) {
+    $$(".expense-card").forEach((card) => {
+      if (card === exceptCard) return;
+      const panel = card.querySelector(".expense-picker-options");
+      const input = card.querySelector('[data-field="expense_search"]');
+      if (panel) panel.hidden = true;
+      if (input) input.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function selectExpense(line, expense) {
+    const previousItem = itemById(line.item_id);
+    line.expense_item_id = expense.id;
+    line.source_expense_item_id = expense.id;
+    line.expense_search = expense.name;
+    line.description = expense.name;
+    line.category_id = mainCategoryId(expense.category_id);
+    if (expense.item_id) {
+      const linkedItem = itemById(expense.item_id);
+      line.item_id = expense.item_id;
+      line.unit_id = linkedItem?.base_unit_id || "";
+      if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
+      const choices = supplierChoices(linkedItem?.id);
+      if (choices.length === 1) line.supplier_name = choices[0].name;
+    } else {
+      line.item_id = "";
+      line.unit_id = "";
+      if (previousItem) line.supplier_name = "";
+    }
+  }
+
+  function applyExpenseChoice(button) {
+    const card = button.closest(".expense-card");
+    const line = state.lines.find((row) => row.id === card?.dataset.lineId);
+    if (!line) return;
+    if (button.dataset.action === "select-expense") {
+      const expense = expenseById(button.dataset.expenseId);
+      if (expense) selectExpense(line, expense);
+    } else {
+      line.expense_item_id = "";
+      line.source_expense_item_id = "";
+      line.description = String(line.expense_search || "").trim();
+    }
+    renderLines();
+    scheduleDraftSave();
+  }
+
   function updateLine(card, field, value) {
     const line = state.lines.find((row) => row.id === card.dataset.lineId);
     if (!line) return;
-    const previousItem = itemById(line.item_id);
     line[field] = ["quantity", "line_total"].includes(field) ? Number(value) : value;
     if (field === "expense_search") {
       const expense = expenseBySearch(value);
       if (expense) {
-        line.expense_item_id = expense.id;
-        line.expense_search = expense.name;
-        line.description = expense.name;
-        if (expense.item_id) {
-          const linkedItem = itemById(expense.item_id);
-          line.item_id = expense.item_id;
-          line.unit_id = linkedItem?.base_unit_id || "";
-          if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
-          const choices = supplierChoices(linkedItem?.id);
-          if (choices.length === 1) line.supplier_name = choices[0].name;
-        } else {
-          line.item_id = "";
-          line.unit_id = "";
-          if (previousItem) line.supplier_name = "";
-        }
+        selectExpense(line, expense);
       } else {
         line.expense_item_id = "";
+        line.source_expense_item_id = "";
         line.item_id = "";
         line.unit_id = "";
         line.description = String(value).trim();
-        if (previousItem) line.supplier_name = "";
       }
+    }
+    if (field === "category_id") {
+      const sourceExpense = expenseById(line.source_expense_item_id);
+      line.expense_item_id = sourceExpense && mainCategoryId(sourceExpense.category_id) === value ? sourceExpense.id : "";
     }
     renderLines();
     scheduleDraftSave();
@@ -182,7 +253,7 @@
       const item = itemById(line.item_id);
       if (!line.description.trim()) errors.push(`รายการ ${index + 1}: ระบุชื่อรายการ`);
       if (!(Number(line.line_total) > 0)) errors.push(`รายการ ${index + 1}: ระบุยอดรวม`);
-      if (!line.expense_item_id) errors.push(`รายการ ${index + 1}: เลือกรายการรายจ่ายจากตัวเลือก`);
+      if (!lineCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (item?.track_stock && (!(Number(line.quantity) > 0) || !line.unit_id)) errors.push(`รายการ ${index + 1}: ระบุจำนวนและหน่วยสำหรับสต็อก`);
     });
     return errors;
@@ -207,10 +278,10 @@
       idempotency_key: crypto.randomUUID(),
       lines: state.lines.map((line) => {
         const supplier = state.suppliers.find((row) => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
-        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: line.quantity, unit_id: line.unit_id || null, line_total: line.line_total, note: line.note || null };
+        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: line.quantity, unit_id: line.unit_id || null, line_total: line.line_total, note: line.note || null };
       })
     };
-    const { data, error } = await client.schema("boy_central").rpc("record_expense", { payload });
+    const { data, error } = await client.schema("boy_central").rpc("record_expense_v2", { payload });
     button.textContent = "บันทึก";
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#reviewDialog").close();
@@ -473,9 +544,22 @@
   $("#addExpenseButton").addEventListener("click", () => { state.lines.forEach((line) => line.expanded = false); state.lines.push(newLine()); renderLines(); scheduleDraftSave(); });
   $("#expenseLines").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]"); if (!button) return;
+    if (["select-expense", "use-custom-expense"].includes(button.dataset.action)) { applyExpenseChoice(button); return; }
     const card = button.closest(".expense-card"); const line = state.lines.find((row) => row.id === card.dataset.lineId); if (!line) return;
     if (button.dataset.action === "toggle-line") { state.lines.forEach((row) => row.expanded = row.id === line.id ? !row.expanded : false); renderLines(); }
     if (button.dataset.action === "remove-line" && confirm("ลบรายการนี้ใช่ไหม")) { state.lines = state.lines.filter((row) => row.id !== line.id); if (!state.lines.length) state.lines.push(newLine()); renderLines(); scheduleDraftSave(); }
+  });
+  $("#expenseLines").addEventListener("pointerdown", (event) => {
+    const button = event.target.closest('button[data-action="select-expense"],button[data-action="use-custom-expense"]');
+    if (!button) return;
+    event.preventDefault();
+    applyExpenseChoice(button);
+  });
+  $("#expenseLines").addEventListener("focusin", (event) => {
+    if (event.target.dataset.field !== "expense_search") return;
+    const card = event.target.closest(".expense-card");
+    closeExpensePickers(card);
+    renderExpenseOptions(card, event.target.value);
   });
   $("#expenseLines").addEventListener("change", (event) => { const field = event.target.dataset.field; if (field) updateLine(event.target.closest(".expense-card"), field, event.target.value); });
   $("#expenseLines").addEventListener("input", (event) => {
@@ -483,9 +567,23 @@
     const card = event.target.closest(".expense-card");
     const line = card && state.lines.find((row) => row.id === card.dataset.lineId);
     if (!field || !line || event.target.matches("select")) return;
+    if (field === "expense_search") {
+      const hadKnownSelection = Boolean(line.source_expense_item_id || line.item_id || line.expense_item_id);
+      line.expense_search = event.target.value;
+      line.description = event.target.value.trim();
+      line.expense_item_id = "";
+      line.source_expense_item_id = "";
+      line.item_id = "";
+      line.unit_id = "";
+      if (hadKnownSelection) { line.category_id = ""; line.supplier_name = ""; }
+      renderExpenseOptions(card, event.target.value);
+      scheduleDraftSave();
+      return;
+    }
     line[field] = ["quantity", "line_total"].includes(field) ? Number(event.target.value) : event.target.value;
     scheduleDraftSave();
   });
+  document.addEventListener("pointerdown", (event) => { if (!event.target.closest(".expense-picker")) closeExpensePickers(); });
   $("#expenseDate").addEventListener("change", async () => { await loadDraftForDate(); await loadExpenseHistory(); });
   $("#reviewExpenseButton").addEventListener("click", openReview);
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
