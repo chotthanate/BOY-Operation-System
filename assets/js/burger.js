@@ -535,10 +535,9 @@
   async function loadStock() {
     if (!state.branch) return;
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
-    const [centralResult, posResult] = await Promise.all([
-      client.schema("boy_central").from("v_stock_on_hand").select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value").eq("branch_id", state.branch.id).order("item_name"),
-      client.schema("boy_central").rpc("get_burger_pos_stock")
-    ]);
+    const centralResult = await client.schema("boy_central").from("v_stock_on_hand")
+      .select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value,updated_at")
+      .eq("branch_id", state.branch.id).order("item_name");
     if (centralResult.error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(centralResult.error.message)}</div>`; return; }
     const stockByItem = new Map(state.items.filter((item) => item.track_stock && item.active !== false && item.branch_active !== false).map((item) => [item.id, {
       item_id: item.id,
@@ -547,15 +546,11 @@
       base_unit_name: unitById(item.base_unit_id)?.name || "",
       quantity_on_hand: 0,
       average_unit_cost: 0,
-      inventory_value: 0
+      inventory_value: 0,
+      stock_source: "BOY Central"
     }]));
-    (centralResult.data || []).forEach((row) => stockByItem.set(row.item_id, row));
+    (centralResult.data || []).forEach((row) => stockByItem.set(row.item_id, { ...row, stock_source: "BOY Central" }));
     state.stock = [...stockByItem.values()];
-    (posResult.data || []).forEach((pos) => {
-      const match = state.stock.find((row) => row.item_name.trim().toLocaleLowerCase("th") === pos.item_name.trim().toLocaleLowerCase("th"));
-      if (match) { match.quantity_on_hand = pos.quantity_on_hand; match.base_unit_name = pos.unit_name; match.stock_source = "Burger POS"; }
-      else state.stock.push({ item_id: `pos-${pos.legacy_ingredient_id}`, item_code: "POS", item_name: pos.item_name, base_unit_name: pos.unit_name, quantity_on_hand: pos.quantity_on_hand, average_unit_cost: 0, inventory_value: 0, stock_source: "Burger POS" });
-    });
     renderStock();
   }
 
@@ -570,23 +565,28 @@
     const period = `${$("#dashboardMonth").value}-01`;
     const [year, month] = $("#dashboardMonth").value.split("-").map(Number);
     const nextPeriod = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-    const [summaryResult, transactionsResult, posResult] = await Promise.all([
+    const [summaryResult, transactionsResult, ordersResult] = await Promise.all([
       client.schema("boy_central").from("v_monthly_branch_summary").select("income,expense,net_profit").eq("branch_id", state.branch.id).eq("month_start", period).maybeSingle(),
       client.schema("boy_central").from("transactions").select("source_system,transaction_type,total_amount,status").eq("branch_id", state.branch.id).gte("transaction_date", period).lt("transaction_date", nextPeriod),
-      client.schema("boy_central").rpc("get_burger_pos_monthly_sales", { month_start: period })
+      client.schema("boy_central").from("pos_orders").select("sales_channel,payment_method,total_amount,payment_status").eq("branch_id", state.branch.id).gte("ordered_at", `${period}T00:00:00+07:00`).lt("ordered_at", `${nextPeriod}T00:00:00+07:00`)
     ]);
-    if (summaryResult.error || transactionsResult.error) { toast(summaryResult.error?.message || transactionsResult.error?.message); return; }
+    if (summaryResult.error || transactionsResult.error || ordersResult.error) { toast(summaryResult.error?.message || transactionsResult.error?.message || ordersResult.error?.message); return; }
     const summary = summaryResult.data || { income: 0, expense: 0, net_profit: 0 };
     const transactions = transactionsResult.data || [];
-    const hasShadowSales = transactions.some((row) => row.source_system === "burger_pos" && ["income","sale"].includes(row.transaction_type));
-    const posSales = hasShadowSales ? 0 : Number(posResult.data?.sales || 0);
-    const posOrders = hasShadowSales ? 0 : Number(posResult.data?.orders || 0);
-    const income = Number(summary.income || 0) + posSales;
+    const income = Number(summary.income || 0);
     const net = income - Number(summary.expense || 0);
-    $("#metricGrid").innerHTML = `<article class="metric accent"><small>รายรับ</small><strong>${money.format(income)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(net)}</strong></article><article class="metric"><small>จำนวนธุรกรรม</small><strong>${number.format(transactions.length + posOrders)}</strong></article>`;
+    const posOrders = (ordersResult.data || []).filter((row) => row.payment_status === "completed");
+    const saleOrders = posOrders.length;
+    $("#metricGrid").innerHTML = `<article class="metric accent"><small>ยอดขายสุทธิ</small><strong>${money.format(income)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(net)}</strong></article><article class="metric"><small>ออเดอร์</small><strong>${number.format(saleOrders)}</strong></article>`;
     const channelMap = new Map();
-    transactions.filter((row) => row.status === "confirmed" && ["income", "sale", "settlement"].includes(row.transaction_type)).forEach((row) => channelMap.set(row.source_system, (channelMap.get(row.source_system) || 0) + Number(row.total_amount || 0)));
-    if (posSales > 0) channelMap.set("Burger POS", posSales);
+    posOrders.forEach((row) => {
+      const channel = ({ store: "หน้าร้าน", grab: "Grab", lineman: "LINE MAN" })[row.sales_channel] || row.sales_channel || "อื่นๆ";
+      channelMap.set(channel, (channelMap.get(channel) || 0) + Number(row.total_amount || 0));
+    });
+    transactions.filter((row) => row.status === "confirmed" && ["income", "settlement"].includes(row.transaction_type)).forEach((row) => {
+      const channel = row.source_system || "รายรับอื่น";
+      channelMap.set(channel, (channelMap.get(channel) || 0) + Number(row.total_amount || 0));
+    });
     const channels = [...channelMap.entries()].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
     const max = Math.max(...channels.map((row) => row.total), 1);
     $("#channelBreakdown").innerHTML = channels.length ? channels.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.name)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, row.total / max * 100)}%"></span></span><strong>${money.format(row.total)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
