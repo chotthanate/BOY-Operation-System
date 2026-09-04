@@ -16,7 +16,7 @@
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", item_search: "", expense_item_id: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", expense_search: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
 
   function toast(message) {
     const element = $("#toast");
@@ -97,9 +97,10 @@
 
   function itemById(id) { return state.items.find((item) => item.id === id); }
   function unitById(id) { return state.units.find((unit) => unit.id === id); }
-  function itemBySearch(value) {
+  function expenseById(id) { return state.expenseItems.find((expense) => expense.id === id); }
+  function expenseBySearch(value) {
     const query = String(value || "").trim().toLocaleLowerCase("th");
-    return state.items.find((item) => item.name.trim().toLocaleLowerCase("th") === query || item.code.toLocaleLowerCase("th") === query);
+    return state.expenseItems.find((expense) => expense.name.trim().toLocaleLowerCase("th") === query || expense.code.toLocaleLowerCase("th") === query);
   }
   function supplierChoices(itemId) {
     const linkedIds = state.itemSuppliers.filter((link) => link.item_id === itemId && link.active !== false).map((link) => link.supplier_id);
@@ -110,18 +111,18 @@
     $("#expenseCount").textContent = `${state.lines.length} รายการ`;
     $("#expenseLines").innerHTML = state.lines.map((line, index) => {
       const item = itemById(line.item_id);
+      const expense = expenseById(line.expense_item_id);
       const unit = unitById(line.unit_id);
       const suppliers = supplierChoices(line.item_id);
       const perUnit = Number(line.quantity) > 0 ? Number(line.line_total) / Number(line.quantity) : 0;
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line">
           <span class="line-number">${index + 1}</span>
-          <span class="summary-copy"><strong>${escapeHtml(line.description || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(state.expenseItems.find((row) => row.id === line.expense_item_id)?.name || "ยังไม่เลือกหมวด")}</small></span>
+          <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(expense ? categoryName(expense.category_id) : "ยังไม่เลือกรายการ")}</small></span>
           <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${item?.track_stock ? "" : "off"}">${item?.track_stock ? "เข้าสต็อก" : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
-          <label>สินค้า (ถ้ามี)<input class="typeable-select" data-field="item_search" list="items-${line.id}" value="${escapeHtml(item?.name || line.item_search)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off"><datalist id="items-${line.id}">${state.items.map((row) => `<option value="${escapeHtml(row.name)}">${escapeHtml(row.code)}</option>`).join("")}</datalist></label>
-          <label>ชื่อรายการ<input data-field="description" value="${escapeHtml(line.description)}" placeholder="เช่น ขนมปังเบอร์เกอร์"></label>
+          <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" list="expenses-${line.id}" value="${escapeHtml(expense?.name || line.expense_search || line.description)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off"><datalist id="expenses-${line.id}">${state.expenseItems.map((row) => `<option value="${escapeHtml(row.name)}">${escapeHtml(row.item_id || row.affects_stock ? "วัตถุดิบ / สต็อก" : "รายจ่ายทั่วไป")} · ${escapeHtml(categoryName(row.category_id))}</option>`).join("")}</datalist></label>
           <div class="field-grid three">
             <label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" value="${escapeHtml(line.quantity)}"></label>
             <label>หน่วย<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(state.units, line.unit_id)}</select></label>
@@ -129,7 +130,7 @@
           </div>
           <div class="unit-price"><span>ราคาต่อหน่วย</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>
           <div class="field-grid">
-            <label>หมวดรายจ่าย<select data-field="expense_item_id"><option value="">เลือกหมวด</option>${optionHtml(state.expenseItems, line.expense_item_id)}</select></label>
+            <div class="unit-price expense-category"><span>หมวด</span><strong>${escapeHtml(expense ? categoryName(expense.category_id) : "เลือกจากรายการด้านบน")}</strong></div>
             <label>Supplier<input data-field="supplier_name" list="suppliers-${line.id}" value="${escapeHtml(line.supplier_name)}" placeholder="เลือกหรือพิมพ์ชื่อ"><datalist id="suppliers-${line.id}">${suppliers.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("")}</datalist></label>
           </div>
           <label>หมายเหตุ<textarea data-field="note" placeholder="ไม่บังคับ">${escapeHtml(line.note)}</textarea></label>
@@ -144,31 +145,30 @@
     if (!line) return;
     const previousItem = itemById(line.item_id);
     line[field] = ["quantity", "line_total"].includes(field) ? Number(value) : value;
-    if (field === "item_search") {
-      const item = itemBySearch(value);
-      line.item_id = item?.id || "";
-      if (item) {
-        line.item_search = item.name;
-        line.description = item.name;
-        line.unit_id = item.base_unit_id || line.unit_id;
-        const linkedExpense = state.expenseItems.find((row) => row.item_id === item.id);
-        if (linkedExpense) line.expense_item_id = linkedExpense.id;
-        const choices = supplierChoices(item.id);
-        if (choices.length === 1) line.supplier_name = choices[0].name;
-      } else if (!line.description || line.description === previousItem?.name) {
-        line.description = String(value).trim();
-        line.unit_id = "";
-      }
-    }
-    if (field === "expense_item_id") {
-      const expense = state.expenseItems.find((row) => row.id === value);
+    if (field === "expense_search") {
+      const expense = expenseBySearch(value);
       if (expense) {
+        line.expense_item_id = expense.id;
+        line.expense_search = expense.name;
         line.description = expense.name;
         if (expense.item_id) {
           const linkedItem = itemById(expense.item_id);
           line.item_id = expense.item_id;
-          line.unit_id = linkedItem?.base_unit_id || line.unit_id;
-        } else line.item_id = "";
+          line.unit_id = linkedItem?.base_unit_id || "";
+          if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
+          const choices = supplierChoices(linkedItem?.id);
+          if (choices.length === 1) line.supplier_name = choices[0].name;
+        } else {
+          line.item_id = "";
+          line.unit_id = "";
+          if (previousItem) line.supplier_name = "";
+        }
+      } else {
+        line.expense_item_id = "";
+        line.item_id = "";
+        line.unit_id = "";
+        line.description = String(value).trim();
+        if (previousItem) line.supplier_name = "";
       }
     }
     renderLines();
@@ -182,7 +182,7 @@
       const item = itemById(line.item_id);
       if (!line.description.trim()) errors.push(`รายการ ${index + 1}: ระบุชื่อรายการ`);
       if (!(Number(line.line_total) > 0)) errors.push(`รายการ ${index + 1}: ระบุยอดรวม`);
-      if (!line.expense_item_id) errors.push(`รายการ ${index + 1}: เลือกหมวดรายจ่าย`);
+      if (!line.expense_item_id) errors.push(`รายการ ${index + 1}: เลือกรายการรายจ่ายจากตัวเลือก`);
       if (item?.track_stock && (!(Number(line.quantity) > 0) || !line.unit_id)) errors.push(`รายการ ${index + 1}: ระบุจำนวนและหน่วยสำหรับสต็อก`);
     });
     return errors;
