@@ -8,7 +8,7 @@
   <title>ร้านเบอร์เกอร์ | BOY Operations</title>
   <link rel="stylesheet" href="assets/css/burger.css">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-5">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-7">
 </head>
 <body>
   <div class="app-shell">
@@ -106,19 +106,53 @@
     <form id="masterForm" class="form-stack">
       <input id="masterId" type="hidden">
       <input id="masterKind" type="hidden">
+      <div class="master-code" id="masterCode">รายการใหม่</div>
       <label>ชื่อรายการ<input id="masterName" required></label>
-      <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
+      <div class="field-grid">
+        <label>ประเภทหลัก<select id="masterMainCategory"></select></label>
+        <label>ประเภทย่อย<select id="masterCategory"></select></label>
+      </div>
+      <div id="masterItemFields" class="form-stack">
+        <label>ประเภทข้อมูล<select id="masterItemType"><option value="STOCK_ITEM">สินค้า / วัตถุดิบ</option><option value="NON_STOCK_ITEM">ไม่ติดตามเป็นสินค้า</option></select></label>
+        <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
+      </div>
       <div id="masterPurchaseFields" class="form-subsection">
         <label>หน่วยที่ซื้อ<select id="masterPurchaseUnit"></select></label>
         <label>จำนวนที่เพิ่มเข้าสต็อก<input id="masterConversion" type="number" min="0.000001" step="any" inputmode="decimal"></label>
+        <label>หน่วยที่ใช้ตอนเบิก<select id="masterDefaultIssueUnit"></select></label>
         <div id="masterConversionPreview" class="conversion-preview"></div>
       </div>
-      <label>หมวด<select id="masterCategory"></select></label>
       <label class="check-row"><input id="masterStock" type="checkbox"><span id="masterStockLabel">ติดตามสต็อก</span></label>
+      <details id="masterItemAdvanced" class="master-advanced">
+        <summary>รายละเอียดสินค้าเพิ่มเติม</summary>
+        <div class="form-stack">
+          <div class="field-grid">
+            <label>ยี่ห้อ<input id="masterBrand"></label>
+            <label>ขนาดบรรจุ<input id="masterPackageSize" type="number" min="0.000001" step="any" inputmode="decimal"></label>
+          </div>
+          <label>หน่วยขนาดบรรจุ<select id="masterPackageUnit"><option value="">ไม่ระบุ</option></select></label>
+          <div class="check-grid">
+            <label class="check-row"><input id="masterPurchaseable" type="checkbox"><span>ซื้อได้</span></label>
+            <label class="check-row"><input id="masterIssueable" type="checkbox"><span>เบิกได้</span></label>
+            <label class="check-row"><input id="masterSellable" type="checkbox"><span>ขายได้</span></label>
+          </div>
+          <div class="field-grid three stock-threshold-grid">
+            <label>สต็อกขั้นต่ำ<input id="masterMinimumStock" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label>จุดสั่งซื้อ<input id="masterReorderPoint" type="number" min="0" step="any" inputmode="decimal"></label>
+            <label>สต็อกเป้าหมาย<input id="masterTargetStock" type="number" min="0" step="any" inputmode="decimal"></label>
+          </div>
+          <fieldset class="supplier-fieldset"><legend>Supplier ของสินค้านี้</legend><div id="masterSupplierChoices" class="supplier-choices"></div></fieldset>
+          <label>Supplier หลัก<select id="masterPreferredSupplier"><option value="">ไม่ระบุ</option></select></label>
+        </div>
+      </details>
       <div id="masterExpenseFields" class="form-subsection">
         <label class="check-row"><input id="masterRequiresQuantity" type="checkbox"><span>ต้องกรอกจำนวน</span></label>
         <label class="check-row"><input id="masterRequiresUnit" type="checkbox"><span>ต้องเลือกหน่วย</span></label>
+        <label class="check-row"><input id="masterRequiresSupplier" type="checkbox"><span>ต้องระบุ Supplier</span></label>
+        <label class="check-row"><input id="masterRequiresReceipt" type="checkbox"><span>ต้องมีหลักฐาน</span></label>
+        <label>ลำดับแสดง<input id="masterSortOrder" type="number" min="0" step="1" inputmode="numeric"></label>
       </div>
+      <label>หมายเหตุ<textarea id="masterNotes" placeholder="ไม่บังคับ"></textarea></label>
       <label class="check-row"><input id="masterActive" type="checkbox"><span>เปิดใช้งาน</span></label>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="masterDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึก</button></div>
     </form>
@@ -127,6 +161,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/burger.js?v=20260904-5"></script>
+  <script src="assets/js/burger.js?v=20260904-6"></script>
 </body>
 </html>

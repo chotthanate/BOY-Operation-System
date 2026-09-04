@@ -38,7 +38,18 @@
 .master-row small { color: #71827e; }
 .master-badges { display: grid; justify-items: end; gap: 4px; flex: 0 0 auto; }
 .master-badges b { color: #08735e; font-size: .78rem; }
-.master-dialog { width: min(420px, calc(100% - 28px)); }
+.master-dialog { width: min(420px, calc(100% - 28px)); max-height: min(88vh, 760px); overflow-y: auto; }
+.master-code { width: fit-content; padding: 5px 9px; border-radius: 999px; background: #eef3f1; color: var(--muted); font-size: .72rem; font-weight: 800; }
+.master-advanced { border: 1px solid #dce9e5; border-radius: 15px; background: #f8fcfa; text-align: left; }
+.master-advanced[hidden] { display: none; }
+.master-advanced summary { min-height: 46px; display: flex; align-items: center; padding: 0 12px; color: var(--green); font-size: .82rem; font-weight: 900; cursor: pointer; }
+.master-advanced > .form-stack { padding: 0 12px 12px; }
+.check-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.supplier-fieldset { min-width: 0; margin: 0; padding: 10px; border: 1px solid #dce9e5; border-radius: 13px; }
+.supplier-fieldset legend { padding: 0 5px; color: #5b6f68; font-size: .76rem; font-weight: 800; }
+.supplier-choices { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.supplier-choice { min-width: 0; padding: 8px; border-radius: 10px; background: #fff; }
+.supplier-choice span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .form-subsection { display: grid; gap: 10px; padding: 12px; border: 1px solid #dce9e5; border-radius: 15px; background: #f8fcfa; text-align: left; }
 .form-subsection[hidden] { display: none; }
 .conversion-preview { padding: 9px 11px; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: .78rem; font-weight: 800; }
@@ -55,4 +66,7 @@
   .toolbar-card { grid-template-columns: minmax(0, 1fr) auto; }
   .draft-status { max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
   .master-row { padding: 12px; }
+  .supplier-choices { grid-template-columns: 1fr; }
+  .check-grid { grid-template-columns: 1fr 1fr; }
+  .field-grid.three.stock-threshold-grid { grid-template-columns: 1fr; }
 }

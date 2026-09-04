@@ -73,6 +73,22 @@ begin
 
   if not exists (
     select 1 from information_schema.columns
+    where table_schema = 'boy_central' and table_name = 'items' and column_name = 'brand'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central' and table_name = 'items' and column_name = 'package_unit_id'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central' and table_name = 'branch_items' and column_name = 'target_stock'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central' and table_name = 'expense_items' and column_name = 'requires_receipt'
+  ) then
+    raise exception 'expanded Burger master fields are missing';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
     where table_schema = 'boy_central'
       and table_name = 'transaction_lines'
       and column_name = 'category_id'

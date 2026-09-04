@@ -10,7 +10,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, branch: null, items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null, syncing: false };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
@@ -55,7 +55,7 @@
     const count = readOutbox().length;
     if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
     else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
-    else setConnection(`เชื่อมต่อแล้ว · ${state.items.length} สินค้า`, "online");
+    else setConnection(`เชื่อมต่อแล้ว · ${state.items.filter((row) => row.active !== false && row.branch_active !== false).length} สินค้า`, "online");
   }
   function queueOperation(type, payload, meta = {}) {
     const rows = readOutbox();
@@ -69,7 +69,7 @@
 
   function saveMasterCache() {
     localStorage.setItem(masterCacheKey(), JSON.stringify({
-      branch: state.branch, items: state.items, units: state.units, itemUnits: state.itemUnits,
+      branch: state.branch, branchItems: state.branchItems, items: state.items, units: state.units, itemUnits: state.itemUnits,
       categories: state.categories, expenseItems: state.expenseItems, suppliers: state.suppliers,
       itemSuppliers: state.itemSuppliers, saved_at: new Date().toISOString()
     }));
@@ -79,6 +79,7 @@
     const cached = readCache(masterCacheKey());
     if (!cached?.branch || !Array.isArray(cached.items)) return false;
     state.branch = cached.branch;
+    state.branchItems = cached.branchItems || [];
     state.items = cached.items;
     state.units = cached.units || [];
     state.itemUnits = cached.itemUnits || [];
@@ -199,14 +200,23 @@
   }
 
   function itemById(id) { return state.items.find((item) => item.id === id); }
+  function branchItemById(id) { return state.branchItems.find((row) => row.item_id === id); }
   function unitById(id) { return state.units.find((unit) => unit.id === id); }
   function expenseById(id) { return state.expenseItems.find((expense) => expense.id === id); }
+  function isExpenseActive(expense) {
+    const linkedItem = expense?.item_id ? itemById(expense.item_id) : null;
+    return expense?.active !== false && expense?.branch_active !== false
+      && (!linkedItem || (linkedItem.active !== false && linkedItem.branch_active !== false));
+  }
   function expenseBySearch(value) {
     const query = String(value || "").trim().toLocaleLowerCase("th");
-    return state.expenseItems.find((expense) => expense.name.trim().toLocaleLowerCase("th") === query || expense.code.toLocaleLowerCase("th") === query);
+    return state.expenseItems.find((expense) => isExpenseActive(expense) && (expense.name.trim().toLocaleLowerCase("th") === query || expense.code.toLocaleLowerCase("th") === query));
   }
   function mainCategories() {
     return state.categories.filter((category) => category.category_type === "item" && !category.parent_id && /^CAT-\d+$/.test(category.code));
+  }
+  function subcategories(mainId) {
+    return state.categories.filter((category) => category.category_type === "item" && category.parent_id === mainId);
   }
   function mainCategoryId(categoryId) {
     const category = state.categories.find((row) => row.id === categoryId);
@@ -224,7 +234,9 @@
     return state.itemUnits.filter((row) => row.item_id === itemId && row.active !== false && (row.is_base_unit || row.allow_purchase));
   }
   function defaultPurchaseUnit(itemId) {
-    return itemUnitChoices(itemId).find((row) => !row.is_base_unit && row.allow_purchase)
+    const defaultUnitId = branchItemById(itemId)?.default_purchase_unit_id;
+    return itemUnitChoices(itemId).find((row) => row.unit_id === defaultUnitId)
+      || itemUnitChoices(itemId).find((row) => !row.is_base_unit && row.allow_purchase)
       || itemUnitChoices(itemId).find((row) => row.is_base_unit);
   }
   function lineRequirements(line, expense = expenseById(line.expense_item_id), item = itemById(line.item_id)) {
@@ -288,7 +300,7 @@
     const input = card.querySelector('[data-field="expense_search"]');
     if (!panel || !input) return;
     const query = String(queryValue || "").trim().toLocaleLowerCase("th");
-    const rows = state.expenseItems.filter((row) => {
+    const rows = state.expenseItems.filter(isExpenseActive).filter((row) => {
       const mainCategory = categoryName(mainCategoryId(row.category_id));
       return `${row.name} ${row.code} ${mainCategory}`.toLocaleLowerCase("th").includes(query);
     }).slice(0, 30);
@@ -388,6 +400,7 @@
       if (!lineCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
       if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
+      if (expense?.requires_supplier && !line.supplier_name.trim()) errors.push(`รายการ ${index + 1}: ระบุ Supplier`);
     });
     return errors;
   }
@@ -466,10 +479,10 @@
     state.units = unitsResult.data || [];
     state.categories = categoriesResult.data || [];
     const [itemLinksResult, expenseLinksResult, supplierLinksResult, linksResult] = await Promise.all([
-      client.schema("boy_central").from("branch_items").select("item_id").eq("branch_id", state.branch.id).eq("active", true),
-      client.schema("boy_central").from("branch_expense_items").select("expense_item_id,sort_order").eq("branch_id", state.branch.id).eq("active", true).order("sort_order"),
+      client.schema("boy_central").from("branch_items").select("item_id,minimum_stock,reorder_point,target_stock,preferred_supplier_id,default_purchase_unit_id,default_issue_unit_id,notes,active").eq("branch_id", state.branch.id),
+      client.schema("boy_central").from("branch_expense_items").select("expense_item_id,sort_order,active").eq("branch_id", state.branch.id).order("sort_order"),
       client.schema("boy_central").from("branch_suppliers").select("supplier_id,is_preferred").eq("branch_id", state.branch.id).eq("active", true).order("is_preferred", { ascending: false }),
-      client.schema("boy_central").from("branch_item_suppliers").select("item_id,supplier_id,active,is_primary").eq("branch_id", state.branch.id).eq("active", true).order("is_primary", { ascending: false })
+      client.schema("boy_central").from("branch_item_suppliers").select("item_id,supplier_id,active,is_primary").eq("branch_id", state.branch.id).order("is_primary", { ascending: false })
     ]);
     if (itemLinksResult.error) throw itemLinksResult.error;
     if (expenseLinksResult.error) throw expenseLinksResult.error;
@@ -479,16 +492,16 @@
     const supplierIds = (supplierLinksResult.data || []).map((row) => row.supplier_id);
     const [itemsResult, expenseResult, supplierResult, itemUnitsResult] = await Promise.all([
       itemIds.length
-        ? client.schema("boy_central").from("items").select("id,name,code,base_unit_id,category_id,track_stock,active").in("id", itemIds).eq("active", true).order("name")
+        ? client.schema("boy_central").from("items").select("id,name,code,item_type,base_unit_id,category_id,track_stock,purchaseable,issueable,sellable,brand,package_size,package_unit_id,notes,active").in("id", itemIds).order("name")
         : Promise.resolve({ data: [], error: null }),
       expenseIds.length
-        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,requires_quantity,requires_unit,active").in("id", expenseIds).eq("active", true)
+        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active").in("id", expenseIds)
         : Promise.resolve({ data: [], error: null }),
       !supplierLinksResult.error && supplierIds.length
         ? client.schema("boy_central").from("suppliers").select("id,name,code").in("id", supplierIds).eq("active", true)
         : Promise.resolve({ data: [], error: null }),
       itemIds.length
-        ? client.schema("boy_central").from("item_units").select("item_id,unit_id,conversion_to_base,is_base_unit,allow_purchase,active").in("item_id", itemIds).eq("active", true).order("is_base_unit", { ascending: true })
+        ? client.schema("boy_central").from("item_units").select("item_id,unit_id,conversion_to_base,is_base_unit,allow_purchase,allow_issue,active").in("item_id", itemIds).eq("active", true).order("is_base_unit", { ascending: true })
         : Promise.resolve({ data: [], error: null })
     ]);
     if (itemsResult.error) throw itemsResult.error;
@@ -497,9 +510,12 @@
 
     const expenseOrder = new Map((expenseLinksResult.data || []).map((row, index) => [row.expense_item_id, [row.sort_order ?? 0, index]]));
     const supplierOrder = new Map((supplierLinksResult.data || []).map((row, index) => [row.supplier_id, [row.is_preferred ? 0 : 1, index]]));
-    state.items = (itemsResult.data || []).sort((a, b) => a.name.localeCompare(b.name, "th"));
+    const branchItemMap = new Map((itemLinksResult.data || []).map((row) => [row.item_id, row]));
+    const branchExpenseMap = new Map((expenseLinksResult.data || []).map((row) => [row.expense_item_id, row]));
+    state.items = (itemsResult.data || []).map((row) => ({ ...row, branch_active: branchItemMap.get(row.id)?.active !== false })).sort((a, b) => a.name.localeCompare(b.name, "th"));
+    state.branchItems = itemLinksResult.data || [];
     state.itemUnits = itemUnitsResult.data || [];
-    state.expenseItems = (expenseResult.data || []).sort((a, b) => {
+    state.expenseItems = (expenseResult.data || []).map((row) => ({ ...row, branch_active: branchExpenseMap.get(row.id)?.active !== false, sort_order: expenseOrder.get(row.id)?.[0] || 0 })).sort((a, b) => {
       const left = expenseOrder.get(a.id) || [0, 0];
       const right = expenseOrder.get(b.id) || [0, 0];
       return left[0] - right[0] || left[1] - right[1];
@@ -524,7 +540,7 @@
       client.schema("boy_central").rpc("get_burger_pos_stock")
     ]);
     if (centralResult.error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(centralResult.error.message)}</div>`; return; }
-    const stockByItem = new Map(state.items.filter((item) => item.track_stock).map((item) => [item.id, {
+    const stockByItem = new Map(state.items.filter((item) => item.track_stock && item.active !== false && item.branch_active !== false).map((item) => [item.id, {
       item_id: item.id,
       item_code: item.code,
       item_name: item.name,
@@ -586,7 +602,7 @@
       .filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("th").includes(query));
     list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="${state.masterTab === "items" ? "item" : "expense_item"}">
       <span><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.code)} · ${escapeHtml(categoryName(row.category_id))}</small></span>
-      <span class="master-badges"><small>${state.masterTab === "items" ? (row.track_stock ? "ติดตามสต็อก" : "ไม่ติดตามสต็อก") : (row.affects_stock ? "เพิ่มสต็อก" : "รายจ่ายทั่วไป")}</small><b>แก้ไข</b></span>
+      <span class="master-badges"><small>${row.active === false || row.branch_active === false ? "ปิดใช้งาน" : (state.masterTab === "items" ? (row.track_stock ? "ติดตามสต็อก" : "ไม่ติดตามสต็อก") : (row.affects_stock ? "เพิ่มสต็อก" : "รายจ่ายทั่วไป"))}</small><b>แก้ไข</b></span>
     </button>`).join("") : '<div class="empty-state">ไม่พบรายการ</div>';
   }
 
@@ -604,31 +620,78 @@
       : `ซื้อและนับสต็อกเป็น ${baseUnit?.name || "หน่วยฐาน"}`;
   }
 
-  function refreshMasterPurchaseUnits(selected = $("#masterPurchaseUnit").value) {
+  function refreshMasterPurchaseUnits(selected = $("#masterPurchaseUnit").value, issueSelected = $("#masterDefaultIssueUnit").value) {
     const baseUnitId = $("#masterUnit").value;
     const nextSelected = selected === baseUnitId ? "" : selected;
     $("#masterPurchaseUnit").innerHTML = `<option value="">ใช้หน่วยฐาน</option>${optionHtml(state.units.filter((unit) => unit.id !== baseUnitId), nextSelected)}`;
+    const issueUnitIds = new Set(state.itemUnits.filter((row) => row.item_id === $("#masterId").value && row.allow_issue && row.active !== false).map((row) => row.unit_id));
+    issueUnitIds.add(baseUnitId);
+    if (nextSelected) issueUnitIds.add(nextSelected);
+    const issueUnits = state.units.filter((unit) => issueUnitIds.has(unit.id));
+    $("#masterDefaultIssueUnit").innerHTML = optionHtml(issueUnits, issueUnits.some((unit) => unit.id === issueSelected) ? issueSelected : baseUnitId);
     syncMasterPurchaseFields();
+  }
+
+  function refreshMasterCategories(mainId, selectedId = "") {
+    const mains = mainCategories();
+    const nextMain = mainId || mains[0]?.id || "";
+    $("#masterMainCategory").innerHTML = optionHtml(mains, nextMain);
+    $("#masterCategory").innerHTML = `<option value="">ไม่ระบุประเภทย่อย</option>${optionHtml(subcategories(nextMain), selectedId)}`;
+  }
+
+  function refreshPreferredSupplier(selected = $("#masterPreferredSupplier").value) {
+    const selectedIds = $$('#masterSupplierChoices input[type="checkbox"]:checked').map((input) => input.value);
+    const rows = state.suppliers.filter((supplier) => selectedIds.includes(supplier.id));
+    $("#masterPreferredSupplier").innerHTML = `<option value="">ไม่ระบุ</option>${optionHtml(rows, rows.some((row) => row.id === selected) ? selected : "")}`;
+  }
+
+  function renderMasterSuppliers(itemId, preferredId = "") {
+    const selectedIds = new Set(state.itemSuppliers.filter((link) => link.item_id === itemId && link.active !== false).map((link) => link.supplier_id));
+    $("#masterSupplierChoices").innerHTML = state.suppliers.length
+      ? state.suppliers.map((supplier) => `<label class="check-row supplier-choice"><input type="checkbox" value="${supplier.id}" ${selectedIds.has(supplier.id) ? "checked" : ""}><span>${escapeHtml(supplier.name)}</span></label>`).join("")
+      : '<div class="expense-picker-empty">ยังไม่มี Supplier ของร้าน</div>';
+    refreshPreferredSupplier(preferredId);
   }
 
   function openMaster(id, kind) {
     const row = (kind === "item" ? state.items : state.expenseItems).find((entry) => entry.id === id) || {};
-    const purchaseUnit = kind === "item" ? state.itemUnits.find((entry) => entry.item_id === row.id && entry.allow_purchase && !entry.is_base_unit && entry.active !== false) : null;
+    const branchItem = kind === "item" ? branchItemById(row.id) || {} : {};
+    const purchaseUnit = kind === "item" ? defaultPurchaseUnit(row.id) : null;
+    const mainId = mainCategoryId(row.category_id) || mainCategories()[0]?.id || "";
+    const selectedSubcategory = state.categories.find((category) => category.id === row.category_id)?.parent_id ? row.category_id : "";
     $("#masterId").value = row.id || "";
     $("#masterKind").value = kind;
+    $("#masterCode").textContent = row.code || "ระบบจะสร้างรหัสให้อัตโนมัติ";
     $("#masterName").value = row.name || "";
     $("#masterDialogTitle").textContent = `${row.id ? "แก้ไข" : "เพิ่ม"}${kind === "item" ? "สินค้า / วัตถุดิบ" : "รายการรายจ่าย"}`;
-    $("#masterUnitField").hidden = kind !== "item";
-    $("#masterUnit").innerHTML = optionHtml(state.units, row.base_unit_id);
-    refreshMasterPurchaseUnits(purchaseUnit?.unit_id || "");
+    $("#masterItemFields").hidden = kind !== "item";
+    $("#masterItemAdvanced").hidden = kind !== "item";
+    $("#masterItemAdvanced").open = false;
+    $("#masterUnit").innerHTML = optionHtml(state.units, row.base_unit_id || state.units[0]?.id);
+    refreshMasterPurchaseUnits(purchaseUnit?.is_base_unit ? "" : purchaseUnit?.unit_id || "", branchItem.default_issue_unit_id || row.base_unit_id);
     $("#masterConversion").value = purchaseUnit?.conversion_to_base || 1;
-    $("#masterCategory").innerHTML = optionHtml(kind === "item" ? state.categories.filter((category) => category.category_type === "item" && category.parent_id) : mainCategories(), kind === "item" ? row.category_id : mainCategoryId(row.category_id));
+    refreshMasterCategories(mainId, selectedSubcategory);
     $("#masterStock").checked = kind === "item" ? Boolean(row.track_stock) : Boolean(row.affects_stock);
     $("#masterStockLabel").textContent = kind === "item" ? "ติดตามสต็อก" : "รายการนี้เพิ่มสต็อก";
+    $("#masterItemType").value = row.item_type || (row.track_stock === false ? "NON_STOCK_ITEM" : "STOCK_ITEM");
+    $("#masterBrand").value = row.brand || "";
+    $("#masterPackageSize").value = row.package_size || "";
+    $("#masterPackageUnit").innerHTML = `<option value="">ไม่ระบุ</option>${optionHtml(state.units, row.package_unit_id)}`;
+    $("#masterPurchaseable").checked = row.purchaseable !== false;
+    $("#masterIssueable").checked = row.issueable !== false;
+    $("#masterSellable").checked = Boolean(row.sellable);
+    $("#masterMinimumStock").value = branchItem.minimum_stock || 0;
+    $("#masterReorderPoint").value = branchItem.reorder_point || 0;
+    $("#masterTargetStock").value = branchItem.target_stock || 0;
+    renderMasterSuppliers(row.id, branchItem.preferred_supplier_id || "");
     $("#masterExpenseFields").hidden = kind !== "expense_item";
     $("#masterRequiresQuantity").checked = kind === "expense_item" && Boolean(row.requires_quantity);
     $("#masterRequiresUnit").checked = kind === "expense_item" && Boolean(row.requires_unit);
-    $("#masterActive").checked = row.active !== false;
+    $("#masterRequiresSupplier").checked = kind === "expense_item" && Boolean(row.requires_supplier);
+    $("#masterRequiresReceipt").checked = kind === "expense_item" && Boolean(row.requires_receipt);
+    $("#masterSortOrder").value = kind === "expense_item" ? row.sort_order || 0 : 0;
+    $("#masterNotes").value = row.notes || "";
+    $("#masterActive").checked = row.active !== false && (kind !== "item" || branchItem.active !== false) && (kind !== "expense_item" || row.branch_active !== false);
     syncMasterPurchaseFields();
     $("#masterDialog").showModal();
     $("#masterDialog").focus({ preventScroll: true });
@@ -638,16 +701,32 @@
     event.preventDefault();
     if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่แก้รายการตั้งต้นได้"); return; }
     const kind = $("#masterKind").value;
-    const payload = { idempotency_key: crypto.randomUUID(), kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value, active: $("#masterActive").checked };
+    const payload = { idempotency_key: crypto.randomUUID(), kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value || $("#masterMainCategory").value, active: $("#masterActive").checked, notes: $("#masterNotes").value.trim() };
     if (kind === "item") {
       payload.base_unit_id = $("#masterUnit").value;
       payload.track_stock = $("#masterStock").checked;
+      payload.item_type = $("#masterItemType").value;
       payload.purchase_unit_id = $("#masterPurchaseUnit").value || null;
       payload.conversion_to_base = Number($("#masterConversion").value) || 1;
+      payload.default_issue_unit_id = $("#masterDefaultIssueUnit").value || $("#masterUnit").value;
+      payload.brand = $("#masterBrand").value.trim();
+      payload.package_size = $("#masterPackageSize").value || null;
+      payload.package_unit_id = $("#masterPackageUnit").value || null;
+      payload.purchaseable = $("#masterPurchaseable").checked;
+      payload.issueable = $("#masterIssueable").checked;
+      payload.sellable = $("#masterSellable").checked;
+      payload.minimum_stock = Number($("#masterMinimumStock").value) || 0;
+      payload.reorder_point = Number($("#masterReorderPoint").value) || 0;
+      payload.target_stock = Number($("#masterTargetStock").value) || 0;
+      payload.supplier_ids = $$('#masterSupplierChoices input[type="checkbox"]:checked').map((input) => input.value);
+      payload.preferred_supplier_id = $("#masterPreferredSupplier").value || null;
     } else {
       payload.affects_stock = $("#masterStock").checked;
       payload.requires_quantity = $("#masterRequiresQuantity").checked;
       payload.requires_unit = $("#masterRequiresUnit").checked;
+      payload.requires_supplier = $("#masterRequiresSupplier").checked;
+      payload.requires_receipt = $("#masterRequiresReceipt").checked;
+      payload.sort_order = Number($("#masterSortOrder").value) || 0;
     }
     if (!navigator.onLine) {
       queueOperation("master", payload);
@@ -821,8 +900,10 @@
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterTab === "items" ? "item" : "expense_item"));
   $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
-  $("#masterPurchaseUnit").addEventListener("change", syncMasterPurchaseFields);
+  $("#masterPurchaseUnit").addEventListener("change", () => refreshMasterPurchaseUnits($("#masterPurchaseUnit").value));
   $("#masterConversion").addEventListener("input", syncMasterPurchaseFields);
+  $("#masterMainCategory").addEventListener("change", () => refreshMasterCategories($("#masterMainCategory").value));
+  $("#masterSupplierChoices").addEventListener("change", () => refreshPreferredSupplier());
   $("#masterRequiresUnit").addEventListener("change", () => { if ($("#masterRequiresUnit").checked) $("#masterRequiresQuantity").checked = true; });
   $("#masterRequiresQuantity").addEventListener("change", () => { if (!$("#masterRequiresQuantity").checked) $("#masterRequiresUnit").checked = false; });
   $("#masterForm").addEventListener("submit", saveMaster);
