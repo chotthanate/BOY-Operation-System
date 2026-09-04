@@ -7,7 +7,7 @@
   <title>ร้านเบอร์เกอร์ | BOY Operations</title>
   <link rel="stylesheet" href="assets/css/burger.css">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-3">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-4">
 </head>
 <body>
   <div class="app-shell">
@@ -100,15 +100,24 @@
     <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="reviewDialog">กลับไปแก้</button><button class="primary-button" id="confirmExpenseButton" type="button">บันทึก</button></div>
   </dialog>
 
-  <dialog id="masterDialog" class="review-dialog master-dialog">
+  <dialog id="masterDialog" class="review-dialog master-dialog" tabindex="-1" autofocus>
     <h2 id="masterDialogTitle">แก้ไขรายการ</h2>
     <form id="masterForm" class="form-stack">
       <input id="masterId" type="hidden">
       <input id="masterKind" type="hidden">
       <label>ชื่อรายการ<input id="masterName" required></label>
       <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
+      <div id="masterPurchaseFields" class="form-subsection">
+        <label>หน่วยที่ซื้อ<select id="masterPurchaseUnit"></select></label>
+        <label>จำนวนที่เพิ่มเข้าสต็อก<input id="masterConversion" type="number" min="0.000001" step="0.001" inputmode="decimal"></label>
+        <div id="masterConversionPreview" class="conversion-preview"></div>
+      </div>
       <label>หมวด<select id="masterCategory"></select></label>
       <label class="check-row"><input id="masterStock" type="checkbox"><span id="masterStockLabel">ติดตามสต็อก</span></label>
+      <div id="masterExpenseFields" class="form-subsection">
+        <label class="check-row"><input id="masterRequiresQuantity" type="checkbox"><span>ต้องกรอกจำนวน</span></label>
+        <label class="check-row"><input id="masterRequiresUnit" type="checkbox"><span>ต้องเลือกหน่วย</span></label>
+      </div>
       <label class="check-row"><input id="masterActive" type="checkbox"><span>เปิดใช้งาน</span></label>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="masterDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึก</button></div>
     </form>
@@ -117,6 +126,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/burger.js?v=20260904-3"></script>
+  <script src="assets/js/burger.js?v=20260904-4"></script>
 </body>
 </html>

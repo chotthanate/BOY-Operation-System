@@ -76,6 +76,20 @@ begin
     raise exception 'transaction_lines.category_id is missing';
   end if;
 
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central'
+      and table_name = 'expense_items'
+      and column_name = 'requires_quantity'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central'
+      and table_name = 'expense_items'
+      and column_name = 'requires_unit'
+  ) then
+    raise exception 'expense quantity/unit settings are missing';
+  end if;
+
   if (select count(*) from boy_central.branches where code in (
     'TAWANA', 'BIGC-CENTRAL-PATTAYA', 'BURGER', 'GRILL'
   )) <> 4 then

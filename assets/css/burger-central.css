@@ -19,7 +19,7 @@
   background-repeat: no-repeat;
 }
 .expense-picker { min-width: 0; }
-.expense-picker-options { display: grid; gap: 5px; max-height: 250px; margin-top: 7px; padding: 6px; overflow-y: auto; border: 1px solid #cfe0da; border-radius: 15px; background: #fff; box-shadow: 0 12px 30px rgba(23,50,44,.12); }
+.expense-picker-options { display: grid; gap: 5px; max-height: 250px; margin-top: 7px; padding: 6px; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y; -webkit-overflow-scrolling: touch; border: 1px solid #cfe0da; border-radius: 15px; background: #fff; box-shadow: 0 12px 30px rgba(23,50,44,.12); }
 .expense-picker-options[hidden] { display: none; }
 .expense-picker-options button { width: 100%; min-height: 50px; padding: 9px 11px; border: 0; border-radius: 11px; background: transparent; color: var(--ink); text-align: left; }
 .expense-picker-options button:active,.expense-picker-options button:hover { background: var(--green-soft); }
@@ -38,6 +38,11 @@
 .master-badges { display: grid; justify-items: end; gap: 4px; flex: 0 0 auto; }
 .master-badges b { color: #08735e; font-size: .78rem; }
 .master-dialog { width: min(420px, calc(100% - 28px)); }
+.form-subsection { display: grid; gap: 10px; padding: 12px; border: 1px solid #dce9e5; border-radius: 15px; background: #f8fcfa; text-align: left; }
+.form-subsection[hidden] { display: none; }
+.conversion-preview { padding: 9px 11px; border-radius: 11px; background: var(--green-soft); color: var(--green); font-size: .78rem; font-weight: 800; }
+.expense-fields.fields-1 { grid-template-columns: 1fr; }
+.expense-fields.fields-2 { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .compact-button { width: auto; min-height: 40px; padding: 8px 13px; }
 .check-row { display: flex !important; align-items: center; gap: 10px; }
 .check-row input { width: 20px !important; height: 20px !important; }
@@ -45,6 +50,7 @@
 .bottom-nav button { min-width: 0; }
 .bottom-nav strong { font-size: .68rem; }
 @media (max-width: 430px) {
+  input,select,textarea { font-size: 16px; }
   .toolbar-card { grid-template-columns: minmax(0, 1fr) auto; }
   .draft-status { max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
   .master-row { padding: 12px; }

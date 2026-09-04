@@ -10,13 +10,13 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, branch: null, items: [], units: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null };
+  const state = { session: null, profile: null, branch: null, items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 1, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 0, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
 
   function toast(message) {
     const element = $("#toast");
@@ -117,6 +117,19 @@
   function lineCategoryId(line, expense = expenseById(line.expense_item_id)) {
     return line.category_id || mainCategoryId(expense?.category_id);
   }
+  function itemUnitChoices(itemId) {
+    return state.itemUnits.filter((row) => row.item_id === itemId && row.active !== false && (row.is_base_unit || row.allow_purchase));
+  }
+  function defaultPurchaseUnit(itemId) {
+    return itemUnitChoices(itemId).find((row) => !row.is_base_unit && row.allow_purchase)
+      || itemUnitChoices(itemId).find((row) => row.is_base_unit);
+  }
+  function lineRequirements(line, expense = expenseById(line.expense_item_id), item = itemById(line.item_id)) {
+    return {
+      quantity: Boolean(item?.track_stock || expense?.requires_quantity),
+      unit: Boolean(item?.track_stock || expense?.requires_unit)
+    };
+  }
   function supplierChoices(itemId) {
     const linkedIds = state.itemSuppliers.filter((link) => link.item_id === itemId && link.active !== false).map((link) => link.supplier_id);
     return linkedIds.length ? state.suppliers.filter((supplier) => linkedIds.includes(supplier.id)) : state.suppliers;
@@ -129,8 +142,20 @@
       const expense = expenseById(line.expense_item_id);
       const categoryId = lineCategoryId(line, expense);
       const unit = unitById(line.unit_id);
+      const unitLink = state.itemUnits.find((row) => row.item_id === item?.id && row.unit_id === line.unit_id && row.active !== false);
+      const requirements = lineRequirements(line, expense, item);
+      const unitChoices = item ? itemUnitChoices(item.id).map((row) => unitById(row.unit_id)).filter(Boolean) : state.units;
       const suppliers = supplierChoices(line.item_id);
       const perUnit = Number(line.quantity) > 0 ? Number(line.line_total) / Number(line.quantity) : 0;
+      const fields = [
+        requirements.quantity ? `<label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(line.quantity || "")}"></label>` : "",
+        requirements.unit ? `<label>หน่วย<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(unitChoices, line.unit_id)}</select></label>` : "",
+        `<label>ยอดรวม<input data-field="line_total" type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(line.line_total)}"></label>`
+      ].filter(Boolean);
+      const conversion = Number(unitLink?.conversion_to_base || 1);
+      const stockEffect = item?.track_stock && unit
+        ? `เพิ่มสต็อก ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}`
+        : "";
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line">
           <span class="line-number">${index + 1}</span>
@@ -142,12 +167,8 @@
             <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" value="${escapeHtml(line.expense_search || line.description || expense?.name)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off" aria-autocomplete="list" aria-expanded="false"></label>
             <div class="expense-picker-options" role="listbox" hidden></div>
           </div>
-          <div class="field-grid three">
-            <label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" value="${escapeHtml(line.quantity)}"></label>
-            <label>หน่วย<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(state.units, line.unit_id)}</select></label>
-            <label>ยอดรวม<input data-field="line_total" type="number" min="0" step="0.01" value="${escapeHtml(line.line_total)}"></label>
-          </div>
-          <div class="unit-price"><span>ราคาต่อหน่วย</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>
+          <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
+          ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
             <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
             <label>Supplier<input data-field="supplier_name" list="suppliers-${line.id}" value="${escapeHtml(line.supplier_name)}" placeholder="เลือกหรือพิมพ์ชื่อ"><datalist id="suppliers-${line.id}">${suppliers.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("")}</datalist></label>
@@ -194,14 +215,17 @@
     line.category_id = mainCategoryId(expense.category_id);
     if (expense.item_id) {
       const linkedItem = itemById(expense.item_id);
+      const purchaseUnit = defaultPurchaseUnit(expense.item_id);
       line.item_id = expense.item_id;
-      line.unit_id = linkedItem?.base_unit_id || "";
+      line.unit_id = purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
+      if (linkedItem?.track_stock && !(Number(line.quantity) > 0)) line.quantity = 1;
       if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
       const choices = supplierChoices(linkedItem?.id);
       if (choices.length === 1) line.supplier_name = choices[0].name;
     } else {
       line.item_id = "";
-      line.unit_id = "";
+      if (!expense.requires_quantity) line.quantity = 0;
+      if (!expense.requires_unit) line.unit_id = "";
       if (previousItem) line.supplier_name = "";
     }
   }
@@ -217,6 +241,8 @@
       line.expense_item_id = "";
       line.source_expense_item_id = "";
       line.description = String(line.expense_search || "").trim();
+      line.quantity = 0;
+      line.unit_id = "";
     }
     renderLines();
     scheduleDraftSave();
@@ -234,6 +260,7 @@
         line.expense_item_id = "";
         line.source_expense_item_id = "";
         line.item_id = "";
+        line.quantity = 0;
         line.unit_id = "";
         line.description = String(value).trim();
       }
@@ -251,10 +278,13 @@
     if (!$("#expenseDate").value) errors.push("กรุณาเลือกวันที่");
     state.lines.forEach((line, index) => {
       const item = itemById(line.item_id);
+      const expense = expenseById(line.expense_item_id);
+      const requirements = lineRequirements(line, expense, item);
       if (!line.description.trim()) errors.push(`รายการ ${index + 1}: ระบุชื่อรายการ`);
       if (!(Number(line.line_total) > 0)) errors.push(`รายการ ${index + 1}: ระบุยอดรวม`);
       if (!lineCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
-      if (item?.track_stock && (!(Number(line.quantity) > 0) || !line.unit_id)) errors.push(`รายการ ${index + 1}: ระบุจำนวนและหน่วยสำหรับสต็อก`);
+      if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
+      if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
     });
     return errors;
   }
@@ -278,7 +308,8 @@
       idempotency_key: crypto.randomUUID(),
       lines: state.lines.map((line) => {
         const supplier = state.suppliers.find((row) => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
-        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: line.quantity, unit_id: line.unit_id || null, line_total: line.line_total, note: line.note || null };
+        const requirements = lineRequirements(line);
+        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, line_total: line.line_total, note: line.note || null };
       })
     };
     const { data, error } = await client.schema("boy_central").rpc("record_expense_v2", { payload });
@@ -323,23 +354,28 @@
     const itemIds = (itemLinksResult.data || []).map((row) => row.item_id);
     const expenseIds = (expenseLinksResult.data || []).map((row) => row.expense_item_id);
     const supplierIds = (supplierLinksResult.data || []).map((row) => row.supplier_id);
-    const [itemsResult, expenseResult, supplierResult] = await Promise.all([
+    const [itemsResult, expenseResult, supplierResult, itemUnitsResult] = await Promise.all([
       itemIds.length
         ? client.schema("boy_central").from("items").select("id,name,code,base_unit_id,category_id,track_stock,active").in("id", itemIds).eq("active", true).order("name")
         : Promise.resolve({ data: [], error: null }),
       expenseIds.length
-        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,active").in("id", expenseIds).eq("active", true)
+        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,requires_quantity,requires_unit,active").in("id", expenseIds).eq("active", true)
         : Promise.resolve({ data: [], error: null }),
       !supplierLinksResult.error && supplierIds.length
         ? client.schema("boy_central").from("suppliers").select("id,name,code").in("id", supplierIds).eq("active", true)
+        : Promise.resolve({ data: [], error: null }),
+      itemIds.length
+        ? client.schema("boy_central").from("item_units").select("item_id,unit_id,conversion_to_base,is_base_unit,allow_purchase,active").in("item_id", itemIds).eq("active", true).order("is_base_unit", { ascending: true })
         : Promise.resolve({ data: [], error: null })
     ]);
     if (itemsResult.error) throw itemsResult.error;
     if (expenseResult.error) throw expenseResult.error;
+    if (itemUnitsResult.error) throw itemUnitsResult.error;
 
     const expenseOrder = new Map((expenseLinksResult.data || []).map((row, index) => [row.expense_item_id, [row.sort_order ?? 0, index]]));
     const supplierOrder = new Map((supplierLinksResult.data || []).map((row, index) => [row.supplier_id, [row.is_preferred ? 0 : 1, index]]));
     state.items = (itemsResult.data || []).sort((a, b) => a.name.localeCompare(b.name, "th"));
+    state.itemUnits = itemUnitsResult.data || [];
     state.expenseItems = (expenseResult.data || []).sort((a, b) => {
       const left = expenseOrder.get(a.id) || [0, 0];
       const right = expenseOrder.get(b.id) || [0, 0];
@@ -430,19 +466,48 @@
     </button>`).join("") : '<div class="empty-state">ไม่พบรายการ</div>';
   }
 
+  function syncMasterPurchaseFields() {
+    const isItem = $("#masterKind").value === "item";
+    const enabled = isItem && $("#masterStock").checked;
+    $("#masterPurchaseFields").hidden = !enabled;
+    if (!enabled) return;
+    const baseUnit = unitById($("#masterUnit").value);
+    const purchaseUnit = unitById($("#masterPurchaseUnit").value);
+    $("#masterConversion").disabled = !purchaseUnit;
+    if (!purchaseUnit) $("#masterConversion").value = 1;
+    $("#masterConversionPreview").textContent = purchaseUnit
+      ? `1 ${purchaseUnit.name} = ${number.format(Number($("#masterConversion").value) || 0)} ${baseUnit?.name || "หน่วยฐาน"}`
+      : `ซื้อและนับสต็อกเป็น ${baseUnit?.name || "หน่วยฐาน"}`;
+  }
+
+  function refreshMasterPurchaseUnits(selected = $("#masterPurchaseUnit").value) {
+    const baseUnitId = $("#masterUnit").value;
+    const nextSelected = selected === baseUnitId ? "" : selected;
+    $("#masterPurchaseUnit").innerHTML = `<option value="">ใช้หน่วยฐาน</option>${optionHtml(state.units.filter((unit) => unit.id !== baseUnitId), nextSelected)}`;
+    syncMasterPurchaseFields();
+  }
+
   function openMaster(id, kind) {
     const row = (kind === "item" ? state.items : state.expenseItems).find((entry) => entry.id === id) || {};
+    const purchaseUnit = kind === "item" ? state.itemUnits.find((entry) => entry.item_id === row.id && entry.allow_purchase && !entry.is_base_unit && entry.active !== false) : null;
     $("#masterId").value = row.id || "";
     $("#masterKind").value = kind;
     $("#masterName").value = row.name || "";
     $("#masterDialogTitle").textContent = `${row.id ? "แก้ไข" : "เพิ่ม"}${kind === "item" ? "สินค้า / วัตถุดิบ" : "รายการรายจ่าย"}`;
     $("#masterUnitField").hidden = kind !== "item";
     $("#masterUnit").innerHTML = optionHtml(state.units, row.base_unit_id);
-    $("#masterCategory").innerHTML = optionHtml(state.categories.filter((category) => kind === "item" ? category.category_type === "item" && category.parent_id : category.category_type === "expense" || (category.category_type === "item" && category.parent_id)), row.category_id);
+    refreshMasterPurchaseUnits(purchaseUnit?.unit_id || "");
+    $("#masterConversion").value = purchaseUnit?.conversion_to_base || 1;
+    $("#masterCategory").innerHTML = optionHtml(kind === "item" ? state.categories.filter((category) => category.category_type === "item" && category.parent_id) : mainCategories(), kind === "item" ? row.category_id : mainCategoryId(row.category_id));
     $("#masterStock").checked = kind === "item" ? Boolean(row.track_stock) : Boolean(row.affects_stock);
     $("#masterStockLabel").textContent = kind === "item" ? "ติดตามสต็อก" : "รายการนี้เพิ่มสต็อก";
+    $("#masterExpenseFields").hidden = kind !== "expense_item";
+    $("#masterRequiresQuantity").checked = kind === "expense_item" && Boolean(row.requires_quantity);
+    $("#masterRequiresUnit").checked = kind === "expense_item" && Boolean(row.requires_unit);
     $("#masterActive").checked = row.active !== false;
+    syncMasterPurchaseFields();
     $("#masterDialog").showModal();
+    $("#masterDialog").focus({ preventScroll: true });
   }
 
   async function saveMaster(event) {
@@ -450,8 +515,16 @@
     if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่แก้รายการตั้งต้นได้"); return; }
     const kind = $("#masterKind").value;
     const payload = { kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value, active: $("#masterActive").checked };
-    if (kind === "item") { payload.base_unit_id = $("#masterUnit").value; payload.track_stock = $("#masterStock").checked; }
-    else payload.affects_stock = $("#masterStock").checked;
+    if (kind === "item") {
+      payload.base_unit_id = $("#masterUnit").value;
+      payload.track_stock = $("#masterStock").checked;
+      payload.purchase_unit_id = $("#masterPurchaseUnit").value || null;
+      payload.conversion_to_base = Number($("#masterConversion").value) || 1;
+    } else {
+      payload.affects_stock = $("#masterStock").checked;
+      payload.requires_quantity = $("#masterRequiresQuantity").checked;
+      payload.requires_unit = $("#masterRequiresUnit").checked;
+    }
     const { error } = await client.schema("boy_central").rpc("admin_update_burger_master", { payload });
     if (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#masterDialog").close();
@@ -549,12 +622,6 @@
     if (button.dataset.action === "toggle-line") { state.lines.forEach((row) => row.expanded = row.id === line.id ? !row.expanded : false); renderLines(); }
     if (button.dataset.action === "remove-line" && confirm("ลบรายการนี้ใช่ไหม")) { state.lines = state.lines.filter((row) => row.id !== line.id); if (!state.lines.length) state.lines.push(newLine()); renderLines(); scheduleDraftSave(); }
   });
-  $("#expenseLines").addEventListener("pointerdown", (event) => {
-    const button = event.target.closest('button[data-action="select-expense"],button[data-action="use-custom-expense"]');
-    if (!button) return;
-    event.preventDefault();
-    applyExpenseChoice(button);
-  });
   $("#expenseLines").addEventListener("focusin", (event) => {
     if (event.target.dataset.field !== "expense_search") return;
     const card = event.target.closest(".expense-card");
@@ -598,6 +665,12 @@
   }));
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterTab === "items" ? "item" : "expense_item"));
+  $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
+  $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
+  $("#masterPurchaseUnit").addEventListener("change", syncMasterPurchaseFields);
+  $("#masterConversion").addEventListener("input", syncMasterPurchaseFields);
+  $("#masterRequiresUnit").addEventListener("change", () => { if ($("#masterRequiresUnit").checked) $("#masterRequiresQuantity").checked = true; });
+  $("#masterRequiresQuantity").addEventListener("change", () => { if (!$("#masterRequiresQuantity").checked) $("#masterRequiresUnit").checked = false; });
   $("#masterForm").addEventListener("submit", saveMaster);
   $("#logoutButton").addEventListener("click", async () => { await client.auth.signOut(); location.reload(); });
   $("#loginForm").addEventListener("submit", async (event) => { event.preventDefault(); $("#loginError").textContent = ""; const { data, error } = await client.auth.signInWithPassword({ email: $("#loginEmail").value, password: $("#loginPassword").value }); if (error) { $("#loginError").textContent = error.message; return; } await enterApp(data.session); });
