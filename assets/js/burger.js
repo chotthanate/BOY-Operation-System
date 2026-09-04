@@ -10,7 +10,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, branch: null, items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null };
+  const state = { session: null, profile: null, branch: null, items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null, syncing: false };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
@@ -32,6 +32,66 @@
     badge.className = `connection-badge ${type}`;
   }
 
+  const outboxKey = () => `boy-burger-outbox:${state.session?.user?.id || "guest"}`;
+  const profileCacheKey = () => `boy-burger-profile:${state.session?.user?.id || "guest"}`;
+  const masterCacheKey = () => `boy-burger-master:${state.session?.user?.id || "guest"}`;
+  function readCache(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { return null; }
+  }
+  function readOutbox() {
+    try {
+      const rows = JSON.parse(localStorage.getItem(outboxKey()) || "[]");
+      return Array.isArray(rows) ? rows : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function writeOutbox(rows) {
+    localStorage.setItem(outboxKey(), JSON.stringify(rows));
+    updateSyncStatus();
+  }
+  function updateSyncStatus() {
+    if (!state.session) return;
+    const count = readOutbox().length;
+    if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
+    else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
+    else setConnection(`เชื่อมต่อแล้ว · ${state.items.length} สินค้า`, "online");
+  }
+  function queueOperation(type, payload, meta = {}) {
+    const rows = readOutbox();
+    const id = payload.idempotency_key;
+    if (!rows.some((row) => row.id === id)) rows.push({ id, type, payload, meta, queued_at: new Date().toISOString() });
+    writeOutbox(rows);
+  }
+  function isNetworkError(error) {
+    return !navigator.onLine || /failed to fetch|network|load failed|fetch/i.test(String(error?.message || error || ""));
+  }
+
+  function saveMasterCache() {
+    localStorage.setItem(masterCacheKey(), JSON.stringify({
+      branch: state.branch, items: state.items, units: state.units, itemUnits: state.itemUnits,
+      categories: state.categories, expenseItems: state.expenseItems, suppliers: state.suppliers,
+      itemSuppliers: state.itemSuppliers, saved_at: new Date().toISOString()
+    }));
+  }
+
+  function loadMasterCache() {
+    const cached = readCache(masterCacheKey());
+    if (!cached?.branch || !Array.isArray(cached.items)) return false;
+    state.branch = cached.branch;
+    state.items = cached.items;
+    state.units = cached.units || [];
+    state.itemUnits = cached.itemUnits || [];
+    state.categories = cached.categories || [];
+    state.expenseItems = cached.expenseItems || [];
+    state.suppliers = cached.suppliers || [];
+    state.itemSuppliers = cached.itemSuppliers || [];
+    renderLines();
+    renderMasterList();
+    updateSyncStatus();
+    return true;
+  }
+
   function setPage(page) {
     $$(".page").forEach((section) => section.classList.toggle("active", section.dataset.page === page));
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
@@ -40,7 +100,8 @@
     if (page === "settings" && state.session) renderMasterList();
   }
 
-  const draftKey = () => `boy-burger-draft:${state.session?.user?.id || "guest"}:${$("#expenseDate").value || today()}`;
+  const draftKeyForDate = (date) => `boy-burger-draft:${state.session?.user?.id || "guest"}:${date || today()}`;
+  const draftKey = () => draftKeyForDate($("#expenseDate").value);
 
   function draftPayload() {
     return { version: 1, transaction_date: $("#expenseDate").value, lines: state.lines, saved_at: new Date().toISOString() };
@@ -56,6 +117,7 @@
     if (!state.session || !state.branch || !$("#expenseDate").value) return;
     const payload = draftPayload();
     localStorage.setItem(draftKey(), JSON.stringify(payload));
+    if (!navigator.onLine) { setDraftStatus("เก็บไว้ในเครื่องแล้ว", "local"); return; }
     setDraftStatus("กำลังบันทึก…");
     const { error } = await client.schema("boy_central").from("expense_drafts").upsert({
       company_id: state.branch.company_id,
@@ -79,20 +141,61 @@
     let payload = null;
     const local = localStorage.getItem(draftKey());
     if (local) try { payload = JSON.parse(local); } catch (_) { localStorage.removeItem(draftKey()); }
-    const { data } = await client.schema("boy_central").from("expense_drafts")
-      .select("payload,updated_at").eq("branch_id", state.branch.id).eq("user_id", state.session.user.id)
-      .eq("transaction_date", $("#expenseDate").value).maybeSingle();
-    if (data?.payload && (!payload?.saved_at || new Date(data.updated_at) > new Date(payload.saved_at))) payload = data.payload;
+    if (navigator.onLine) {
+      const { data } = await client.schema("boy_central").from("expense_drafts")
+        .select("payload,updated_at").eq("branch_id", state.branch.id).eq("user_id", state.session.user.id)
+        .eq("transaction_date", $("#expenseDate").value).maybeSingle();
+      if (data?.payload && (!payload?.saved_at || new Date(data.updated_at) > new Date(payload.saved_at))) payload = data.payload;
+    }
     state.lines = Array.isArray(payload?.lines) && payload.lines.length ? payload.lines.map((line) => ({ ...newLine(), ...line, expanded: false })) : [newLine()];
     state.lines[0].expanded = true;
     renderLines();
     setDraftStatus(payload ? "เปิดร่างล่าสุดแล้ว" : "พร้อมบันทึกร่าง", payload ? "saved" : "");
   }
 
+  async function clearDraftForDate(date, removeCloud = true) {
+    localStorage.removeItem(draftKeyForDate(date));
+    if (removeCloud && state.session && state.branch && navigator.onLine) await client.schema("boy_central").from("expense_drafts").delete()
+      .eq("branch_id", state.branch.id).eq("user_id", state.session.user.id).eq("transaction_date", date);
+  }
+
   async function clearDraft() {
-    localStorage.removeItem(draftKey());
-    if (state.session && state.branch) await client.schema("boy_central").from("expense_drafts").delete()
-      .eq("branch_id", state.branch.id).eq("user_id", state.session.user.id).eq("transaction_date", $("#expenseDate").value);
+    await clearDraftForDate($("#expenseDate").value);
+  }
+
+  async function sendQueuedOperation(operation) {
+    if (operation.type === "expense") return client.schema("boy_central").rpc("record_expense_v2", { payload: operation.payload });
+    if (operation.type === "master") return client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload: operation.payload });
+    return { data: null, error: new Error("ไม่รู้จักประเภทรายการที่รอส่ง") };
+  }
+
+  async function flushOutbox({ notify = false } = {}) {
+    const sent = { expense: 0, master: 0 };
+    if (state.syncing || !state.session || !navigator.onLine) { updateSyncStatus(); return sent; }
+    state.syncing = true;
+    let rows = readOutbox();
+    try {
+      while (rows.length && navigator.onLine) {
+        const operation = rows[0];
+        const { error } = await sendQueuedOperation(operation);
+        if (error) {
+          operation.last_error = error.message || String(error);
+          writeOutbox(rows);
+          if (notify && !isNetworkError(error)) toast(`ส่งรายการที่ค้างไม่สำเร็จ: ${operation.last_error}`);
+          break;
+        }
+        rows.shift();
+        writeOutbox(rows);
+        if (operation.type === "expense") await clearDraftForDate(operation.meta?.transaction_date, true);
+        sent[operation.type] += 1;
+      }
+    } finally {
+      state.syncing = false;
+      updateSyncStatus();
+    }
+    const total = sent.expense + sent.master;
+    if (notify && total) toast(`ส่งรายการที่ค้างแล้ว ${total} รายการ`);
+    return sent;
   }
 
   function itemById(id) { return state.items.find((item) => item.id === id); }
@@ -312,8 +415,27 @@
         return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, line_total: line.line_total, note: line.note || null };
       })
     };
+    if (!navigator.onLine) {
+      queueOperation("expense", payload, { transaction_date: payload.transaction_date });
+      $("#reviewDialog").close();
+      await clearDraftForDate(payload.transaction_date, false);
+      state.lines = [newLine()];
+      renderLines();
+      button.textContent = "บันทึก";
+      toast("เก็บรายการไว้แล้ว จะส่งอัตโนมัติเมื่อออนไลน์");
+      return;
+    }
     const { data, error } = await client.schema("boy_central").rpc("record_expense_v2", { payload });
     button.textContent = "บันทึก";
+    if (error && isNetworkError(error)) {
+      queueOperation("expense", payload, { transaction_date: payload.transaction_date });
+      $("#reviewDialog").close();
+      await clearDraftForDate(payload.transaction_date, false);
+      state.lines = [newLine()];
+      renderLines();
+      toast("การเชื่อมต่อขาดหาย เก็บรายการไว้รอส่งแล้ว");
+      return;
+    }
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#reviewDialog").close();
     await clearDraft();
@@ -325,6 +447,7 @@
 
   async function loadExpenseHistory() {
     if (!state.branch) return;
+    if (!navigator.onLine) { $("#expenseHistory").innerHTML = '<div class="empty-state">ออฟไลน์ · ประวัติจะอัปเดตเมื่อเชื่อมต่อ</div>'; return; }
     const { data, error } = await client.schema("boy_central").from("transactions").select("id,transaction_date,total_amount,status,transaction_lines(description)").eq("branch_id", state.branch.id).eq("transaction_type", "expense").eq("transaction_date", $("#expenseDate").value).order("occurred_at", { ascending: false }).limit(30);
     if (error) { $("#expenseHistory").innerHTML = '<div class="empty-state">โหลดประวัติไม่สำเร็จ</div>'; return; }
     $("#expenseHistory").innerHTML = (data || []).length ? data.map((row) => `<article class="history-row"><span><strong>${escapeHtml(row.transaction_lines?.[0]?.description || "รายจ่าย")}</strong><small>${escapeHtml(row.transaction_date)} · ${escapeHtml(row.status)}</small></span><span class="history-amount">${money.format(row.total_amount || 0)}</span></article>`).join("") : '<div class="empty-state">ยังไม่มีรายจ่าย</div>';
@@ -389,7 +512,8 @@
     state.itemSuppliers = linksResult.error ? [] : (linksResult.data || []);
     renderLines();
     renderMasterList();
-    setConnection(`เชื่อมต่อแล้ว · ${state.items.length} สินค้า`, "online");
+    saveMasterCache();
+    updateSyncStatus();
   }
 
   async function loadStock() {
@@ -514,7 +638,7 @@
     event.preventDefault();
     if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่แก้รายการตั้งต้นได้"); return; }
     const kind = $("#masterKind").value;
-    const payload = { kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value, active: $("#masterActive").checked };
+    const payload = { idempotency_key: crypto.randomUUID(), kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value, active: $("#masterActive").checked };
     if (kind === "item") {
       payload.base_unit_id = $("#masterUnit").value;
       payload.track_stock = $("#masterStock").checked;
@@ -525,7 +649,19 @@
       payload.requires_quantity = $("#masterRequiresQuantity").checked;
       payload.requires_unit = $("#masterRequiresUnit").checked;
     }
-    const { error } = await client.schema("boy_central").rpc("admin_update_burger_master", { payload });
+    if (!navigator.onLine) {
+      queueOperation("master", payload);
+      $("#masterDialog").close();
+      toast("เก็บการแก้ไขไว้แล้ว จะส่งอัตโนมัติเมื่อออนไลน์");
+      return;
+    }
+    const { error } = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload });
+    if (error && isNetworkError(error)) {
+      queueOperation("master", payload);
+      $("#masterDialog").close();
+      toast("การเชื่อมต่อขาดหาย เก็บการแก้ไขไว้รอส่งแล้ว");
+      return;
+    }
     if (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#masterDialog").close();
     await loadMaster();
@@ -551,15 +687,24 @@
     setConnection("กำลังตรวจสิทธิ์");
     let profile;
     try {
-      profile = await ensureProfile(session);
+      if (navigator.onLine) {
+        profile = await ensureProfile(session);
+        localStorage.setItem(profileCacheKey(), JSON.stringify(profile));
+      } else {
+        profile = readCache(profileCacheKey());
+        if (!profile) throw new Error("ต้องเชื่อมต่ออินเทอร์เน็ตอย่างน้อยหนึ่งครั้งก่อนใช้งานออฟไลน์");
+      }
     } catch (error) {
-      state.session = null;
-      await client.auth.signOut();
-      $("#authCard").hidden = false;
-      $$(".page,.bottom-nav").forEach((element) => element.hidden = true);
-      $("#loginError").textContent = error.message;
-      setConnection("ไม่มีสิทธิ์", "error");
-      return;
+      const cachedProfile = readCache(profileCacheKey());
+      if (cachedProfile && isNetworkError(error)) profile = cachedProfile;
+      else {
+        state.session = null;
+        $("#authCard").hidden = false;
+        $$(".page,.bottom-nav").forEach((element) => element.hidden = true);
+        $("#loginError").textContent = error.message;
+        setConnection("ไม่มีสิทธิ์", "error");
+        return;
+      }
     }
     state.profile = profile;
     const next = new URLSearchParams(location.search).get("next");
@@ -571,8 +716,16 @@
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = profile.display_name || "ผู้ใช้งาน BOY";
-    setConnection("เชื่อมต่อแล้ว", "online");
-    try { await loadMaster(); await loadDraftForDate(); await loadExpenseHistory(); } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
+    updateSyncStatus();
+    try {
+      if (navigator.onLine) await loadMaster();
+      else if (!loadMasterCache()) throw new Error("ยังไม่มีข้อมูลร้านที่เก็บไว้ในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตก่อน");
+      const sent = await flushOutbox();
+      if (sent.master) await loadMaster();
+      await loadDraftForDate();
+      await loadExpenseHistory();
+      updateSyncStatus();
+    } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
   }
 
   async function requestMagicLink() {
@@ -595,6 +748,7 @@
   }
 
   async function init() {
+    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("burger-sw.js").catch(() => {});
     $("#expenseDate").value = today();
     $("#dashboardMonth").value = monthNow();
     state.lines = [newLine()];
@@ -675,5 +829,11 @@
   $("#logoutButton").addEventListener("click", async () => { await client.auth.signOut(); location.reload(); });
   $("#loginForm").addEventListener("submit", async (event) => { event.preventDefault(); $("#loginError").textContent = ""; const { data, error } = await client.auth.signInWithPassword({ email: $("#loginEmail").value, password: $("#loginPassword").value }); if (error) { $("#loginError").textContent = error.message; return; } await enterApp(data.session); });
   $("#magicLinkButton").addEventListener("click", requestMagicLink);
+  window.addEventListener("offline", updateSyncStatus);
+  window.addEventListener("online", async () => {
+    const sent = await flushOutbox({ notify: true });
+    if (sent.master) await loadMaster();
+    if (sent.expense) await loadExpenseHistory();
+  });
   init();
 })();

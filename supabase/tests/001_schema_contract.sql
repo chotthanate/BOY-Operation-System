@@ -67,6 +67,10 @@ begin
     raise exception 'record_expense_v2(jsonb) is missing';
   end if;
 
+  if to_regprocedure('boy_central.admin_update_burger_master_v2(jsonb)') is null then
+    raise exception 'admin_update_burger_master_v2(jsonb) is missing';
+  end if;
+
   if not exists (
     select 1 from information_schema.columns
     where table_schema = 'boy_central'

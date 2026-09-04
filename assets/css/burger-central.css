@@ -26,6 +26,7 @@
 .expense-picker-options strong,.expense-picker-options small { display: block; }
 .expense-picker-options small { margin-top: 3px; color: var(--muted); font-size: .72rem; }
 .expense-picker-options .custom-expense-option { background: #fff7df; color: #765713; }
+.connection-badge.pending { background: #fff4dc; color: #8c5d10; }
 .expense-picker-empty { padding: 14px; color: var(--muted); text-align: center; font-size: .78rem; }
 .master-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; padding: 4px; border-radius: 15px; background: #e8f3ef; }
 .master-tabs button { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: #57716a; font-weight: 800; }
