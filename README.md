@@ -8,6 +8,7 @@ Staging repo for the next BOY business workflow.
 
 - `index.html` - staging menu
 - `tawana.html` - Tawana page connected to the new BOY Operation System Apps Script
+- `master-data.html` - BOY Master editor for employees, items, units, suppliers, branches, categories, and mappings
 - `bigc.html` - บิ๊กซีพัทยากลาง expense-only page, connected to `BOY_Transactions > รายจ่าย`
 - `bigc-order.html` - บิ๊กซีพัทยากลาง order/receive/return page
 - `dashboard.html` - monthly reporting dashboard for income, expenses, profit, raw materials, and branch comparison

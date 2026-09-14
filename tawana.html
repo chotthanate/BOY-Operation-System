@@ -480,6 +480,27 @@
     .btn-primary, .btn-submit { background: linear-gradient(135deg, var(--primary), #099d81); }
     .btn-soft { border-color: #f1c7ba; background: var(--secondary-soft); color: #a9422e; }
     .bottom-nav-item.active { background: linear-gradient(135deg, var(--primary-soft), #fff5d8); color: var(--primary-strong); }
+    .employee-toolbar { display:grid; grid-template-columns:1fr 92px; gap:10px; margin-bottom:14px; }
+    .employee-toolbar label { font-size:.78rem; font-weight:800; color:var(--muted); }
+    .employee-toolbar select,.employee-toolbar input { margin-top:6px; width:100%; }
+    .employee-overview { display:grid; gap:10px; }
+    .employee-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .employee-name { font-weight:900; font-size:1rem; }
+    .employee-meta { color:var(--muted); font-size:.78rem; margin-top:3px; }
+    .employee-stats { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+    .employee-stat { background:var(--surface-soft); border-radius:999px; padding:6px 9px; font-size:.75rem; color:var(--text); }
+    .employee-stat.leave { background:#fff2ed; color:#a9482d; }
+    .employee-loading { padding:20px; text-align:center; color:var(--muted); }
+    .master-link-grid { display:grid; gap:10px; margin:16px 0; }
+    .master-link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px; border:1px solid var(--line); border-radius:16px; color:var(--text); text-decoration:none; background:var(--surface); text-align:left; }
+    .master-link strong { display:block; }
+    .master-link small { display:block; color:var(--muted); margin-top:3px; }
+    .record-list { display:grid; gap:10px; }
+    .record-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; padding:14px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .record-row strong { display:block; }
+    .record-meta { color:var(--muted); font-size:.77rem; margin-top:4px; }
+    .record-amount { font-weight:900; white-space:nowrap; color:var(--primary-strong); }
+    .stock-qty { font-size:1.05rem; font-weight:900; white-space:nowrap; }
 
     #expenseList { gap: 8px; }
     .swipe-wrapper { padding: 0; overflow: hidden; border-color: #eadfd9; border-radius: 16px; background: white; }
@@ -574,45 +595,44 @@
         <button class="btn-main btn-submit" id="btnSubmit" type="button" onclick="openSubmitReview()">ตรวจสอบและส่งข้อมูลประจำวัน</button>
       </section>
       <section id="leaveView" class="app-view">
-        <div class="compact-page-header"><h1>การลาพนักงาน</h1><span class="page-context">เต็มวัน · รายชั่วโมง</span></div>
-        <div class="card leave-card"><div class="section-heading"><div><h2 class="section-title">รายการลา</h2><p class="section-description">เลือกพนักงานและระบุช่วงลา</p></div></div><div id="leaveList"></div><div class="section-actions"><button class="btn-main btn-secondary" type="button" onclick="addLeaveRow()">+ เพิ่มพนักงาน</button><button class="btn-main btn-primary" type="button" onclick="saveMultipleLeaves()">บันทึกข้อมูลการลา</button></div><div class="saved-leave-area"><div class="saved-leave-title">บันทึกแล้วในวันที่เลือก</div><div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div></div></div>
+        <div class="compact-page-header"><h1>พนักงาน</h1><span class="page-context">ภาพรวม · การลา</span></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">ภาพรวมพนักงานทั้งหมด</h2><p class="section-description">วันทำงานตามรอบคำนวณจากจำนวนวันในเดือนหักวันลา</p></div></div><div class="employee-toolbar"><label>เดือน<select id="employeeMonth" onchange="loadEmployeeOverview()"></select></label><label>ปี<input id="employeeYear" type="number" min="2024" max="2100" onchange="loadEmployeeOverview()"></label></div><div id="employeeOverview" class="employee-overview"><div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div></div></div>
+        <div class="card leave-card"><div class="section-heading"><div><h2 class="section-title">เพิ่มวันลา</h2><p class="section-description">เลือกวันที่ พนักงาน และรูปแบบการลา</p></div></div><div class="field" style="margin-bottom:12px"><label for="leaveDate">วันที่ลา</label><input id="leaveDate" type="date" onchange="refreshSavedLeaves()"></div><div id="leaveList"></div><div class="section-actions"><button class="btn-main btn-secondary" type="button" onclick="addLeaveRow()">+ เพิ่มพนักงาน</button><button class="btn-main btn-primary" type="button" onclick="saveMultipleLeaves()">บันทึกข้อมูลการลา</button></div><div class="saved-leave-area"><div class="saved-leave-title">บันทึกแล้วในวันที่เลือก</div><div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div></div></div>
       </section>
       <section id="payrollView" class="app-view">
         <div class="compact-page-header"><h1>สรุปเงินเดือน</h1><span class="page-context">รายเดือน</span></div>
-        <div class="card feature-card"><div class="feature-icon">฿</div><h2>คำนวณจากข้อมูลที่บันทึกไว้</h2><p>ระบบรวมวันทำงานและการลาเพื่อช่วยตรวจยอดก่อนลงเป็นค่าใช้จ่ายปลายเดือน</p><ul class="rule-list"><li><span>ค่าแรงต่อวัน</span><strong>400 บาท</strong></li><li><span>หักลารายชั่วโมง</span><strong>40 บาท/ชม.</strong></li><li><span>โควต้าพิเศษ</span><strong>2 วัน</strong></li></ul><button class="btn-main btn-primary" type="button" onclick="openSalaryDashboard()">เปิดสรุปเงินเดือน</button></div>
+        <div class="card feature-card"><div class="feature-icon">฿</div><h2>คำนวณจากข้อมูลที่บันทึกไว้</h2><p>ระบบใช้ค่าแรงและชั่วโมงต่อวันของพนักงานแต่ละคนจาก BOY Master แล้วหักข้อมูลการลาในรอบนั้น</p><button class="btn-main btn-primary" type="button" onclick="openSalaryDashboard()">เปิดสรุปเงินเดือน</button></div>
+      </section>
+      <section id="historyView" class="app-view">
+        <div class="compact-page-header"><h1>ประวัติ</h1><span class="page-context">รายการล่าสุด</span></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">รายรับและรายจ่าย</h2><p class="section-description">ข้อมูลที่ส่งเข้า BOY Transactions แล้ว</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchHistory()">โหลดใหม่</button></div><div id="historyList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูประวัติ</div></div></div>
+      </section>
+      <section id="stockView" class="app-view">
+        <div class="compact-page-header"><h1>สต็อก</h1><span class="page-context">ทาวน่า</span></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">ยอดคงเหลือ</h2><p class="section-description">คำนวณจากประวัติรับเข้า เบิก และปรับสต็อก</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchStock()">โหลดใหม่</button></div><div id="stockList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูสต็อก</div></div></div>
       </section>
       <section id="moreView" class="app-view">
         <div class="compact-page-header"><h1>เมนูเพิ่มเติม</h1><span class="page-context">BOY System</span></div>
-        <div class="more-grid"><a class="more-card" href="./dashboard.html"><span class="store-option-icon">DB</span><span><strong>Dashboard</strong><span>ดูรายงานสรุปของบริษัท</span></span></a><a class="more-card" href="./water-pos-admin.html"><span class="store-option-icon">POS</span><span><strong>จัดการ POS ร้านน้ำ</strong><span>รายการขาย รับเงิน VAT สต็อก และเครื่อง POS</span></span></a><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a><a class="more-card" href="./system-test.html"><span class="store-option-icon">TS</span><span><strong>ตรวจสอบระบบ</strong><span>ทดสอบการเชื่อมต่อหลังบ้าน</span></span></a><button class="more-card settings-btn" type="button" onclick="toggleSettings()"><span class="store-option-icon">ST</span><span><strong>ตั้งค่าระบบ</strong><span>พนักงาน Database และสต็อก</span></span></button></div>
+        <div class="more-grid"><a class="more-card" href="./dashboard.html"><span class="store-option-icon">DB</span><span><strong>Dashboard</strong><span>ดูรายงานสรุปของบริษัท</span></span></a><a class="more-card" href="./water-pos-admin.html"><span class="store-option-icon">POS</span><span><strong>จัดการ POS ร้านน้ำ</strong><span>รายการขาย รับเงิน VAT สต็อก และเครื่อง POS</span></span></a><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a><button class="more-card" type="button" onclick="openSalaryDashboard()"><span class="store-option-icon">฿</span><span><strong>สรุปเงินเดือน</strong><span>ตรวจวันทำงาน การลา และค่าแรง</span></span></button><button class="more-card settings-btn" type="button" onclick="toggleSettings()"><span class="store-option-icon">ST</span><span><strong>ตั้งค่าระบบ</strong><span>พนักงาน สินค้า หน่วย และผู้ขาย</span></span></button></div>
       </section>
     </main>
   </div>
   <nav class="bottom-nav" aria-label="เมนูหลัก"><div class="bottom-nav-inner">
     <button class="bottom-nav-item active" type="button" aria-label="บันทึกประจำวัน" onclick="switchAppView('dailyView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9H3zM9 20v-6h6v6"/></svg><span class="bottom-nav-label">บันทึก</span></button>
-    <button class="bottom-nav-item" type="button" aria-label="การลาพนักงาน" onclick="switchAppView('leaveView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.5-5 3-7 8-7s7.5 2 8 7"/></svg><span class="bottom-nav-label">การลา</span></button>
-    <button class="bottom-nav-item" type="button" aria-label="สรุปเงินเดือน" onclick="switchAppView('payrollView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v13H4zM7 10h4M7 14h2M15 11h2v4h-2z"/></svg><span class="bottom-nav-label">เงินเดือน</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="ประวัติ" onclick="switchAppView('historyView', this); loadBranchHistory()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2-5.3L4 9M4 4v5h5M12 8v5l3 2"/></svg><span class="bottom-nav-label">ประวัติ</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="สต็อก" onclick="switchAppView('stockView', this); loadBranchStock()"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v14H4zM8 3h8v3M8 11h8"/></svg><span class="bottom-nav-label">สต็อก</span></button>
+    <button class="bottom-nav-item" type="button" aria-label="พนักงาน" onclick="switchAppView('leaveView', this); loadEmployeeOverview()"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.5-5 3-7 8-7s7.5 2 8 7"/></svg><span class="bottom-nav-label">พนักงาน</span></button>
     <button class="bottom-nav-item" type="button" aria-label="เมนูเพิ่มเติม" onclick="switchAppView('moreView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg><span class="bottom-nav-label">เพิ่มเติม</span></button>
   </div></nav>
   <div id="reviewOverlay" class="full-overlay hidden"><div class="overlay-card"><h2 style="margin:0;">ตรวจสอบก่อนส่ง</h2><div class="review-count-card"><span>รายการรายจ่าย</span><strong id="reviewExpenseCount">0 รายการ</strong></div><div id="reviewWarnings" class="review-warnings hidden" role="alert"><strong>ข้อมูลรายรับยังไม่ครบ</strong><ul id="reviewWarningList"></ul></div><button class="btn-main btn-primary" type="button" onclick="confirmSubmitReview()">ยืนยันและส่งข้อมูล</button><button class="btn-main btn-secondary" type="button" onclick="closeSubmitReview()">กลับไปตรวจสอบ</button></div></div>
 
   <div id="settingsOverlay" class="full-overlay hidden">
     <div class="overlay-card">
-      <h2 style="margin-top:0;">⚙️ ตั้งค่าระบบ</h2>
-      <h3 style="text-align: left; margin-top: 20px;">👥 จัดการรายชื่อพนักงาน</h3>
-      <textarea id="staffListInput" style="width:100%; height:80px; padding:10px; border-radius:10px; border:1px solid #ccc; font-family:inherit;" placeholder="ปู, นัน, สั้น, หยก..."></textarea>
-      <button onclick="saveStaffList()" style="width:100%; padding:10px; border-radius:10px; border:none; background:#007aff; color:white; font-weight:bold; margin-bottom:20px; margin-top: 5px;">
-        💾 บันทึกรายชื่อพนักงาน
-      </button>
-
-      <h3 style="text-align: left;">📦 จัดการรายการสินค้า</h3>
-      <button onclick="pushSync()" style="width:100%; padding:15px; border-radius:15px; border:1px solid var(--primary); background:#ebfaf0; color:var(--primary); font-weight:bold; margin-bottom:12px;">
-        🔄 อัปเดตรายการสินค้า
-      </button>
-      <button onclick="toggleDatabaseManager()" style="width:100%; padding:15px; border-radius:15px; border:1px solid #007aff; background:#eef6ff; color:#007aff; font-weight:bold; margin-bottom:12px;">
-        🧾 แก้ Database / ซิงค์สต็อก
-      </button>
-
-      <div id="databaseManager" class="db-manager hidden">
+      <h2 style="margin-top:0;">ตั้งค่าระบบ</h2>
+      <p class="section-description" style="text-align:left">แก้ข้อมูลกลางจากหน้าเว็บ ข้อมูลที่บันทึกจะลง BOY Master โดยตรง</p>
+      <div class="master-link-grid"><a class="master-link" href="master-data.html?entity=employees"><span><strong>พนักงาน</strong><small>ข้อมูลส่วนตัว สาขา ตำแหน่ง เวลางาน และค่าแรง</small></span><b>›</b></a><a class="master-link" href="master-data.html?entity=items"><span><strong>สินค้าและวัตถุดิบ</strong><small>รายละเอียดสินค้า หน่วย หมวด และการใช้งาน</small></span><b>›</b></a><a class="master-link" href="master-data.html"><span><strong>ข้อมูลกลางทั้งหมด</strong><small>หน่วย ผู้ขาย ค่าใช้จ่าย สาขา และความสัมพันธ์ต่าง ๆ</small></span><b>›</b></a></div>
+      <button class="btn-main btn-soft" type="button" onclick="pushSync()">อัปเดตรายการรายจ่ายจาก BOY Master</button>
+      <div id="databaseManager" class="db-manager hidden" aria-hidden="true">
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
           <strong>Database รายการสินค้า</strong>
           <button class="mini-btn mini-secondary" type="button" onclick="clearDatabaseForm()">เพิ่มรายการใหม่</button>
@@ -658,8 +678,8 @@
       <div id="salaryTableArea" style="overflow-x: auto;"></div>
       
       <div style="background: #f8f8f8; padding: 10px; border-radius: 10px; font-size: 0.8rem; text-align: left; color: #666; margin-bottom: 15px;">
-        * ค่าแรง 400/วัน | หักลา 40/ชม. <br>
-        * โควต้าพิเศษ 2 วัน (800 บ.) หักออกทันทีที่มีการลา
+        * ค่าแรงและอัตรารายชั่วโมงอ้างอิงข้อมูลพนักงานใน BOY Master<br>
+        * เงินพิเศษคำนวณเทียบเท่าค่าแรง 2 วัน และลดลงตามวันที่ลา
       </div>
 
       <button class="btn-main" style="background: var(--primary); color: white; margin-top: 0;" onclick="postSalariesToExpenses()">
@@ -750,6 +770,92 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    function setupEmployeePeriod() {
+      const monthSelect = document.getElementById('employeeMonth');
+      const yearInput = document.getElementById('employeeYear');
+      const today = new Date();
+      if (monthSelect && monthSelect.options.length === 0) {
+        salaryMonthNames.forEach(function(name, index) {
+          monthSelect.add(new Option(name, String(index + 1)));
+        });
+      }
+      if (monthSelect && !monthSelect.dataset.ready) {
+        monthSelect.value = String(today.getMonth() + 1);
+        monthSelect.dataset.ready = 'true';
+      }
+      if (yearInput && !yearInput.dataset.ready) {
+        yearInput.value = String(today.getFullYear());
+        yearInput.dataset.ready = 'true';
+      }
+    }
+
+    async function loadEmployeeOverview() {
+      setupEmployeePeriod();
+      const container = document.getElementById('employeeOverview');
+      if (!container) return;
+      container.innerHTML = '<div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div>';
+      try {
+        const result = await apiCall('employeeOverview', {
+          month: document.getElementById('employeeMonth').value,
+          year: document.getElementById('employeeYear').value
+        });
+        if (result.status === 'error') throw new Error(result.message || 'โหลดข้อมูลไม่สำเร็จ');
+        const employees = result.employees || [];
+        staffList = employees.map(function(row) { return row.nickname; }).filter(Boolean);
+        localStorage.setItem('BOY_STAFF', JSON.stringify(staffList));
+        if (!employees.length) {
+          container.innerHTML = '<div class="employee-loading">ยังไม่มีพนักงานของสาขาทาวน่าใน BOY Master</div>';
+          return;
+        }
+        container.innerHTML = employees.map(function(row) {
+          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml([row.position, row.employmentStatus].filter(Boolean).join(' · ') || 'ยังไม่ระบุรายละเอียด') + '</div><div class="employee-stats"><span class="employee-stat">ทำงานตามรอบ ' + row.workedDays + ' วัน</span><span class="employee-stat leave">ลา ' + row.leaveDays + ' วัน' + (row.leaveHours ? ' · ' + row.leaveHours + ' ชม.' : '') + '</span></div></div><button class="mini-btn mini-primary" type="button" onclick="prepareLeaveFor(decodeURIComponent(\'' + encodeURIComponent(row.nickname || '') + '\'))">เพิ่มวันลา</button></article>';
+        }).join('');
+      } catch (error) {
+        container.innerHTML = '<div class="employee-loading">โหลดข้อมูลพนักงานไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      }
+    }
+
+    function prepareLeaveFor(name) {
+      clearLeaveList();
+      const input = document.querySelector('#leaveList .hr-name');
+      if (input) input.value = name;
+      document.getElementById('leaveDate').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    async function loadBranchHistory() {
+      const list = document.getElementById('historyList');
+      if (!list) return;
+      list.innerHTML = '<div class="employee-loading">กำลังโหลดประวัติ…</div>';
+      try {
+        const result = await apiCall('branchHistory', { limit: 50 });
+        const rows = result.rows || [];
+        list.innerHTML = rows.length ? rows.map(function(row) {
+          return '<article class="record-row"><div><strong>' + escapeHtml(row.mode || row.type || 'รายการ') + '</strong><div class="record-meta">' + escapeHtml([row.date, row.payment, row.status].filter(Boolean).join(' · ')) + '</div></div><div class="record-amount">' + formatMoney(row.amount) + '</div></article>';
+        }).join('') : '<div class="employee-loading">ยังไม่มีประวัติที่ส่งเข้าระบบกลาง</div>';
+      } catch (error) {
+        list.innerHTML = '<div class="employee-loading">โหลดประวัติไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      }
+    }
+
+    async function loadBranchStock() {
+      const list = document.getElementById('stockList');
+      if (!list) return;
+      list.innerHTML = '<div class="employee-loading">กำลังคำนวณสต็อก…</div>';
+      try {
+        const result = await apiCall('branchStock');
+        const rows = result.rows || [];
+        list.innerHTML = rows.length ? rows.map(function(row) {
+          return '<article class="record-row"><div><strong>' + escapeHtml(row.name) + '</strong><div class="record-meta">' + escapeHtml(row.itemId) + '</div></div><div class="stock-qty">' + toUiNumber(row.quantity).toLocaleString('th-TH') + ' ' + escapeHtml(row.unit || '') + '</div></article>';
+        }).join('') : '<div class="employee-loading">ยังไม่มี Stock Movement ของสาขาทาวน่า</div>';
+      } catch (error) {
+        list.innerHTML = '<div class="employee-loading">โหลดสต็อกไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      }
+    }
+
+    function selectedLeaveDate() {
+      return document.getElementById('leaveDate').value || document.getElementById('mainDate').value;
+    }
+
     function toUiNumber(value) {
       var number = parseFloat(String(value == null ? '' : value).replace(/,/g, ''));
       return Number.isFinite(number) ? number : 0;
@@ -805,7 +911,7 @@
         const writeActions = new Set([
           'submit', 'unlockDate', 'autoSave', 'saveMultipleLeaves',
           'cancelLeaveRecord', 'syncCloud', 'database_saveItem',
-          'database_setActive', 'database_syncToStock'
+          'database_setActive', 'database_syncToStock', 'masterSave', 'masterSetActive'
         ]);
         if (writeActions.has(action)) {
           throw new Error('หน้า staging ยังไม่ได้ต่อ Apps Script ใหม่ จึงไม่บันทึกข้อมูล');
@@ -813,6 +919,9 @@
         if (action === 'loadData') return { draft: '{}', submitted: false };
         if (action === 'getLeavesByDate') return { status: 'success', leaves: [] };
         if (action === 'calculateSalary') return [];
+        if (action === 'employeeOverview') return { status: 'success', employees: [] };
+        if (action === 'masterCatalog') return { status: 'success', headers: [], rows: [] };
+        if (action === 'branchHistory' || action === 'branchStock') return { status: 'success', rows: [] };
         if (action === 'database_getRows') return { status: 'success', rows: [] };
         if (action === 'shared_loadDB') return { status: 'success', database: { categories: {}, itemMeta: {} } };
         if (action === 'pullItems') return {};
@@ -1073,7 +1182,7 @@
     }
 
     async function saveMultipleLeaves() {
-      var date = document.getElementById('mainDate').value;
+      var date = selectedLeaveDate();
       if (!date) return alert("กรุณาเลือกวันที่ด้านบนก่อนครับ");
 
       var rows = document.getElementById('leaveList').children;
@@ -1100,6 +1209,7 @@
         alert(`✅ บันทึกการลา ${leavesToSave.length} รายการ เรียบร้อยแล้ว`);
         clearLeaveList(); // บันทึกเสร็จให้ล้างช่องทิ้ง ป้องกันส่งซ้ำ
         await refreshSavedLeaves();
+        await loadEmployeeOverview();
       } catch (e) {
         alert("❌ บันทึกไม่สำเร็จ สาเหตุ: " + e.message);
       }
@@ -1152,7 +1262,7 @@
     }
 
     async function refreshSavedLeaves(targetDate) {
-      const date = targetDate || document.getElementById('mainDate').value;
+      const date = targetDate || selectedLeaveDate();
       const list = document.getElementById('savedLeaveList');
       if (!list) return;
       if (!date) {
@@ -1166,7 +1276,7 @@
       try {
         const res = await apiCall('getLeavesByDate', { date: date });
         if (res.status === 'error') throw new Error(res.message || 'โหลดรายการลาไม่สำเร็จ');
-        if (targetDate && document.getElementById('mainDate').value !== targetDate) return;
+        if (targetDate && selectedLeaveDate() !== targetDate) return;
         renderSavedLeaves(res.leaves || []);
       } catch (e) {
         list.className = 'saved-leave-empty';
@@ -1176,7 +1286,7 @@
     }
 
     async function cancelSavedLeave(rowNumber, staffName) {
-      const date = document.getElementById('mainDate').value;
+      const date = selectedLeaveDate();
       if (!date) return alert("กรุณาเลือกวันที่ก่อนครับ");
       if (!confirm(`ยืนยันยกเลิกการลาของ ${staffName} ในวันที่เลือกหรือไม่?`)) return;
 
@@ -1185,6 +1295,7 @@
         const res = await apiCall('cancelLeaveRecord', { rowNumber: rowNumber, date: date });
         if (res.status === 'error') throw new Error(res.message || 'ยกเลิกไม่สำเร็จ');
         await refreshSavedLeaves();
+        await loadEmployeeOverview();
         alert("✅ ยกเลิกรายการลาเรียบร้อยแล้ว");
       } catch (e) {
         alert("❌ ยกเลิกไม่สำเร็จ สาเหตุ: " + e.message);
@@ -1618,12 +1729,16 @@
 
       var savedStaff = localStorage.getItem('BOY_STAFF');
       if (savedStaff) { staffList = JSON.parse(savedStaff); }
-      document.getElementById('staffListInput').value = staffList.join(', ');
 
       var today = new Date();
-      document.getElementById('mainDate').value = today.toISOString().split('T')[0];
+      var todayKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      document.getElementById('mainDate').value = todayKey;
+      document.getElementById('leaveDate').value = todayKey;
+      setupEmployeePeriod();
+      document.getElementById('formArea').addEventListener('input', persistLocalDraft);
       loadData().finally(function() {
         setTimeout(pullItems, 0);
+        setTimeout(loadEmployeeOverview, 0);
       });
     }
 
@@ -1868,6 +1983,13 @@
       };
     }
 
+    function persistLocalDraft() {
+      if (isLoadingData) return;
+      const date = document.getElementById('mainDate').value;
+      if (!date) return;
+      localStorage.setItem('BOY_TAWANA_DRAFT_' + date, JSON.stringify(collectFormDataSnapshot()));
+    }
+
     async function submitToSheet() {
       var date = document.getElementById('mainDate').value;
       if(!date) return alert("กรุณาระบุวันที่");
@@ -1878,6 +2000,7 @@
         const res = await apiCall('submit', { date: date, data: data });
         document.getElementById('loadingOverlay').classList.add('hidden');
         if(res.status === "Success") {
+          localStorage.removeItem('BOY_TAWANA_DRAFT_' + date);
           setSaveState('saved', 'ส่งข้อมูลแล้ว');
           const dObj = new Date(date);
           const thMonths = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
@@ -1926,6 +2049,7 @@
       var date = document.getElementById('mainDate').value;
       if(!date) return;
       var data = collectFormDataSnapshot();
+      localStorage.setItem('BOY_TAWANA_DRAFT_' + date, JSON.stringify(data));
       updateAllExpenseCards();
       updateDailySummary(data);
       setSaveState('saving', 'กำลังบันทึกร่าง...');
@@ -1952,12 +2076,16 @@
       try {
         const parsed = await apiCall('loadData', { date: date });
         if (requestId !== loadDataSeq || document.getElementById('mainDate').value !== date) return;
-        var d = {}; try { d = JSON.parse(parsed.draft || '{}'); } catch(e) {}
+        var d = {};
+        try {
+          d = JSON.parse(parsed.draft || '{}');
+          if (Object.keys(d).length === 0) {
+            d = JSON.parse(localStorage.getItem('BOY_TAWANA_DRAFT_' + date) || '{}');
+          }
+        } catch(e) {}
         
         // ล้างข้อมูลหน้าจอและโหลดใหม่
         document.getElementById('expenseList').innerHTML = '';
-        clearLeaveList(); // เคลียร์ช่องให้สะอาดทุกครั้งที่เปลี่ยนวัน
-        refreshSavedLeaves(date);
         if (requestId !== loadDataSeq || document.getElementById('mainDate').value !== date) return;
 
         document.getElementById('val-cash').value = (d.cash) ? d.cash.v : '';
@@ -1987,6 +2115,9 @@
       }
     }
     
+    window.addEventListener('online', function() {
+      if (document.getElementById('mainDate').value) doSync();
+    });
     window.onload = initApp;
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

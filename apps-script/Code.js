@@ -24,6 +24,7 @@ const CONFIG = {
     salary: 'สรุปเงินเดือน',
     bigcOrderMenu: 'รายการเบิกของ',
     masterBranches: 'M_สาขา',
+    masterCategories: 'M_หมวดหมู่',
     masterItems: 'M_สินค้า',
     masterUnits: 'M_หน่วย',
     masterItemUnits: 'M_หน่วยสินค้า',
@@ -31,6 +32,7 @@ const CONFIG = {
     masterSuppliers: 'M_ผู้ขาย',
     masterItemSuppliers: 'M_ผู้ขายสินค้า',
     masterEmployees: 'M_พนักงาน',
+    masterBranchItems: 'M_สินค้าสาขา',
     transactionsV2: 'T_Transactions',
     transactionLinesV2: 'T_รายละเอียด',
     paymentsV2: 'T_การชำระเงิน',
@@ -132,6 +134,24 @@ function doPost(e) {
         break;
       case 'calculateSalary':
         result = handleCalculateSalary_(payload.month, payload.year, payload.staffList || []);
+        break;
+      case 'employeeOverview':
+        result = handleEmployeeOverview_(payload.month, payload.year);
+        break;
+      case 'masterCatalog':
+        result = handleMasterCatalog_(payload.entity);
+        break;
+      case 'masterSave':
+        result = handleMasterSave_(payload.entity, payload.rowNumber, payload.values || {});
+        break;
+      case 'masterSetActive':
+        result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active);
+        break;
+      case 'branchHistory':
+        result = handleBranchHistory_(payload.limit);
+        break;
+      case 'branchStock':
+        result = handleBranchStock_();
         break;
       case 'syncCloud':
         result = { status: 'success', message: 'ข้อมูล Database ถูกอ่านจาก BOY_Master โดยตรงแล้ว' };
@@ -360,6 +380,104 @@ function tableObjects_(spreadsheetId, sheetName) {
     });
     return obj;
   });
+}
+
+const MASTER_ENTITY_SPECS = {
+  employees: { sheet: 'M_พนักงาน', id: 'employee_id', prefix: 'EMP', title: 'พนักงาน', required: ['ชื่อเล่น'] },
+  items: { sheet: 'M_สินค้า', id: 'item_id', prefix: 'ITEM', title: 'สินค้าและวัตถุดิบ', required: ['ชื่อสินค้า'] },
+  expenseItems: { sheet: 'M_รายการค่าใช้จ่าย', id: 'expense_item_id', prefix: 'EXP', title: 'รายการค่าใช้จ่าย', required: ['ชื่อรายการค่าใช้จ่าย'] },
+  units: { sheet: 'M_หน่วย', id: 'unit_id', prefix: 'UNIT', title: 'หน่วย', required: ['ชื่อหน่วย'] },
+  suppliers: { sheet: 'M_ผู้ขาย', id: 'supplier_id', prefix: 'SUP', title: 'ผู้ขาย', required: ['ชื่อผู้ขาย'] },
+  branches: { sheet: 'M_สาขา', id: 'branch_id', prefix: 'BR', title: 'สาขา', required: ['ชื่อสาขา'] },
+  categories: { sheet: 'M_หมวดหมู่', id: 'subcategory_id', prefix: 'SUB', title: 'หมวดหมู่', required: ['ชื่อประเภทย่อย'] },
+  itemUnits: { sheet: 'M_หน่วยสินค้า', id: 'item_unit_id', prefix: 'IU', title: 'หน่วยสินค้า', required: ['item_id', 'unit_id'] },
+  itemSuppliers: { sheet: 'M_ผู้ขายสินค้า', id: 'item_supplier_id', prefix: 'IS', title: 'ผู้ขายสินค้า', required: ['item_id', 'supplier_id'] },
+  branchItems: { sheet: 'M_สินค้าสาขา', id: 'branch_item_id', prefix: 'BI', title: 'สินค้าประจำสาขา', required: ['branch_id', 'item_id'] }
+};
+
+function masterSpec_(entity) {
+  const key = normalizeText_(entity);
+  const spec = MASTER_ENTITY_SPECS[key];
+  if (!spec) throw new Error('ไม่รองรับข้อมูล Master ประเภทนี้');
+  return spec;
+}
+
+function masterHeaders_(sheet) {
+  const lastColumn = sheet.getLastColumn();
+  if (!lastColumn) throw new Error('ไม่พบหัวตาราง Master');
+  return sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0].map(normalizeText_);
+}
+
+function nextMasterId_(sheet, idColumn, prefix) {
+  const lastRow = sheet.getLastRow();
+  const values = lastRow > 1 ? sheet.getRange(2, idColumn, lastRow - 1, 1).getDisplayValues() : [];
+  let max = 0;
+  values.forEach(function(row) {
+    const match = normalizeText_(row[0]).match(/(\d+)$/);
+    if (match) max = Math.max(max, Number(match[1]));
+  });
+  return prefix + '-' + String(max + 1).padStart(4, '0');
+}
+
+function handleMasterCatalog_(entity) {
+  const spec = masterSpec_(entity);
+  const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
+  const headers = masterHeaders_(sh);
+  const rows = tableObjects_(CONFIG.spreadsheets.master, spec.sheet).filter(function(row) {
+    if (!isBlank_(row[spec.id])) return true;
+    return (spec.required || []).some(function(header) { return !isBlank_(row[header]); });
+  });
+  return {
+    status: 'success', entity: entity, title: spec.title, idHeader: spec.id,
+    headers: headers, rows: rows, required: spec.required || []
+  };
+}
+
+function handleMasterSave_(entity, rowNumber, incoming) {
+  const spec = masterSpec_(entity);
+  const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
+  const headers = masterHeaders_(sh);
+  const idIndex = headers.indexOf(spec.id);
+  if (idIndex < 0) throw new Error('ไม่พบคอลัมน์รหัส ' + spec.id);
+  (spec.required || []).forEach(function(header) {
+    if (isBlank_(incoming[header])) throw new Error('กรุณากรอก ' + header);
+  });
+
+  const lock = lock_();
+  lock.waitLock(15000);
+  try {
+    const rn = Number(rowNumber);
+    const isUpdate = rn >= 2 && rn <= sh.getLastRow();
+    const existing = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getValues()[0] : new Array(headers.length).fill('');
+    const row = headers.map(function(header, index) {
+      if (header === spec.id) return isUpdate ? existing[index] : nextMasterId_(sh, idIndex + 1, spec.prefix);
+      if (!Object.prototype.hasOwnProperty.call(incoming, header)) return existing[index];
+      if (header === 'เปิดใช้งาน') return toBool_(incoming[header], true);
+      return incoming[header];
+    });
+    if (!isUpdate) {
+      const activeIndex = headers.indexOf('เปิดใช้งาน');
+      if (activeIndex >= 0 && isBlank_(row[activeIndex])) row[activeIndex] = true;
+      appendRows_(sh, [row]);
+    } else {
+      sh.getRange(rn, 1, 1, headers.length).setValues([row]);
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return handleMasterCatalog_(entity);
+}
+
+function handleMasterSetActive_(entity, rowNumber, active) {
+  const spec = masterSpec_(entity);
+  const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
+  const headers = masterHeaders_(sh);
+  const activeIndex = headers.indexOf('เปิดใช้งาน');
+  const rn = Number(rowNumber);
+  if (activeIndex < 0) throw new Error('ตารางนี้ไม่มีคอลัมน์เปิดใช้งาน');
+  if (!rn || rn < 2 || rn > sh.getLastRow()) throw new Error('แถวข้อมูลไม่ถูกต้อง');
+  sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
+  return handleMasterCatalog_(entity);
 }
 
 function lookupKey_(value) {
@@ -2412,7 +2530,7 @@ function handleCancelLeaveRecord_(date, rowNumber) {
   return { status: 'success' };
 }
 
-function handleCalculateSalary_(month, year, staffList) {
+function handleCalculateSalary_(month, year, staffList, employeeLookupsOverride) {
   const m = Number(month);
   const y = Number(year);
   if (!m || !y) throw new Error('เดือนหรือปีไม่ถูกต้อง');
@@ -2422,8 +2540,13 @@ function handleCalculateSalary_(month, year, staffList) {
     .filter(Boolean);
   const leavesByStaff = getLeavesForMonth_(m, y);
   const daysInMonth = new Date(y, m, 0).getDate();
+  const employeeLookups = employeeLookupsOverride || normalizedMasterLookups_().employeesByName;
 
   return staff.map(function(name) {
+    const employee = employeeLookups[lookupKey_(name)] || {};
+    const dailyWage = toNumber_(employee['ค่าแรงต่อวัน']) || 400;
+    const hoursPerDay = toNumber_(employee['ชั่วโมง/วัน']) || 10;
+    const hourlyRate = dailyWage / hoursPerDay;
     const leaves = leavesByStaff[name] || [];
     let fullLeaves = 0;
     let leaveHours = 0;
@@ -2440,9 +2563,9 @@ function handleCalculateSalary_(month, year, staffList) {
 
     const penaltyDays = Math.min(2, Object.keys(leaveDates).length);
     const workedDays = Math.max(0, daysInMonth - fullLeaves);
-    const basePay = workedDays * 400;
-    const hourDeduction = leaveHours * 40;
-    const bonusPay = Math.max(0, 800 - (penaltyDays * 400));
+    const basePay = workedDays * dailyWage;
+    const hourDeduction = leaveHours * hourlyRate;
+    const bonusPay = Math.max(0, (dailyWage * 2) - (penaltyDays * dailyWage));
     const totalNet = basePay - hourDeduction + bonusPay;
 
     return {
@@ -2450,12 +2573,96 @@ function handleCalculateSalary_(month, year, staffList) {
       workedDays: workedDays,
       fullLeaves: fullLeaves,
       leaveHours: leaveHours,
+      dailyWage: dailyWage,
+      hourlyRate: hourlyRate,
       basePay: basePay,
       hourDeduction: hourDeduction,
       bonusPay: bonusPay,
       totalNet: totalNet
     };
   });
+}
+
+function handleEmployeeOverview_(month, year) {
+  const now = now_();
+  const m = Math.min(12, Math.max(1, Number(month) || (now.getMonth() + 1)));
+  const y = Number(year) || now.getFullYear();
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, CONFIG.branchName) || 'BR-001';
+  const employees = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterEmployees)
+    .filter(function(row) {
+      return toBool_(row['เปิดใช้งาน'], true) && normalizeText_(row.branch_id) === branchId && lookupKey_(row['ตำแหน่ง']) !== 'owner';
+    });
+  const names = employees.map(function(row) {
+    return normalizeText_(row['ชื่อเล่น']) || [normalizeText_(row['ชื่อจริง']), normalizeText_(row['นามสกุล'])].filter(Boolean).join(' ');
+  }).filter(Boolean);
+  const salaryByName = {};
+  handleCalculateSalary_(m, y, names, lookups.employeesByName).forEach(function(row) { salaryByName[lookupKey_(row.name)] = row; });
+
+  return {
+    status: 'success', month: m, year: y, branchId: branchId,
+    employees: employees.map(function(row) {
+      const name = normalizeText_(row['ชื่อเล่น']) || [normalizeText_(row['ชื่อจริง']), normalizeText_(row['นามสกุล'])].filter(Boolean).join(' ');
+      const stats = salaryByName[lookupKey_(name)] || {};
+      return {
+        rowNumber: row.__rowNumber,
+        employeeId: normalizeText_(row.employee_id),
+        code: normalizeText_(row['รหัสพนักงาน']),
+        nickname: name,
+        fullName: [normalizeText_(row['ชื่อจริง']), normalizeText_(row['นามสกุล'])].filter(Boolean).join(' '),
+        position: normalizeText_(row['ตำแหน่ง']),
+        employmentStatus: normalizeText_(row['สถานะการจ้าง']),
+        startTime: normalizeText_(row['เวลาเริ่มงาน']),
+        endTime: normalizeText_(row['เวลาเลิกงาน']),
+        hoursPerDay: toNumber_(row['ชั่วโมง/วัน']),
+        dailyWage: toNumber_(row['ค่าแรงต่อวัน']),
+        workedDays: Number(stats.workedDays || 0),
+        leaveDays: Number(stats.fullLeaves || 0),
+        leaveHours: Number(stats.leaveHours || 0)
+      };
+    })
+  };
+}
+
+function handleBranchHistory_(limit) {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, CONFIG.branchName) || 'BR-001';
+  const maxRows = Math.min(100, Math.max(10, Number(limit) || 40));
+  const rows = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2)
+    .filter(function(row) { return normalizeText_(row.branch_id) === branchId; })
+    .reverse().slice(0, maxRows).map(function(row) {
+      let date = '';
+      try { date = dateKey_(row['วันที่รายการ']); } catch (err) { date = normalizeText_(row['วันที่รายการ']); }
+      return {
+        id: normalizeText_(row.transaction_id), date: date,
+        type: normalizeText_(row['ประเภทธุรกรรม']), mode: normalizeText_(row['รูปแบบการบันทึก']),
+        amount: toNumber_(row['ยอดสุทธิ']), payment: normalizeText_(row['ช่องทางชำระเงิน']),
+        status: normalizeText_(row['สถานะ']), note: normalizeText_(row['หมายเหตุ'])
+      };
+    });
+  return { status: 'success', branchId: branchId, rows: rows };
+}
+
+function handleBranchStock_() {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, CONFIG.branchName) || 'BR-001';
+  const totals = {};
+  tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.stockMovementsV2).forEach(function(row) {
+    if (normalizeText_(row.branch_id) !== branchId) return;
+    const itemId = normalizeText_(row.item_id);
+    if (!itemId) return;
+    if (!totals[itemId]) totals[itemId] = 0;
+    totals[itemId] += toNumber_(row['จำนวนเปลี่ยนแปลงหน่วยฐาน']);
+  });
+  const rows = Object.keys(totals).map(function(itemId) {
+    const item = lookups.itemsById[itemId] || {};
+    const unit = lookups.unitsById[normalizeText_(item.base_unit_id)] || {};
+    return {
+      itemId: itemId, name: normalizeText_(item['ชื่อสินค้า']) || itemId,
+      quantity: totals[itemId], unit: normalizeText_(unit['ชื่อหน่วย'] || unit['สัญลักษณ์'])
+    };
+  }).sort(function(a, b) { return a.name.localeCompare(b.name, 'th'); });
+  return { status: 'success', branchId: branchId, rows: rows };
 }
 
 function getLeavesForMonth_(month, year) {
