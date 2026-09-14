@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0f513f">
+  <title>จัดการ POS ร้านน้ำ · BOY Operation</title>
+  <link rel="stylesheet" href="assets/css/water-pos-admin.css">
+  <style>.danger-text{color:#b9362b;margin-right:auto}</style>
+</head>
+<body>
+  <style id="boyAuthPendingStyle">body{visibility:hidden}</style>
+  <header class="topbar">
+    <a class="back" href="tawana.html" aria-label="กลับ">←</a>
+    <div><small>BOY OPERATION</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div>
+    <span class="sync-pill" id="syncPill"><i></i><b>กำลังเชื่อมต่อ</b></span>
+  </header>
+
+  <main>
+    <nav class="tabs" aria-label="หัวข้อ">
+      <button class="active" data-tab="overview">ภาพรวม</button>
+      <button data-tab="catalog">รายการขาย</button>
+      <button data-tab="payments">รับเงิน</button>
+      <button data-tab="stock">สต็อก</button>
+      <button data-tab="settings">ร้านและ VAT</button>
+      <button data-tab="devices">เครื่อง POS</button>
+    </nav>
+
+    <section class="panel active" id="overviewPanel">
+      <div class="page-head"><div><h2>สถานะวันนี้</h2><p>ข้อมูลจริงที่ Water POS ส่งเข้า BOY Central</p></div><button class="secondary" id="refreshAll">รีเฟรช</button></div>
+      <div class="metrics" id="metrics"></div>
+      <div class="two-col"><article class="card"><h3>ยอดตามช่องทาง</h3><div id="paymentBreakdown" class="rows"></div></article><article class="card"><h3>การซิงก์ล่าสุด</h3><div id="recentSync" class="rows"></div></article></div>
+    </section>
+
+    <section class="panel" id="catalogPanel">
+      <div class="page-head"><div><h2>รายการขายและหมวดหมู่</h2><p>แก้ที่นี่แล้ว POS จะดึงข้อมูลใหม่เมื่อซิงก์</p></div><div class="actions"><button class="secondary" id="addProduct">+ เพิ่มรายการ</button><button class="primary" data-save-config>บันทึกทั้งหมด</button></div></div>
+      <div class="category-strip" id="categoryStrip"></div>
+      <div id="catalogList" class="catalog-list"></div>
+    </section>
+
+    <section class="panel" id="paymentsPanel">
+      <div class="page-head"><div><h2>ช่องทางชำระเงิน</h2><p>รูป QR ที่อัปโหลดจะแสดงบนจอลูกค้า</p></div><div class="actions"><button class="secondary" id="addPayment">+ เพิ่มช่องทาง</button><button class="primary" data-save-config>บันทึกทั้งหมด</button></div></div>
+      <div id="paymentList" class="edit-list"></div>
+    </section>
+
+    <section class="panel" id="stockPanel">
+      <div class="page-head"><div><h2>สต็อกกลางของทาวน่า</h2><p>ยอดจากการรับของใน BOY และการขายใน POS อยู่ใน Ledger เดียวกัน</p></div><button class="secondary" id="refreshStock">รีเฟรชยอด</button></div>
+      <div id="stockList" class="stock-grid"></div>
+    </section>
+
+    <section class="panel" id="settingsPanel">
+      <div class="page-head"><div><h2>ข้อมูลร้าน การขาย และ VAT</h2><p>ใช้ร่วมกันทุกเครื่องในสาขาทาวน่า</p></div><button class="primary" data-save-config>บันทึกทั้งหมด</button></div>
+      <div class="settings-grid">
+        <article class="card"><h3>ข้อมูลร้าน</h3><label>ชื่อร้าน<input id="storeName"></label><label>ชื่อสาขา<input id="branchName" readonly></label><label>เวลาเริ่มวันขาย<input id="businessDayStart" type="time"></label></article>
+        <article class="card"><h3>ภาษีและใบเสร็จ</h3><label class="check"><input id="vatEnabled" type="checkbox"><span>เปิดใช้ VAT</span></label><label>อัตรา VAT (%)<input id="vatRate" type="number" min="0" max="100" step="0.01"></label><label>รูปแบบราคา<select id="vatPriceMode"><option value="included">ราคารวม VAT แล้ว</option><option value="excluded">ราคายังไม่รวม VAT</option></select></label><label>ชื่อผู้ประกอบการ<input id="legalName"></label><label>เลขประจำตัวผู้เสียภาษี<input id="taxId"></label></article>
+        <article class="card"><h3>กะและสต็อก</h3><label class="check"><input id="requireOpeningCash" type="checkbox"><span>บังคับเงินสดเริ่มต้น</span></label><label class="check"><input id="requireClosingCash" type="checkbox"><span>บังคับนับเงินตอนปิดกะ</span></label><label class="check"><input id="preventNegativeStock" type="checkbox"><span>ป้องกันสต็อกติดลบ</span></label><label class="check"><input id="lowStockAlerts" type="checkbox"><span>แจ้งเตือนสต็อกต่ำ</span></label></article>
+      </div>
+    </section>
+
+    <section class="panel" id="devicesPanel">
+      <div class="page-head"><div><h2>เครื่อง POS และข้อมูลค้างส่ง</h2><p>พนักงานไม่ต้องมีบัญชี ใช้รหัสจับคู่เพียงครั้งแรก</p></div><button class="primary" id="createPairing">สร้างรหัสเชื่อมเครื่อง</button></div>
+      <div id="pairingResult" class="pairing-result" hidden></div>
+      <div id="deviceList" class="edit-list"></div>
+    </section>
+  </main>
+
+  <dialog id="productDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="productDialogTitle">เพิ่มรายการขาย</h2><label>ชื่อรายการ<input id="productName"></label><div class="field-row"><label>ราคา<input id="productPrice" type="number" min="0"></label><label>หมวดหมู่<input id="productCategory" list="categoryOptions"></label></div><label>Emoji หรือสัญลักษณ์<input id="productEmoji" maxlength="8"></label><label class="check"><input id="productActive" type="checkbox" checked><span>เปิดขาย</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="saveProduct">เก็บรายการ</button></menu></form></dialog>
+  <dialog id="paymentDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="paymentDialogTitle">เพิ่มช่องทางชำระเงิน</h2><label>ชื่อช่องทาง<input id="paymentName"></label><div class="field-row"><label>ประเภท<select id="paymentType"><option value="cash">เงินสด</option><option value="transfer">เงินโอน</option><option value="government">โครงการรัฐ</option><option value="delivery">Delivery</option><option value="other">อื่นๆ</option></select></label><label>ค่าธรรมเนียม (%)<input id="paymentFee" type="number" min="0" max="100" step="0.01"></label></div><label>บัญชีหรือปลายทางรับเงิน<input id="paymentAccount"></label><label class="check"><input id="paymentReference" type="checkbox"><span>ต้องกรอกเลขอ้างอิง</span></label><label class="check"><input id="paymentChange" type="checkbox"><span>สามารถทอนเงินได้</span></label><label class="check"><input id="paymentActive" type="checkbox" checked><span>เปิดใช้งาน</span></label><menu><button type="button" class="secondary danger-text" id="deletePayment">ลบ</button><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="savePayment">เก็บรายการ</button></menu></form></dialog>
+  <datalist id="categoryOptions"></datalist>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/water-pos-admin.js"></script>
+</body>
+</html>

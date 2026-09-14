@@ -787,7 +787,7 @@
     }
     state.profile = profile;
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|dashboard)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
     }
