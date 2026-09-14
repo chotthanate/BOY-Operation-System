@@ -1,6 +1,7 @@
 # Environment files and secrets
 .env
 .env.*
+assets/js/boy-local-secret.js
 !.env.example
 !.env.sample
 *.pem

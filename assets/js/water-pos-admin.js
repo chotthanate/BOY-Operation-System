@@ -23,7 +23,16 @@
   async function start() {
     try {
       const { data: auth } = await client.auth.getSession();
-      if (!auth.session) return;
+      if (!auth.session) {
+        if (window.BOY_LOCAL_ACCESS?.hasAccess()) {
+          setConnected(false, "BOY Central พักใช้งาน");
+          $("#metrics").innerHTML = '<article class="metric"><span>สถานะระบบกลาง</span><strong>รอเปิดบริการ</strong></article>';
+          $("#paymentBreakdown").innerHTML = '<small>ข้อมูลจะกลับมาอัตโนมัติเมื่อ BOY Central พร้อม</small>';
+          $("#recentSync").innerHTML = '<small>ยังแก้ข้อมูลกลางไม่ได้ในขณะนี้</small>';
+          $$('[data-save-config],#createPairing,#addProduct,#addPayment').forEach((button) => button.disabled = true);
+        }
+        return;
+      }
       const branchResult = await db.from("branches").select("id,company_id,code,name").eq("code", "TAWANA").single();
       if (branchResult.error) throw branchResult.error;
       branch = branchResult.data;
