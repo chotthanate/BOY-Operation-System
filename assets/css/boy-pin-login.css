@@ -1,0 +1,45 @@
+.auth-card {
+  max-width: 420px;
+  margin: min(14vh, 96px) auto 0;
+  padding: 24px;
+}
+
+.page[hidden],
+.bottom-nav[hidden],
+.auth-mode .topbar {
+  display: none !important;
+}
+
+.auth-mode .app-shell {
+  display: grid;
+  min-height: 100vh;
+  align-items: start;
+}
+
+.auth-card .section-heading {
+  margin: 0 0 22px;
+}
+
+.pin-login-form {
+  gap: 14px;
+}
+
+.pin-input {
+  min-height: 60px;
+  text-align: center;
+  font-size: 1.7rem;
+  font-weight: 900;
+  letter-spacing: .45em;
+  padding-left: calc(12px + .45em);
+}
+
+.pin-login-form .primary-button {
+  min-height: 56px;
+}
+
+@media (max-width: 430px) {
+  .auth-card {
+    margin-top: 9vh;
+    padding: 20px;
+  }
+}

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css">
   <link rel="stylesheet" href="assets/css/burger-history.css">
   <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-7">
+  <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
 </head>
 <body>
   <div class="app-shell">
@@ -23,13 +24,11 @@
 
     <main>
       <section class="auth-card" id="authCard" hidden>
-        <div class="section-heading"><div><small>BOY CENTRAL</small><h1>เข้าสู่ระบบ</h1></div></div>
-        <form id="loginForm" class="form-stack">
-          <label>อีเมล<input id="loginEmail" type="email" autocomplete="username" required></label>
-          <label>รหัสผ่าน<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+        <div class="section-heading"><div><small>BOY OPERATION</small><h1>ใส่รหัสเข้าใช้งาน</h1></div></div>
+        <form id="loginForm" class="form-stack pin-login-form">
+          <label>รหัส 6 หลัก<input id="loginPassword" class="pin-input" type="password" inputmode="numeric" autocomplete="current-password" pattern="[0-9]{6}" minlength="6" maxlength="6" enterkeyhint="go" autofocus required></label>
           <p class="form-error" id="loginError" role="alert"></p>
-          <button class="primary-button" type="submit">เข้าสู่ระบบ</button>
-          <button class="secondary-button" id="magicLinkButton" type="button">ส่งลิงก์เข้าอีเมล</button>
+          <button class="primary-button" id="loginButton" type="submit">เข้าใช้งาน</button>
         </form>
       </section>
 
@@ -160,7 +159,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/burger.js?v=20260904-6"></script>
+  <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
+  <script src="assets/js/burger.js?v=20260915-1"></script>
 </body>
 </html>

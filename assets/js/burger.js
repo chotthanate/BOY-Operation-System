@@ -778,6 +778,7 @@
       if (cachedProfile && isNetworkError(error)) profile = cachedProfile;
       else {
         state.session = null;
+        document.body.classList.add("auth-mode");
         $("#authCard").hidden = false;
         $$(".page,.bottom-nav").forEach((element) => element.hidden = true);
         $("#loginError").textContent = error.message;
@@ -786,6 +787,7 @@
       }
     }
     state.profile = profile;
+    document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
     if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
@@ -807,25 +809,6 @@
     } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
   }
 
-  async function requestMagicLink() {
-    const email = $("#loginEmail").value.trim();
-    const button = $("#magicLinkButton");
-    $("#loginError").textContent = "";
-    if (!email || !$("#loginEmail").checkValidity()) {
-      $("#loginError").textContent = "กรุณากรอกอีเมลให้ถูกต้อง";
-      return;
-    }
-    button.disabled = true;
-    button.textContent = "กำลังส่ง";
-    const { error } = await client.auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: false, emailRedirectTo: `${location.origin}${location.pathname}` }
-    });
-    button.disabled = false;
-    button.textContent = "ส่งลิงก์เข้าอีเมล";
-    $("#loginError").textContent = error ? error.message : "ส่งลิงก์แล้ว กรุณาตรวจอีเมล";
-  }
-
   async function init() {
     if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("burger-sw.js").catch(() => {});
     $("#expenseDate").value = today();
@@ -833,6 +816,7 @@
     state.lines = [newLine()];
     renderLines();
     if (!configured) {
+      document.body.classList.add("auth-mode");
       setConnection("รอตั้งค่า BOY Central", "error");
       $("#authCard").hidden = false;
       $("#loginForm").innerHTML = '<div class="empty-state">ยังไม่ได้เชื่อม Supabase BOY Central</div>';
@@ -841,7 +825,7 @@
     }
     const { data } = await client.auth.getSession();
     if (data.session) await enterApp(data.session);
-    else { $("#authCard").hidden = false; $$(".page,.bottom-nav").forEach((element) => element.hidden = true); setConnection("กรุณาเข้าสู่ระบบ"); }
+    else { document.body.classList.add("auth-mode"); $("#authCard").hidden = false; $$(".page,.bottom-nav").forEach((element) => element.hidden = true); setConnection("กรุณาเข้าสู่ระบบ"); }
   }
 
   $$(".bottom-nav button").forEach((button) => button.addEventListener("click", () => setPage(button.dataset.target)));
@@ -908,8 +892,22 @@
   $("#masterRequiresQuantity").addEventListener("change", () => { if (!$("#masterRequiresQuantity").checked) $("#masterRequiresUnit").checked = false; });
   $("#masterForm").addEventListener("submit", saveMaster);
   $("#logoutButton").addEventListener("click", async () => { await client.auth.signOut(); location.reload(); });
-  $("#loginForm").addEventListener("submit", async (event) => { event.preventDefault(); $("#loginError").textContent = ""; const { data, error } = await client.auth.signInWithPassword({ email: $("#loginEmail").value, password: $("#loginPassword").value }); if (error) { $("#loginError").textContent = error.message; return; } await enterApp(data.session); });
-  $("#magicLinkButton").addEventListener("click", requestMagicLink);
+  $("#loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const input = $("#loginPassword"); const button = $("#loginButton"); const pin = input.value.trim();
+    $("#loginError").textContent = "";
+    if (!/^\d{6}$/.test(pin)) { $("#loginError").textContent = "กรุณาใส่รหัส 6 หลัก"; input.focus(); return; }
+    button.disabled = true; button.textContent = "กำลังตรวจรหัส";
+    const { data, error } = await client.auth.signInWithPassword({ email: config.ownerLoginEmail, password: pin });
+    button.disabled = false; button.textContent = "เข้าใช้งาน";
+    if (error) {
+      input.value = "";
+      const invalidPin = error.status === 400 || /invalid login credentials/i.test(error.message || "");
+      $("#loginError").textContent = invalidPin ? "รหัสไม่ถูกต้อง ลองอีกครั้ง" : "ระบบออนไลน์ยังไม่พร้อม กรุณาลองใหม่ภายหลัง";
+      input.focus(); return;
+    }
+    await enterApp(data.session);
+  });
   window.addEventListener("offline", updateSyncStatus);
   window.addEventListener("online", async () => {
     const sent = await flushOutbox({ notify: true });
