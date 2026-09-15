@@ -427,9 +427,22 @@ function handleMasterCatalog_(entity) {
     if (!isBlank_(row[spec.id])) return true;
     return (spec.required || []).some(function(header) { return !isBlank_(row[header]); });
   });
+  const references = {};
+  const referenceMap = {
+    employees: ['branches'], items: ['categories', 'units'], expenseItems: ['categories', 'items'],
+    itemUnits: ['items', 'units'], itemSuppliers: ['items', 'suppliers'], branchItems: ['branches', 'items']
+  };
+  (referenceMap[entity] || []).forEach(function(referenceEntity) {
+    const referenceSpec = masterSpec_(referenceEntity);
+    const referenceRows = tableObjects_(CONFIG.spreadsheets.master, referenceSpec.sheet).filter(function(row) {
+      if (!isBlank_(row[referenceSpec.id])) return true;
+      return (referenceSpec.required || []).some(function(header) { return !isBlank_(row[header]); });
+    });
+    references[referenceEntity] = { idHeader: referenceSpec.id, rows: referenceRows };
+  });
   return {
     status: 'success', entity: entity, title: spec.title, idHeader: spec.id,
-    headers: headers, rows: rows, required: spec.required || []
+    headers: headers, rows: rows, required: spec.required || [], references: references
   };
 }
 
