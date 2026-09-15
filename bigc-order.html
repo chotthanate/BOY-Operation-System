@@ -63,6 +63,16 @@
         .cup-icon { font-size: 60px; animation: bounceLoader 0.8s infinite alternate ease-in-out; text-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .loader-text { margin-top: 15px; font-weight: bold; font-size: 18px; background: var(--primary); padding: 8px 20px; border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
         .revenue-box { background: #E8F5E9; border: 1px solid #C8E6C9; padding: 15px; border-radius: 12px; margin-bottom: 20px; }
+        .revenue-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .revenue-title { color: var(--primary-dark); font-size: 18px; font-weight: bold; }
+        .revenue-status { display: none; margin-top: 5px; color: #61746a; font-size: 12px; font-weight: 700; }
+        .revenue-toggle { min-height: 42px; display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; border: 1px solid #A5D6A7; border-radius: 11px; background: #fff; color: var(--primary-dark); font-weight: bold; cursor: pointer; }
+        .revenue-toggle .chevron { transition: transform .18s ease; }
+        .revenue-fields { display: flex; gap: 10px; margin-top: 15px; }
+        .revenue-field { flex: 1; }
+        .revenue-box.collapsed .revenue-fields { display: none; }
+        .revenue-box.collapsed .revenue-status { display: block; }
+        .revenue-box.collapsed .revenue-toggle .chevron { transform: rotate(180deg); }
         .rev-input { width: 100%; padding: 12px; border: 2px solid #A5D6A7; border-radius: 8px; font-size: 20px; font-weight: bold; text-align: right; outline: none; }
         .app-switcher-toggle { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 10px; z-index: 10020; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(31,41,55,.14); font-size: 1.45rem; font-weight: 900; cursor: pointer; }
         .app-switcher-backdrop { position: fixed; inset: 0; z-index: 10010; background: rgba(15,23,42,.38); backdrop-filter: blur(2px); }
@@ -144,16 +154,16 @@ document.addEventListener('keydown', function(event) {
 </div>
 
 <div id="tab-return" class="tab-content">
-    <div class="revenue-box">
-        <div style="text-align:center; font-size:18px; font-weight:bold; color:var(--primary-dark); margin-bottom:15px;">💰 สรุปรายได้ประจำวัน</div>
-        <div style="display:flex; gap:10px;">
-            <div style="flex:1;">
+    <div class="revenue-box" id="revenueBox">
+        <div class="revenue-head"><div><div class="revenue-title">💰 รายรับประจำวัน</div><div class="revenue-status" id="revenueStatus">ยังไม่ได้กรอก</div></div><button class="revenue-toggle" id="revenueToggle" type="button" aria-expanded="true" aria-controls="revenueFields" onclick="window.toggleRevenueCard()"><span>ย่อ</span><span class="chevron" aria-hidden="true">⌃</span></button></div>
+        <div class="revenue-fields" id="revenueFields">
+            <div class="revenue-field">
                 <label style="font-size:12px; font-weight:bold;">💵 เงินสด</label>
-                <input type="number" id="revenue-cash" class="rev-input" placeholder="0" oninput="window.saveRevenueLocally()">
+                <input type="number" id="revenue-cash" class="rev-input" placeholder="0" oninput="window.saveRevenueLocally(); window.updateRevenueCardStatus()">
             </div>
-            <div style="flex:1;">
+            <div class="revenue-field">
                 <label style="font-size:12px; font-weight:bold;">📱 เงินโอน</label>
-                <input type="number" id="revenue-transfer" class="rev-input" placeholder="0" oninput="window.saveRevenueLocally()">
+                <input type="number" id="revenue-transfer" class="rev-input" placeholder="0" oninput="window.saveRevenueLocally(); window.updateRevenueCardStatus()">
             </div>
         </div>
     </div>
@@ -445,6 +455,7 @@ document.addEventListener('keydown', function(event) {
         window.VIP_ITEMS.forEach(i => { if (window.returnQty[i] === undefined) window.returnQty[i] = 0; });
         document.getElementById('revenue-cash').value = window.revenue.cash || '';
         document.getElementById('revenue-transfer').value = window.revenue.transfer || '';
+        if (window.updateRevenueCardStatus) window.updateRevenueCardStatus();
     }
 
     // ==========================================
@@ -497,6 +508,7 @@ document.addEventListener('keydown', function(event) {
 
         document.getElementById('revenue-cash').value = window.revenue.cash || '';
         document.getElementById('revenue-transfer').value = window.revenue.transfer || '';
+        window.restoreRevenueCardState();
 
         const sel = document.getElementById('item-cat');
         sel.innerHTML = '';
@@ -536,6 +548,33 @@ document.addEventListener('keydown', function(event) {
         window.revenue.cash = document.getElementById('revenue-cash').value; 
         window.revenue.transfer = document.getElementById('revenue-transfer').value; 
         scheduleAutoSave(); 
+    }
+
+    window.revenueCardStorageKey = function() {
+        return 'boy_bigc_revenue_collapsed_' + window.getBusinessDateKey();
+    }
+    window.updateRevenueCardStatus = function() {
+        const status = document.getElementById('revenueStatus');
+        if (!status) return;
+        const fields = [document.getElementById('revenue-cash').value, document.getElementById('revenue-transfer').value];
+        const filled = fields.filter(value => String(value || '').trim() !== '').length;
+        status.textContent = filled === 0 ? 'ยังไม่ได้กรอก' : filled === 2 ? 'กรอกรายรับครบแล้ว' : 'กรอกแล้ว 1 จาก 2 ช่อง';
+    }
+    window.setRevenueCardCollapsed = function(collapsed, remember) {
+        const box = document.getElementById('revenueBox');
+        const button = document.getElementById('revenueToggle');
+        if (!box || !button) return;
+        box.classList.toggle('collapsed', collapsed);
+        button.setAttribute('aria-expanded', String(!collapsed));
+        button.querySelector('span').textContent = collapsed ? 'เปิด' : 'ย่อ';
+        if (remember) window.safeLocalStorageSet(window.revenueCardStorageKey(), collapsed ? '1' : '0');
+        window.updateRevenueCardStatus();
+    }
+    window.toggleRevenueCard = function() {
+        window.setRevenueCardCollapsed(!document.getElementById('revenueBox').classList.contains('collapsed'), true);
+    }
+    window.restoreRevenueCardState = function() {
+        window.setRevenueCardCollapsed(window.safeLocalStorageGet(window.revenueCardStorageKey()) === '1', false);
     }
 
     window.updateOrderQty = function(item, change) {
@@ -725,6 +764,7 @@ document.addEventListener('keydown', function(event) {
         if (cashVal.trim() === "" && transferVal.trim() === "") {
             const shouldContinue = await window.confirmMissingRevenue();
             if (!shouldContinue) {
+                window.setRevenueCardCollapsed(false, true);
                 document.getElementById('revenue-cash').focus();
                 return;
             }
@@ -741,6 +781,7 @@ document.addEventListener('keydown', function(event) {
             window.returnQty = {}; window.returnWgt = {}; window.revenue = {cash:"", transfer:""};
             window.VIP_ITEMS.forEach(i => window.returnQty[i] = 0);
             document.getElementById('revenue-cash').value = ''; document.getElementById('revenue-transfer').value = '';
+            window.updateRevenueCardStatus();
             scheduleAutoSave();
             alert("✅ ปิดยอดสำเร็จ!"); window.renderReturn();
         } catch(e) { alert("❌ " + e.message); } finally { isSubmitting = false; document.getElementById('btn-submit-return').disabled = false; window.hideLoader(); }

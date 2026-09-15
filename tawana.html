@@ -313,6 +313,17 @@
     .income-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
     .income-grid .wide { grid-column: 1 / -1; }
     .other-income-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(110px,.7fr); gap: 10px; }
+    .daily-columns { display: grid; grid-template-columns: minmax(0,1fr); gap: 14px; align-items: start; }
+    .daily-columns .card { margin-bottom: 0; }
+    .income-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .income-card-head .section-heading { flex: 1; margin-bottom: 0; }
+    .income-toggle { min-height: 42px; display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #cfe5dc; border-radius: 13px; background: white; color: var(--primary-strong); font-size: .76rem; font-weight: 850; cursor: pointer; }
+    .income-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; transition: transform .18s ease; }
+    .income-card-body { margin-top: 11px; }
+    .income-compact-status { display: none; margin-top: 7px; color: var(--muted); font-size: .76rem; font-weight: 750; }
+    .income-card.collapsed .income-card-body { display: none; }
+    .income-card.collapsed .income-compact-status { display: block; }
+    .income-card.collapsed .income-toggle svg { transform: rotate(180deg); }
     .quick-expense-hint { margin: 0 0 14px; padding: 11px 13px; border: 0; border-radius: 14px; background: var(--primary-soft); color: var(--primary-strong); font-size: .8rem; }
     #expenseList { gap: 10px; }
     .swipe-wrapper { display: block; overflow: visible; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: #fbfcfb; }
@@ -436,17 +447,14 @@
     }
     @media (max-width: 390px) {
       body { padding-left: 10px !important; padding-right: 10px !important; }
-      .income-grid { grid-template-columns: 1fr; }
-      .income-grid .wide { grid-column: auto; }
-      .other-income-grid { grid-template-columns: 1fr; }
       .bottom-nav-item { padding: 0 9px; min-width: 48px; }
       .bottom-nav-item.active { flex: 1.65 1 0; }
       .bottom-nav-label { font-size: .76rem; }
       .more-grid { grid-template-columns: 1fr; }
     }
     @media (min-width: 780px) {
-      .daily-columns { display: grid; grid-template-columns: minmax(0,.9fr) minmax(0,1.35fr); gap: 14px; align-items: start; }
-      .daily-columns .card { margin-bottom: 0; }
+      .income-grid { grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,2fr); }
+      .income-grid .wide { grid-column: auto; }
     }
 
     /* Compact, colorful operations theme */
@@ -598,11 +606,11 @@
         <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายรับ · รายจ่าย</span></div>
         <div class="card date-status-card"><div class="date-card-head"><label for="mainDate">วันที่ทำรายการ</label><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div><input type="date" id="mainDate" onchange="loadData()"></div>
         <div id="formArea" class="daily-columns">
-          <div class="card income-card"><div class="section-heading"><div><h2 class="section-title">รายรับ</h2><p class="section-description">แยกตามช่องทางรับเงิน</p></div></div><div class="income-grid">
+          <div class="card income-card" id="incomeCard"><div class="income-card-head"><div class="section-heading"><div><h2 class="section-title">รายรับ</h2><p class="section-description">แยกตามช่องทางรับเงิน</p><div class="income-compact-status" id="incomeCompactStatus">ยังไม่ได้กรอก</div></div></div><button class="income-toggle" id="incomeToggle" type="button" aria-expanded="true" aria-controls="incomeCardBody" onclick="toggleIncomeCard()"><span>ย่อ</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button></div><div class="income-card-body" id="incomeCardBody"><div class="income-grid">
             <div class="field"><label for="val-cash">เงินสด</label><input type="number" inputmode="decimal" id="val-cash" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
             <div class="field"><label for="val-transfer">เงินโอน</label><input type="number" inputmode="decimal" id="val-transfer" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
             <div class="field wide"><label>รายรับอื่น</label><div class="other-income-grid"><input type="text" id="otherIncomeNote" placeholder="รายละเอียด เช่น ค่าส่ง" onchange="doSync()"><input type="number" inputmode="decimal" id="otherIncomeVal" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div></div>
-          </div></div>
+          </div></div></div>
           <div class="card expense-card"><div class="section-heading"><div><h2 class="section-title">รายจ่าย</h2><p class="section-description">แตะรายการเพื่อดูหรือแก้รายละเอียด</p></div></div><div id="expenseList"></div><div class="section-actions"><button class="btn-main btn-soft" type="button" onclick="addRow()">+ เพิ่มรายการ</button><button class="btn-main btn-danger-quiet" type="button" onclick="clearAllData()">ล้างทั้งหมด</button></div></div>
         </div>
         <button class="btn-main btn-submit" id="btnSubmit" type="button" onclick="openSubmitReview()">ตรวจสอบและส่งข้อมูลประจำวัน</button>
@@ -891,7 +899,41 @@
 
     function updateDailySummary(snapshot) {
       var totals = calculateDailySummary(snapshot);
+      updateIncomeCardStatus();
       return totals;
+    }
+
+    function incomeCardStorageKey() {
+      return 'BOY_TAWANA_INCOME_COLLAPSED_' + (document.getElementById('mainDate').value || 'current');
+    }
+
+    function updateIncomeCardStatus() {
+      var status = document.getElementById('incomeCompactStatus');
+      if (!status) return;
+      var cashFilled = String(document.getElementById('val-cash').value || '').trim() !== '';
+      var transferFilled = String(document.getElementById('val-transfer').value || '').trim() !== '';
+      var otherFilled = String(document.getElementById('otherIncomeVal').value || '').trim() !== '';
+      var requiredFilled = Number(cashFilled) + Number(transferFilled);
+      status.textContent = requiredFilled === 0 ? 'ยังไม่ได้กรอกเงินสดและเงินโอน' : requiredFilled === 2 ? 'เงินสดและเงินโอนกรอกแล้ว' + (otherFilled ? ' · มีรายรับอื่น' : '') : 'กรอกแล้ว 1 จาก 2 ช่องหลัก';
+    }
+
+    function setIncomeCardCollapsed(collapsed, remember) {
+      var card = document.getElementById('incomeCard');
+      var button = document.getElementById('incomeToggle');
+      if (!card || !button) return;
+      card.classList.toggle('collapsed', collapsed);
+      button.setAttribute('aria-expanded', String(!collapsed));
+      button.querySelector('span').textContent = collapsed ? 'เปิด' : 'ย่อ';
+      if (remember) localStorage.setItem(incomeCardStorageKey(), collapsed ? '1' : '0');
+      updateIncomeCardStatus();
+    }
+
+    function toggleIncomeCard() {
+      setIncomeCardCollapsed(!document.getElementById('incomeCard').classList.contains('collapsed'), true);
+    }
+
+    function restoreIncomeCardState() {
+      setIncomeCardCollapsed(localStorage.getItem(incomeCardStorageKey()) === '1', false);
     }
 
     function setSaveState(state, text) {
@@ -2126,6 +2168,7 @@
         document.getElementById('val-transfer').value = (d.transfer) ? d.transfer.v : '';
         document.getElementById('otherIncomeVal').value = (d.other) ? d.other.v : '';
         document.getElementById('otherIncomeNote').value = (d.other) ? d.other.n : '';
+        restoreIncomeCardState();
         if (d.exp && d.exp.length > 0) {
           for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t, d.exp[r].s, d.exp[r].n); }
         } else { addRow(); }
