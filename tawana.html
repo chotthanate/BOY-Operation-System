@@ -248,6 +248,7 @@
       box-shadow: 0 5px 15px rgba(34,55,46,.05);
     }
     .icon-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .home-button { display: grid; place-items: center; text-decoration: none; }
     .app-content { min-height: 55vh; }
     .app-view { display: none; animation: viewIn .18s ease-out; }
     .app-view.active { display: block; }
@@ -590,7 +591,7 @@
   <div class="app-shell">
     <header class="app-topbar">
       <button class="store-switcher-button" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="store-avatar">TW</span><span class="store-copy"><span class="store-eyebrow">กำลังทำงานที่</span><span class="store-name">ทาวน่า <svg viewBox="0 0 24 24"><path d="m7 10 5 5 5-5" fill="none" stroke-width="2"/></svg></span></span></button>
-      <div class="topbar-actions"><button class="icon-button settings-btn" type="button" onclick="toggleSettings()" aria-label="ตั้งค่าระบบ"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/></svg></button></div>
+      <div class="topbar-actions"><a class="icon-button home-button" href="./index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7v9H3zM9 20v-6h6v6"/></svg></a></div>
     </header>
     <main class="app-content">
       <section id="dailyView" class="app-view active">
@@ -625,7 +626,7 @@
       </section>
       <section id="moreView" class="app-view">
         <div class="compact-page-header"><h1>เมนูเพิ่มเติม</h1><span class="page-context">BOY System</span></div>
-        <div class="more-grid"><a class="more-card" href="./dashboard.html"><span class="store-option-icon">DB</span><span><strong>Dashboard</strong><span>ดูรายงานสรุปของบริษัท</span></span></a><a class="more-card" href="./water-pos-admin.html"><span class="store-option-icon">POS</span><span><strong>จัดการ POS ร้านน้ำ</strong><span>รายการขาย รับเงิน VAT สต็อก และเครื่อง POS</span></span></a><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a><button class="more-card" type="button" onclick="openSalaryDashboard()"><span class="store-option-icon">฿</span><span><strong>สรุปเงินเดือน</strong><span>ตรวจวันทำงาน การลา และค่าแรง</span></span></button><button class="more-card settings-btn" type="button" onclick="toggleSettings()"><span class="store-option-icon">ST</span><span><strong>ตั้งค่าระบบ</strong><span>พนักงาน สินค้า หน่วย และผู้ขาย</span></span></button></div>
+        <div class="more-grid"><button class="more-card" type="button" onclick="openSalaryDashboard()"><span class="store-option-icon">฿</span><span><strong>สรุปเงินเดือน</strong><span>ตรวจวันทำงาน การลา และค่าแรง</span></span></button><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a></div>
       </section>
     </main>
   </div>

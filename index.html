@@ -3,91 +3,195 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>BOY Operation System</title>
+  <meta name="theme-color" content="#f4faf7">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>หน้าหลัก | BOY Operation</title>
   <style>
     :root {
       color-scheme: light;
-      --ink: #14213d;
-      --muted: #5f6f7f;
-      --line: #d8e1ea;
-      --green: #1b8f5a;
-      --yellow: #f2b705;
-      --orange: #d96c1f;
-      --paper: #f7fafc;
+      --ink: #17352e;
+      --muted: #71817b;
+      --line: #dfe9e4;
+      --paper: #f4faf7;
+      --surface: #ffffff;
+      --green: #0b876b;
+      --green-strong: #086d57;
+      --green-soft: #e5f6ef;
+      --orange: #ef6c4d;
+      --orange-soft: #fff0e9;
+      --yellow: #e6ad18;
+      --yellow-soft: #fff6d9;
+      --blue-soft: #edf5ff;
+      --violet-soft: #f2edff;
+      --shadow: 0 14px 36px rgba(22, 62, 50, .08);
     }
     * { box-sizing: border-box; }
+    html { min-height: 100%; background: var(--paper); }
     body {
       margin: 0;
-      font-family: Arial, "Noto Sans Thai", sans-serif;
-      background: var(--paper);
-      color: var(--ink);
       min-height: 100vh;
-      padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+      min-height: 100dvh;
+      color: var(--ink);
+      background: radial-gradient(circle at 100% 0, #fff4cc 0, transparent 24rem), linear-gradient(180deg, #f3fcf8 0, #fffaf3 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Noto Sans Thai", sans-serif;
+      -webkit-tap-highlight-color: transparent;
     }
-    main { max-width: 720px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; }
-    p { margin: 0 0 22px; color: var(--muted); line-height: 1.6; }
-    .grid { display: grid; gap: 12px; }
-    a {
-      display: block;
-      padding: 18px;
+    a { color: inherit; text-decoration: none; }
+    .shell {
+      width: min(100%, 980px);
+      margin: 0 auto;
+      padding: calc(22px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom));
+    }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 30px; }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark {
+      width: 50px;
+      height: 50px;
+      flex: 0 0 50px;
+      display: grid;
+      place-items: center;
+      border-radius: 17px;
+      color: #fff;
+      background: linear-gradient(145deg, var(--green), #16a687);
+      box-shadow: 0 11px 24px rgba(11, 135, 107, .23);
+      font-size: .9rem;
+      font-weight: 950;
+      letter-spacing: .03em;
+    }
+    .brand small, .brand strong { display: block; }
+    .brand small { color: var(--orange); font-size: .7rem; font-weight: 900; letter-spacing: .08em; }
+    .brand strong { margin-top: 3px; font-size: clamp(1.22rem, 3vw, 1.55rem); line-height: 1.15; }
+    .home-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      flex: 0 0 auto;
+      padding: 8px 11px;
+      border-radius: 999px;
+      color: var(--green-strong);
+      background: rgba(229, 246, 239, .9);
+      font-size: .72rem;
+      font-weight: 850;
+    }
+    .home-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #14a77d; }
+    .section + .section { margin-top: 28px; }
+    .section-head { margin: 0 2px 13px; }
+    .section-head h1, .section-head h2 { margin: 0; line-height: 1.2; }
+    .section-head h1 { font-size: clamp(1.55rem, 5vw, 2rem); }
+    .section-head h2 { font-size: 1.05rem; }
+    .section-head p { margin: 6px 0 0; color: var(--muted); font-size: .82rem; }
+    .branch-grid, .tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .card {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 112px;
+      padding: 16px;
+      overflow: hidden;
       border: 1px solid var(--line);
-      border-radius: 10px;
-      background: white;
-      color: inherit;
-      text-decoration: none;
-      box-shadow: 0 8px 24px rgba(28, 46, 74, 0.08);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: var(--shadow);
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
     }
-    a strong { display: block; margin-bottom: 5px; font-size: 18px; }
-    a span { display: block; color: var(--muted); line-height: 1.45; font-size: 14px; }
-    .tawana { border-left: 5px solid var(--green); }
-    .bigc { border-left: 5px solid var(--yellow); }
-    .bigc-order { border-left: 5px solid var(--orange); }
-    .burger { border-left: 5px solid #087f68; }
-    .water-pos { border-left: 5px solid #0f7659; }
-    .reports { border-left: 5px solid var(--green); }
-    .system-test { border-left: 5px solid #4868d7; }
-    .disabled { opacity: .68; pointer-events: none; }
+    a.card:active { transform: scale(.985); }
+    a.card:hover { border-color: #bddbce; box-shadow: 0 17px 40px rgba(22, 62, 50, .12); }
+    .card-icon {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 17px;
+      color: var(--green-strong);
+      background: var(--green-soft);
+      font-size: .88rem;
+      font-weight: 950;
+    }
+    .card-copy { min-width: 0; }
+    .card-copy strong, .card-copy span { display: block; }
+    .card-copy strong { font-size: 1rem; line-height: 1.25; }
+    .card-copy span { margin-top: 5px; color: var(--muted); font-size: .76rem; line-height: 1.4; }
+    .card-arrow { color: #9aaca5; font-size: 1.35rem; }
+    .card.bigc .card-icon, .card.order .card-icon { color: #815d00; background: var(--yellow-soft); }
+    .card.burger .card-icon { color: #bd4c33; background: var(--orange-soft); }
+    .card.grill .card-icon, .card.system .card-icon { color: #69509c; background: var(--violet-soft); }
+    .card.dashboard .card-icon, .card.pos .card-icon { color: #285f9f; background: var(--blue-soft); }
+    .card.disabled { opacity: .67; box-shadow: none; }
+    .status-chip {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      color: #716c5f;
+      background: #f2f0ea;
+      font-size: .61rem;
+      font-weight: 850;
+    }
+    .tool-grid .card { min-height: 96px; }
+    .tool-grid .card-icon { width: 46px; height: 46px; border-radius: 15px; }
+    @media (max-width: 620px) {
+      .shell { padding-left: 14px; padding-right: 14px; }
+      .topbar { margin-bottom: 24px; }
+      .branch-grid { grid-template-columns: 1fr; }
+      .tool-grid { grid-template-columns: 1fr 1fr; }
+      .branch-grid .card { min-height: 96px; }
+      .card { padding: 14px; border-radius: 19px; }
+      .card-icon { width: 48px; height: 48px; border-radius: 15px; }
+      .tool-grid .card { grid-template-columns: auto minmax(0, 1fr); min-height: 112px; align-content: center; }
+      .tool-grid .card-arrow { display: none; }
+      .tool-grid .card-copy span { font-size: .7rem; }
+    }
+    @media (max-width: 380px) {
+      .tool-grid { grid-template-columns: 1fr; }
+      .tool-grid .card { min-height: 88px; grid-template-columns: auto minmax(0, 1fr) auto; }
+      .tool-grid .card-arrow { display: block; }
+      .home-status { padding: 7px 9px; }
+    }
   </style>
+  <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
-  <main>
-    <h1>BOY Operation System</h1>
-    <p>ระบบใหม่แบบแยกหน้าตามงาน เพื่อกันข้อมูลรายจ่าย รายรับ และรายการเบิกของปนกัน</p>
-    <section class="grid">
-      <a class="tawana" href="tawana.html">
-        <strong>ทาวน่า</strong>
-        <span>ลงรายรับ รายจ่าย และงานพนักงานของทาวน่า</span>
-      </a>
-      <a class="bigc" href="bigc.html">
-        <strong>บิ๊กซีพัทยากลาง</strong>
-        <span>ลงรายจ่ายบิ๊กซีพัทยากลางเท่านั้น บันทึกเข้า BOY_Transactions > รายจ่าย</span>
-      </a>
-      <a class="bigc-order" href="bigc-order.html">
-        <strong>รายการเบิกของบิ๊กซีพัทยากลาง</strong>
-        <span>แยกไว้สำหรับสั่งของ รับของ ปิดยอดคืนของ และรายรับบิ๊กซีพัทยากลาง</span>
-      </a>
-      <a class="burger" href="burger.html">
-        <strong>ร้านเบอร์เกอร์</strong>
-        <span>บันทึกรายจ่าย ดูสต็อก และ Dashboard ของร้านเบอร์เกอร์</span>
-      </a>
-      <a class="water-pos" href="water-pos-admin.html">
-        <strong>จัดการ POS ร้านน้ำ</strong>
-        <span>รายการขาย ช่องทางรับเงิน VAT สต็อก เครื่อง POS และสถานะการซิงก์</span>
-      </a>
-      <a class="reports" href="dashboard.html">
-        <strong>Reports</strong>
-        <span>ดูสรุปรายเดือน รายสาขา รายรับ รายจ่าย กำไร และวัตถุดิบ</span>
-      </a>
-      <a class="system-test" href="system-test.html">
-        <strong>ตรวจระบบ</strong>
-        <span>ตรวจ backend, Master และความเชื่อมโยงของข้อมูลที่บันทึกผ่านหน้าเว็บจริง</span>
-      </a>
-      <a class="disabled" href="#">
-        <strong>Admin</strong>
-        <span>รอเชื่อม BOY_Master</span>
-      </a>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark">BOY</div><div><small>BOY OPERATION</small><strong>หน้าหลัก</strong></div></div>
+      <span class="home-status">พร้อมใช้งาน</span>
+    </header>
+
+    <section class="section" aria-labelledby="branchHeading">
+      <div class="section-head"><h1 id="branchHeading">เลือกสาขา</h1><p>เข้าไปบันทึกและตรวจข้อมูลงานของสาขา</p></div>
+      <div class="branch-grid">
+        <a class="card tawana" href="tawana.html"><span class="card-icon">TW</span><span class="card-copy"><strong>ทาวน่า</strong><span>ร้านน้ำ · รายรับ รายจ่าย สต็อก และพนักงาน</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <a class="card bigc" href="bigc.html"><span class="card-icon">BC</span><span class="card-copy"><strong>BigC พัทยากลาง</strong><span>ร้านน้ำ · รายจ่ายและข้อมูลสาขา</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <a class="card burger" href="burger.html"><span class="card-icon">BG</span><span class="card-copy"><strong>ร้านเบอร์เกอร์</strong><span>รายจ่าย สต็อก และ Dashboard</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <div class="card grill disabled" aria-disabled="true"><span class="status-chip">กำลังเตรียม</span><span class="card-icon">GR</span><span class="card-copy"><strong>ร้านเนื้อย่าง</strong><span>รายจ่าย สต็อก และข้อมูลร้าน</span></span><span class="card-arrow" aria-hidden="true">›</span></div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="centralHeading">
+      <div class="section-head"><h2 id="centralHeading">ภาพรวมและข้อมูลกลาง</h2></div>
+      <div class="tool-grid">
+        <a class="card dashboard" href="dashboard.html"><span class="card-icon">DB</span><span class="card-copy"><strong>Dashboard รวม</strong><span>รายรับ รายจ่าย และภาพรวมทุกสาขา</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <a class="card master" href="master-data.html"><span class="card-icon">MD</span><span class="card-copy"><strong>ข้อมูลกลาง BOY</strong><span>สินค้า พนักงาน หน่วย Supplier และสาขา</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="supportHeading">
+      <div class="section-head"><h2 id="supportHeading">งานสนับสนุน</h2></div>
+      <div class="tool-grid">
+        <a class="card pos" href="water-pos-admin.html"><span class="card-icon">POS</span><span class="card-copy"><strong>จัดการ POS ร้านน้ำ</strong><span>สินค้า การขาย การชำระเงิน และเครื่อง POS</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <a class="card order" href="bigc-order.html"><span class="card-icon">OR</span><span class="card-copy"><strong>เบิกและรับของ BigC</strong><span>สั่งของ รับของ และปิดยอด</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <a class="card system" href="system-test.html"><span class="card-icon">✓</span><span class="card-copy"><strong>ตรวจระบบ</strong><span>สถานะฐานข้อมูล Master และการเชื่อมต่อ</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+      </div>
     </section>
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-local-access.js?v=20260915-1"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
 </body>
 </html>
