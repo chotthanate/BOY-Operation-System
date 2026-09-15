@@ -138,6 +138,9 @@ function doPost(e) {
       case 'employeeOverview':
         result = handleEmployeeOverview_(payload.month, payload.year);
         break;
+      case 'employeeHistory':
+        result = handleEmployeeHistory_(payload.employeeId);
+        break;
       case 'masterCatalog':
         result = handleMasterCatalog_(payload.entity);
         break;
@@ -2634,6 +2637,93 @@ function handleEmployeeOverview_(month, year) {
         leaveHours: Number(stats.leaveHours || 0)
       };
     })
+  };
+}
+
+function historyDateText_(value) {
+  if (isBlank_(value)) return '';
+  try { return dateKey_(value); } catch (err) { return normalizeText_(value); }
+}
+
+function handleEmployeeHistory_(employeeId) {
+  const id = normalizeText_(employeeId);
+  if (!id) throw new Error('ไม่พบรหัสพนักงาน');
+
+  const employee = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterEmployees)
+    .find(function(row) { return normalizeText_(row.employee_id) === id; });
+  if (!employee) throw new Error('ไม่พบพนักงานใน BOY Master');
+
+  const leaves = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.leavesV2)
+    .filter(function(row) { return normalizeText_(row.employee_id) === id; })
+    .map(function(row) {
+      return {
+        id: normalizeText_(row.leave_id),
+        startDate: historyDateText_(row['วันที่เริ่ม']),
+        endDate: historyDateText_(row['วันที่สิ้นสุด']),
+        type: normalizeText_(row['ประเภทลา']),
+        days: toNumber_(row['จำนวนวันลา']),
+        hours: toNumber_(row['ชั่วโมงลา']),
+        status: normalizeText_(row['สถานะ']),
+        note: normalizeText_(row['หมายเหตุ'])
+      };
+    });
+  const knownLeaveIds = {};
+  leaves.forEach(function(row) { if (row.id) knownLeaveIds[row.id] = true; });
+  const employeeName = normalizeText_(employee['ชื่อเล่น']) || [normalizeText_(employee['ชื่อจริง']), normalizeText_(employee['นามสกุล'])].filter(Boolean).join(' ');
+  const branch = normalizedMasterLookups_().branchesByName[lookupKey_(employee.branch_id)] || {};
+  const branchName = normalizeText_(branch['ชื่อสาขา']);
+  values_(CONFIG.spreadsheets.transactions, CONFIG.sheets.leave).slice(1).forEach(function(row) {
+    const legacyId = normalizeText_(row[7]);
+    if (legacyId && knownLeaveIds[legacyId]) return;
+    if (lookupKey_(row[2]) !== lookupKey_(employeeName)) return;
+    if (branchName && lookupKey_(row[1]) !== lookupKey_(branchName)) return;
+    leaves.push({
+      id: legacyId,
+      startDate: historyDateText_(row[0]),
+      endDate: historyDateText_(row[0]),
+      type: normalizeText_(row[3]) === 'Hourly' ? 'ลารายชั่วโมง' : 'ลาเต็มวัน',
+      days: toNumber_(row[5]),
+      hours: toNumber_(row[4]),
+      status: 'บันทึกแล้ว',
+      note: normalizeText_(row[6])
+    });
+  });
+  leaves.sort(function(a, b) { return normalizeText_(b.startDate).localeCompare(normalizeText_(a.startDate)); });
+  if (leaves.length > 50) leaves.splice(50);
+
+  const payroll = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.payrollV2)
+    .filter(function(row) { return normalizeText_(row.employee_id) === id; })
+    .reverse().slice(0, 50).map(function(row) {
+      return {
+        id: normalizeText_(row.payroll_id),
+        period: normalizeText_(row['รอบเงินเดือน']),
+        workedDays: toNumber_(row['วันทำงาน']),
+        workedHours: toNumber_(row['ชั่วโมงทำงาน']),
+        netPay: toNumber_(row['เงินเดือนสุทธิ']),
+        status: normalizeText_(row['สถานะ']),
+        paidDate: historyDateText_(row['วันที่จ่าย']),
+        note: normalizeText_(row['หมายเหตุ'])
+      };
+    });
+
+  const transactions = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2)
+    .filter(function(row) { return normalizeText_(row.related_employee_id) === id; })
+    .reverse().slice(0, 50).map(function(row) {
+      return {
+        id: normalizeText_(row.transaction_id),
+        date: historyDateText_(row['วันที่รายการ']),
+        type: normalizeText_(row['ประเภทธุรกรรม']),
+        mode: normalizeText_(row['รูปแบบการบันทึก']),
+        amount: toNumber_(row['ยอดสุทธิ']),
+        status: normalizeText_(row['สถานะ']),
+        note: normalizeText_(row['หมายเหตุ'])
+      };
+    });
+
+  return {
+    status: 'success', employeeId: id,
+    summary: { leaves: leaves.length, payroll: payroll.length, transactions: transactions.length },
+    leaves: leaves, payroll: payroll, transactions: transactions
   };
 }
 

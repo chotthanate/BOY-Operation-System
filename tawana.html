@@ -496,6 +496,7 @@
     .employee-toolbar select,.employee-toolbar input { margin-top:6px; width:100%; }
     .employee-overview { display:grid; gap:10px; }
     .employee-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .employee-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; }
     .employee-name { font-weight:900; font-size:1rem; }
     .employee-meta { color:var(--muted); font-size:.78rem; margin-top:3px; }
     .employee-stats { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
@@ -819,11 +820,15 @@
           return;
         }
         container.innerHTML = employees.map(function(row) {
-          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml([row.position, row.employmentStatus].filter(Boolean).join(' · ') || 'ยังไม่ระบุรายละเอียด') + '</div><div class="employee-stats"><span class="employee-stat">ทำงานตามรอบ ' + row.workedDays + ' วัน</span><span class="employee-stat leave">ลา ' + row.leaveDays + ' วัน' + (row.leaveHours ? ' · ' + row.leaveHours + ' ชม.' : '') + '</span></div></div><button class="mini-btn mini-primary" type="button" onclick="prepareLeaveFor(decodeURIComponent(\'' + encodeURIComponent(row.nickname || '') + '\'))">เพิ่มวันลา</button></article>';
+          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml([row.position, row.employmentStatus].filter(Boolean).join(' · ') || 'ยังไม่ระบุรายละเอียด') + '</div><div class="employee-stats"><span class="employee-stat">ทำงานตามรอบ ' + row.workedDays + ' วัน</span><span class="employee-stat leave">ลา ' + row.leaveDays + ' วัน' + (row.leaveHours ? ' · ' + row.leaveHours + ' ชม.' : '') + '</span></div></div><div class="employee-actions"><button class="mini-btn mini-secondary" type="button" onclick="editEmployee(decodeURIComponent(\'' + encodeURIComponent(row.employeeId || '') + '\'))">ดู / แก้ไข</button><button class="mini-btn mini-primary" type="button" onclick="prepareLeaveFor(decodeURIComponent(\'' + encodeURIComponent(row.nickname || '') + '\'))">เพิ่มวันลา</button></div></article>';
         }).join('');
       } catch (error) {
         container.innerHTML = '<div class="employee-loading">โหลดข้อมูลพนักงานไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
       }
+    }
+
+    function editEmployee(employeeId) {
+      location.href = 'master-data.html?entity=employees&employee=' + encodeURIComponent(employeeId);
     }
 
     function prepareLeaveFor(name) {
