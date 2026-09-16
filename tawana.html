@@ -486,9 +486,9 @@
     .compact-page-header h1 { margin: 0; color: var(--ink); font-size: 1.18rem; line-height: 1.2; letter-spacing: -.015em; }
     .compact-page-header .page-context { color: var(--muted); font-size: .74rem; font-weight: 750; white-space: nowrap; }
     .card { border-color: #d6e8e0; box-shadow: 0 8px 22px rgba(12,82,65,.07); }
-    .date-status-card { display: block; padding: 13px 14px; border-top: 4px solid var(--accent); background: linear-gradient(135deg, #fffdf6, #fff); }
+    .date-status-card { display: block; padding: 13px 14px; border-top: 4px solid var(--accent); background: linear-gradient(135deg, #fffdf6, #fff); cursor: pointer; }
     .date-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
-    .date-card-head label { color: var(--ink); font-size: .8rem; font-weight: 900; }
+    .date-card-head label { color: var(--ink); font-size: .8rem; font-weight: 900; pointer-events:none; }
     .date-card-head .save-state { flex: 0 1 auto; min-height: 27px; padding: 5px 9px; font-size: .68rem; overflow: hidden; text-overflow: ellipsis; }
     #mainDate { min-height: 44px; padding: 8px 11px; background: white; }
     .income-card { border-top: 4px solid var(--primary); background: linear-gradient(160deg, #f6fffb 0, white 45%); }
@@ -504,13 +504,15 @@
     .employee-toolbar label { font-size:.78rem; font-weight:800; color:var(--muted); }
     .employee-toolbar select,.employee-toolbar input { margin-top:6px; width:100%; }
     .employee-overview { display:grid; gap:10px; }
-    .employee-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:12px; align-items:center; padding:14px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
-    .employee-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:7px; }
+    .employee-row, .employee-columns { display:grid; grid-template-columns:minmax(0,1fr) 76px 92px; gap:10px; align-items:center; }
+    .employee-row { padding:13px 12px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
+    .employee-columns { padding:0 12px; color:var(--muted); font-size:.72rem; font-weight:800; }
+    .employee-columns span:not(:first-child), .employee-count { text-align:right; }
+    .employee-count { font-weight:900; color:var(--primary-strong); white-space:nowrap; }
     .employee-name { font-weight:900; font-size:1rem; }
     .employee-meta { color:var(--muted); font-size:.78rem; margin-top:3px; }
-    .employee-stats { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
-    .employee-stat { background:var(--surface-soft); border-radius:999px; padding:6px 9px; font-size:.75rem; color:var(--text); }
-    .employee-stat.leave { background:#fff2ed; color:#a9482d; }
+    #leaveOverlay .overlay-card { width:min(calc(100vw - 28px), 540px); }
+    #leaveOverlay .leave-card { margin:0; padding:0; border:0; box-shadow:none; }
     .employee-loading { padding:20px; text-align:center; color:var(--muted); }
     .master-link-grid { display:grid; gap:10px; margin:16px 0; }
     .master-link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px; border:1px solid var(--line); border-radius:16px; color:var(--text); text-decoration:none; background:var(--surface); text-align:left; }
@@ -604,7 +606,7 @@
     <main class="app-content">
       <section id="dailyView" class="app-view active">
         <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายรับ · รายจ่าย</span></div>
-        <div class="card date-status-card"><div class="date-card-head"><label for="mainDate">วันที่ทำรายการ</label><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div><input type="date" id="mainDate" onchange="loadData()"></div>
+        <div class="card date-status-card" onclick="openMainDatePicker(event)"><div class="date-card-head"><label for="mainDate">วันที่ทำรายการ</label><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div><input type="date" id="mainDate" onchange="loadData()"></div>
         <div id="formArea" class="daily-columns">
           <div class="card income-card" id="incomeCard"><div class="income-card-head"><div class="section-heading"><div><h2 class="section-title">รายรับ</h2><div class="income-compact-status" id="incomeCompactStatus">ยังไม่ได้กรอก</div></div></div><button class="income-toggle" id="incomeToggle" type="button" aria-expanded="true" aria-controls="incomeCardBody" onclick="toggleIncomeCard()"><span>ย่อ</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button></div><div class="income-card-body" id="incomeCardBody"><div class="income-grid">
             <div class="field"><label for="val-cash">เงินสด</label><input type="number" inputmode="decimal" id="val-cash" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
@@ -616,9 +618,8 @@
         <button class="btn-main btn-submit" id="btnSubmit" type="button" onclick="openSubmitReview()">ตรวจสอบและส่งข้อมูลประจำวัน</button>
       </section>
       <section id="leaveView" class="app-view">
-        <div class="compact-page-header"><h1>พนักงาน</h1><span class="page-context">ภาพรวม · การลา</span></div>
-        <div class="card"><div class="section-heading"><div><h2 class="section-title">ภาพรวมพนักงานทั้งหมด</h2><p class="section-description">วันทำงานตามรอบคำนวณจากจำนวนวันในเดือนหักวันลา</p></div></div><div class="employee-toolbar"><label>เดือน<select id="employeeMonth" onchange="loadEmployeeOverview()"></select></label><label>ปี<input id="employeeYear" type="number" min="2024" max="2100" onchange="loadEmployeeOverview()"></label></div><div id="employeeOverview" class="employee-overview"><div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div></div></div>
-        <div class="card leave-card"><div class="section-heading"><div><h2 class="section-title">เพิ่มวันลา</h2><p class="section-description">เลือกวันที่ พนักงาน และรูปแบบการลา</p></div></div><div class="field" style="margin-bottom:12px"><label for="leaveDate">วันที่ลา</label><input id="leaveDate" type="date" onchange="refreshSavedLeaves()"></div><div id="leaveList"></div><div class="section-actions"><button class="btn-main btn-secondary" type="button" onclick="addLeaveRow()">+ เพิ่มพนักงาน</button><button class="btn-main btn-primary" type="button" onclick="saveMultipleLeaves()">บันทึกข้อมูลการลา</button></div><div class="saved-leave-area"><div class="saved-leave-title">บันทึกแล้วในวันที่เลือก</div><div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div></div></div>
+        <div class="compact-page-header"><h1>พนักงาน</h1><button class="mini-btn mini-primary" type="button" onclick="openLeaveOverlay()">+ เพิ่มวันลา</button></div>
+        <div class="card"><div class="employee-toolbar"><label>เดือน<select id="employeeMonth" onchange="loadEmployeeOverview(true)"></select></label><label>ปี<input id="employeeYear" type="number" min="2024" max="2100" onchange="loadEmployeeOverview(true)"></label></div><div class="employee-columns"><span>พนักงาน</span><span>หยุด (วัน)</span><span>หยุด (ชม.)</span></div><div id="employeeOverview" class="employee-overview"><div class="employee-loading">กดเมนูพนักงานเพื่อดูข้อมูล</div></div></div>
       </section>
       <section id="payrollView" class="app-view">
         <div class="compact-page-header"><h1>สรุปเงินเดือน</h1><span class="page-context">รายเดือน</span></div>
@@ -626,11 +627,11 @@
       </section>
       <section id="historyView" class="app-view">
         <div class="compact-page-header"><h1>ประวัติ</h1><span class="page-context">รายการล่าสุด</span></div>
-        <div class="card"><div class="section-heading"><div><h2 class="section-title">รายรับและรายจ่าย</h2><p class="section-description">ข้อมูลที่ส่งเข้า BOY Transactions แล้ว</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchHistory()">โหลดใหม่</button></div><div id="historyList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูประวัติ</div></div></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">รายรับและรายจ่าย</h2><p class="section-description">ข้อมูลที่ส่งเข้า BOY Transactions แล้ว</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchHistory(true)">โหลดใหม่</button></div><div id="historyList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูประวัติ</div></div></div>
       </section>
       <section id="stockView" class="app-view">
         <div class="compact-page-header"><h1>สต็อก</h1><span class="page-context">ทาวน่า</span></div>
-        <div class="card"><div class="section-heading"><div><h2 class="section-title">ยอดคงเหลือ</h2><p class="section-description">คำนวณจากประวัติรับเข้า เบิก และปรับสต็อก</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchStock()">โหลดใหม่</button></div><div id="stockList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูสต็อก</div></div></div>
+        <div class="card"><div class="section-heading"><div><h2 class="section-title">ยอดคงเหลือ</h2><p class="section-description">คำนวณจากประวัติรับเข้า เบิก และปรับสต็อก</p></div><button class="mini-btn mini-secondary" type="button" onclick="loadBranchStock(true)">โหลดใหม่</button></div><div id="stockList" class="record-list"><div class="employee-loading">กดโหลดเพื่อดูสต็อก</div></div></div>
       </section>
       <section id="moreView" class="app-view">
         <div class="compact-page-header"><h1>เมนูเพิ่มเติม</h1><span class="page-context">BOY System</span></div>
@@ -645,6 +646,7 @@
     <button class="bottom-nav-item" type="button" aria-label="พนักงาน" onclick="switchAppView('leaveView', this); loadEmployeeOverview()"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c.5-5 3-7 8-7s7.5 2 8 7"/></svg><span class="bottom-nav-label">พนักงาน</span></button>
     <button class="bottom-nav-item" type="button" aria-label="เมนูเพิ่มเติม" onclick="switchAppView('moreView', this)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg><span class="bottom-nav-label">เพิ่มเติม</span></button>
   </div></nav>
+  <div id="leaveOverlay" class="full-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="leaveOverlayTitle" onclick="if(event.target === this) closeLeaveOverlay()"><div class="overlay-card"><div class="section-heading"><h2 id="leaveOverlayTitle" class="section-title">เพิ่มวันลา</h2><button class="mini-btn mini-secondary" type="button" onclick="closeLeaveOverlay()" aria-label="ปิด">✕</button></div><div class="card leave-card"><div class="field" style="margin-bottom:12px"><label for="leaveDate">วันที่ลา</label><input id="leaveDate" type="date" onchange="refreshSavedLeaves()"></div><div id="leaveList"></div><div class="section-actions"><button class="btn-main btn-secondary" type="button" onclick="addLeaveRow()">+ เพิ่มพนักงาน</button><button class="btn-main btn-primary" type="button" onclick="saveMultipleLeaves()">บันทึกข้อมูลการลา</button></div><div class="saved-leave-area"><div class="saved-leave-title">บันทึกแล้วในวันที่เลือก</div><div id="savedLeaveList" class="saved-leave-empty">ยังไม่มีรายการลาในวันที่เลือก</div></div></div></div></div>
   <div id="reviewOverlay" class="full-overlay hidden"><div class="overlay-card"><h2 style="margin:0;">ตรวจสอบก่อนส่ง</h2><div class="review-count-card"><span>รายการรายจ่าย</span><strong id="reviewExpenseCount">0 รายการ</strong></div><div id="reviewWarnings" class="review-warnings hidden" role="alert"><strong>ข้อมูลรายรับยังไม่ครบ</strong><ul id="reviewWarningList"></ul></div><button class="btn-main btn-primary" type="button" onclick="confirmSubmitReview()">ยืนยันและส่งข้อมูล</button><button class="btn-main btn-secondary" type="button" onclick="closeSubmitReview()">กลับไปตรวจสอบ</button></div></div>
 
   <div id="settingsOverlay" class="full-overlay hidden">
@@ -791,6 +793,26 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    function openMainDatePicker(event) {
+      const input = document.getElementById('mainDate');
+      if (event.target === input || event.target.closest('label')) return;
+      try { input.showPicker(); } catch (error) { input.focus(); input.click(); }
+    }
+
+    function openLeaveOverlay() {
+      if (!document.getElementById('leaveList').children.length) clearLeaveList();
+      document.getElementById('leaveOverlay').classList.remove('hidden');
+      refreshSavedLeaves();
+    }
+
+    function closeLeaveOverlay() {
+      document.getElementById('leaveOverlay').classList.add('hidden');
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if (event.key === 'Escape' && !document.getElementById('leaveOverlay').classList.contains('hidden')) closeLeaveOverlay();
+    });
+
     function setupEmployeePeriod() {
       const monthSelect = document.getElementById('employeeMonth');
       const yearInput = document.getElementById('employeeYear');
@@ -810,18 +832,33 @@
       }
     }
 
-    async function loadEmployeeOverview() {
+    let employeeOverviewKey = '';
+    let employeeOverviewAt = 0;
+    let employeeOverviewPending = '';
+    let stockLoaded = false;
+    let stockLoadedAt = 0;
+    let stockPending = false;
+    let historyLoaded = false;
+    let historyLoadedAt = 0;
+    let historyPending = false;
+
+    async function loadEmployeeOverview(force) {
       setupEmployeePeriod();
       const container = document.getElementById('employeeOverview');
       if (!container) return;
-      container.innerHTML = '<div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div>';
+      const month = document.getElementById('employeeMonth').value;
+      const year = document.getElementById('employeeYear').value;
+      const key = year + '-' + month;
+      if (employeeOverviewPending === key || (!force && employeeOverviewKey === key && Date.now() - employeeOverviewAt < 60000)) return;
+      employeeOverviewPending = key;
+      if (employeeOverviewKey !== key) container.innerHTML = '<div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div>';
       try {
-        const result = await apiCall('employeeOverview', {
-          month: document.getElementById('employeeMonth').value,
-          year: document.getElementById('employeeYear').value
-        });
+        const result = await apiCall('employeeOverview', { month: month, year: year });
         if (result.status === 'error') throw new Error(result.message || 'โหลดข้อมูลไม่สำเร็จ');
+        if (document.getElementById('employeeYear').value + '-' + document.getElementById('employeeMonth').value !== key) return;
         const employees = result.employees || [];
+        employeeOverviewKey = key;
+        employeeOverviewAt = Date.now();
         staffList = employees.map(function(row) { return row.nickname; }).filter(Boolean);
         localStorage.setItem('BOY_STAFF', JSON.stringify(staffList));
         if (!employees.length) {
@@ -829,10 +866,12 @@
           return;
         }
         container.innerHTML = employees.map(function(row) {
-          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml([row.position, row.employmentStatus].filter(Boolean).join(' · ') || 'ยังไม่ระบุรายละเอียด') + '</div><div class="employee-stats"><span class="employee-stat">ทำงานตามรอบ ' + row.workedDays + ' วัน</span><span class="employee-stat leave">ลา ' + row.leaveDays + ' วัน' + (row.leaveHours ? ' · ' + row.leaveHours + ' ชม.' : '') + '</span></div></div><div class="employee-actions"><button class="mini-btn mini-secondary" type="button" onclick="editEmployee(decodeURIComponent(\'' + encodeURIComponent(row.employeeId || '') + '\'))">ดู / แก้ไข</button><button class="mini-btn mini-primary" type="button" onclick="prepareLeaveFor(decodeURIComponent(\'' + encodeURIComponent(row.nickname || '') + '\'))">เพิ่มวันลา</button></div></article>';
+          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml(row.position || 'ไม่ระบุตำแหน่ง') + '</div></div><div class="employee-count">' + toUiNumber(row.leaveDays).toLocaleString('th-TH') + '</div><div class="employee-count">' + toUiNumber(row.leaveHours).toLocaleString('th-TH') + '</div></article>';
         }).join('');
       } catch (error) {
-        container.innerHTML = '<div class="employee-loading">โหลดข้อมูลพนักงานไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+        if (employeeOverviewKey !== key) container.innerHTML = '<div class="employee-loading">โหลดข้อมูลพนักงานไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      } finally {
+        if (employeeOverviewPending === key) employeeOverviewPending = '';
       }
     }
 
@@ -847,34 +886,40 @@
       document.getElementById('leaveDate').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    async function loadBranchHistory() {
+    async function loadBranchHistory(force) {
       const list = document.getElementById('historyList');
-      if (!list) return;
-      list.innerHTML = '<div class="employee-loading">กำลังโหลดประวัติ…</div>';
+      if (!list || historyPending || (!force && historyLoaded && Date.now() - historyLoadedAt < 60000)) return;
+      historyPending = true;
+      if (!historyLoaded) list.innerHTML = '<div class="employee-loading">กำลังโหลดประวัติ…</div>';
       try {
         const result = await apiCall('branchHistory', { limit: 50 });
+        historyLoaded = true;
+        historyLoadedAt = Date.now();
         const rows = result.rows || [];
         list.innerHTML = rows.length ? rows.map(function(row) {
           return '<article class="record-row"><div><strong>' + escapeHtml(row.mode || row.type || 'รายการ') + '</strong><div class="record-meta">' + escapeHtml([row.date, row.payment, row.status].filter(Boolean).join(' · ')) + '</div></div><div class="record-amount">' + formatMoney(row.amount) + '</div></article>';
         }).join('') : '<div class="employee-loading">ยังไม่มีประวัติที่ส่งเข้าระบบกลาง</div>';
       } catch (error) {
-        list.innerHTML = '<div class="employee-loading">โหลดประวัติไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
-      }
+        if (!historyLoaded) list.innerHTML = '<div class="employee-loading">โหลดประวัติไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      } finally { historyPending = false; }
     }
 
-    async function loadBranchStock() {
+    async function loadBranchStock(force) {
       const list = document.getElementById('stockList');
-      if (!list) return;
-      list.innerHTML = '<div class="employee-loading">กำลังคำนวณสต็อก…</div>';
+      if (!list || stockPending || (!force && stockLoaded && Date.now() - stockLoadedAt < 60000)) return;
+      stockPending = true;
+      if (!stockLoaded) list.innerHTML = '<div class="employee-loading">กำลังคำนวณสต็อก…</div>';
       try {
         const result = await apiCall('branchStock');
+        stockLoaded = true;
+        stockLoadedAt = Date.now();
         const rows = result.rows || [];
         list.innerHTML = rows.length ? rows.map(function(row) {
           return '<article class="record-row"><div><strong>' + escapeHtml(row.name) + '</strong><div class="record-meta">' + escapeHtml(row.itemId) + '</div></div><div class="stock-qty">' + toUiNumber(row.quantity).toLocaleString('th-TH') + ' ' + escapeHtml(row.unit || '') + '</div></article>';
         }).join('') : '<div class="employee-loading">ยังไม่มี Stock Movement ของสาขาทาวน่า</div>';
       } catch (error) {
-        list.innerHTML = '<div class="employee-loading">โหลดสต็อกไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
-      }
+        if (!stockLoaded) list.innerHTML = '<div class="employee-loading">โหลดสต็อกไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+      } finally { stockPending = false; }
     }
 
     function selectedLeaveDate() {
@@ -1267,8 +1312,8 @@
         await apiCall('saveMultipleLeaves', { date: date, leaves: leavesToSave });
         alert(`✅ บันทึกการลา ${leavesToSave.length} รายการ เรียบร้อยแล้ว`);
         clearLeaveList(); // บันทึกเสร็จให้ล้างช่องทิ้ง ป้องกันส่งซ้ำ
-        await refreshSavedLeaves();
-        await loadEmployeeOverview();
+        closeLeaveOverlay();
+        loadEmployeeOverview(true);
       } catch (e) {
         alert("❌ บันทึกไม่สำเร็จ สาเหตุ: " + e.message);
       }
@@ -1354,7 +1399,7 @@
         const res = await apiCall('cancelLeaveRecord', { rowNumber: rowNumber, date: date });
         if (res.status === 'error') throw new Error(res.message || 'ยกเลิกไม่สำเร็จ');
         await refreshSavedLeaves();
-        await loadEmployeeOverview();
+        loadEmployeeOverview(true);
         alert("✅ ยกเลิกรายการลาเรียบร้อยแล้ว");
       } catch (e) {
         alert("❌ ยกเลิกไม่สำเร็จ สาเหตุ: " + e.message);
@@ -1795,10 +1840,7 @@
       document.getElementById('leaveDate').value = todayKey;
       setupEmployeePeriod();
       document.getElementById('formArea').addEventListener('input', persistLocalDraft);
-      loadData().finally(function() {
-        setTimeout(pullItems, 0);
-        setTimeout(loadEmployeeOverview, 0);
-      });
+      loadData().finally(function() { setTimeout(pullItems, 0); });
     }
 
     function showSuggestions(inp) {
@@ -2076,6 +2118,8 @@
         const res = await apiCall('submit', { date: date, data: data });
         document.getElementById('loadingOverlay').classList.add('hidden');
         if(res.status === "Success") {
+          stockLoaded = false;
+          historyLoaded = false;
           localStorage.removeItem('BOY_TAWANA_DRAFT_' + date);
           setSaveState('saved', 'ส่งข้อมูลแล้ว');
           const dObj = new Date(date);
