@@ -795,8 +795,10 @@
 
     function openMainDatePicker(event) {
       const input = document.getElementById('mainDate');
-      if (event.target === input || event.target.closest('label')) return;
-      try { input.showPicker(); } catch (error) { input.focus(); input.click(); }
+      try { input.showPicker(); } catch (error) {
+        input.focus();
+        if (event.target !== input) input.click();
+      }
     }
 
     function openLeaveOverlay() {
