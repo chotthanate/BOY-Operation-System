@@ -108,7 +108,7 @@
     @keyframes loadingSpin { to { transform: rotate(360deg); } }
 
     /* สไตล์สำหรับกล่องบันทึกการลา */
-    .leave-box { border: 1px solid #eee; padding: 12px; border-radius: 12px; margin-bottom: 10px; background: #fafafa; }
+    .leave-box { position: relative; border: 1px solid #eee; padding: 12px; border-radius: 12px; margin-bottom: 10px; background: #fafafa; }
     .radio-group { display: flex; align-items: center; gap: 15px; margin-top: 8px; font-size: 15px; }
     .radio-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: #333; }
     .radio-group input[type="radio"] { width: 20px; height: 20px; accent-color: var(--primary); }
@@ -504,15 +504,19 @@
     .employee-toolbar label { font-size:.78rem; font-weight:800; color:var(--muted); }
     .employee-toolbar select,.employee-toolbar input { margin-top:6px; width:100%; }
     .employee-overview { display:grid; gap:10px; }
-    .employee-row, .employee-columns { display:grid; grid-template-columns:minmax(0,1fr) 76px 92px; gap:10px; align-items:center; }
     .employee-row { padding:13px 12px; border:1px solid var(--line); border-radius:16px; background:var(--surface); }
-    .employee-columns { padding:0 12px; color:var(--muted); font-size:.72rem; font-weight:800; }
-    .employee-columns span:not(:first-child), .employee-count { text-align:right; }
-    .employee-count { font-weight:900; color:var(--primary-strong); white-space:nowrap; }
+    .employee-row-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .employee-pay { color:var(--primary-strong); font-size:1.08rem; font-weight:900; white-space:nowrap; }
+    .employee-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:11px; }
+    .employee-stat { display:grid; gap:3px; min-width:0; padding:7px 5px; border-radius:10px; background:var(--surface-soft); text-align:center; }
+    .employee-stat small { color:var(--muted); font-size:.65rem; }
+    .employee-stat strong { font-size:.82rem; white-space:nowrap; }
+    .employee-stat.leave { background:#fff2ed; color:#a9482d; }
     .employee-name { font-weight:900; font-size:1rem; }
     .employee-meta { color:var(--muted); font-size:.78rem; margin-top:3px; }
     #leaveOverlay .overlay-card { width:min(calc(100vw - 28px), 540px); }
     #leaveOverlay .leave-card { margin:0; padding:0; border:0; box-shadow:none; }
+    .leave-box .autocomplete-items { top:76px; left:12px; right:12px; width:auto; }
     .employee-loading { padding:20px; text-align:center; color:var(--muted); }
     .master-link-grid { display:grid; gap:10px; margin:16px 0; }
     .master-link { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px; border:1px solid var(--line); border-radius:16px; color:var(--text); text-decoration:none; background:var(--surface); text-align:left; }
@@ -576,6 +580,7 @@
       .exp-row { grid-template-columns: 1fr; }
       .section-actions { grid-template-columns: 1.2fr .8fr; }
     }
+    @media (max-width: 420px) { .employee-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     @media (max-width: 360px) {
       .expense-summary { grid-template-columns: minmax(0,1fr) auto 14px; padding: 9px; }
       .expense-index { display: none; }
@@ -619,11 +624,7 @@
       </section>
       <section id="leaveView" class="app-view">
         <div class="compact-page-header"><h1>พนักงาน</h1><button class="mini-btn mini-primary" type="button" onclick="openLeaveOverlay()">+ เพิ่มวันลา</button></div>
-        <div class="card"><div class="employee-toolbar"><label>เดือน<select id="employeeMonth" onchange="loadEmployeeOverview(true)"></select></label><label>ปี<input id="employeeYear" type="number" min="2024" max="2100" onchange="loadEmployeeOverview(true)"></label></div><div class="employee-columns"><span>พนักงาน</span><span>หยุด (วัน)</span><span>หยุด (ชม.)</span></div><div id="employeeOverview" class="employee-overview"><div class="employee-loading">กดเมนูพนักงานเพื่อดูข้อมูล</div></div></div>
-      </section>
-      <section id="payrollView" class="app-view">
-        <div class="compact-page-header"><h1>สรุปเงินเดือน</h1><span class="page-context">รายเดือน</span></div>
-        <div class="card feature-card"><div class="feature-icon">฿</div><h2>คำนวณจากข้อมูลที่บันทึกไว้</h2><p>ระบบใช้ค่าแรงและชั่วโมงต่อวันของพนักงานแต่ละคนจาก BOY Master แล้วหักข้อมูลการลาในรอบนั้น</p><button class="btn-main btn-primary" type="button" onclick="openSalaryDashboard()">เปิดสรุปเงินเดือน</button></div>
+        <div class="card"><div class="employee-toolbar"><label>เดือน<select id="employeeMonth" onchange="loadEmployeeOverview(true)"></select></label><label>ปี<input id="employeeYear" type="number" min="2024" max="2100" onchange="loadEmployeeOverview(true)"></label></div><div id="employeeOverview" class="employee-overview"><div class="employee-loading">กดเมนูพนักงานเพื่อดูข้อมูล</div></div><button id="postSalaryButton" class="btn-main btn-primary" type="button" style="margin-top:14px" onclick="postSalariesToExpenses()" disabled>ดึงยอดลงรายจ่ายวันสิ้นเดือน</button></div>
       </section>
       <section id="historyView" class="app-view">
         <div class="compact-page-header"><h1>ประวัติ</h1><span class="page-context">รายการล่าสุด</span></div>
@@ -635,7 +636,7 @@
       </section>
       <section id="moreView" class="app-view">
         <div class="compact-page-header"><h1>เมนูเพิ่มเติม</h1><span class="page-context">BOY System</span></div>
-        <div class="more-grid"><button class="more-card" type="button" onclick="openSalaryDashboard()"><span class="store-option-icon">฿</span><span><strong>สรุปเงินเดือน</strong><span>ตรวจวันทำงาน การลา และค่าแรง</span></span></button><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a></div>
+        <div class="more-grid"><a class="more-card" href="./bigc-order.html"><span class="store-option-icon">OR</span><span><strong>เบิกและรับของ</strong><span>จัดการรายการของ BigC</span></span></a></div>
       </section>
     </main>
   </div>
@@ -689,30 +690,6 @@
     </div>
   </div>
 
-  <div id="salaryOverlay" class="full-overlay hidden">
-    <div class="overlay-card" style="padding: 15px;">
-      <h2 style="margin: 0; color: #007aff;">📊 สรุปเงินเดือน</h2>
-      <p id="salaryMonthText" style="color: #666; margin: 5px 0 10px 0; font-size: 0.9rem;"></p>
-      <div style="display:grid; grid-template-columns: 1fr 95px; gap: 8px; margin-bottom: 10px;">
-        <select id="salaryMonthSelect" onchange="loadSalaryDashboard()"></select>
-        <input type="number" id="salaryYearInput" onchange="loadSalaryDashboard()" style="text-align:center;" min="2024" max="2100">
-      </div>
-      
-      <div id="salaryTableArea" style="overflow-x: auto;"></div>
-      
-      <div style="background: #f8f8f8; padding: 10px; border-radius: 10px; font-size: 0.8rem; text-align: left; color: #666; margin-bottom: 15px;">
-        * ค่าแรงและอัตรารายชั่วโมงอ้างอิงข้อมูลพนักงานใน BOY Master<br>
-        * เงินพิเศษคำนวณเทียบเท่าค่าแรง 2 วัน และลดลงตามวันที่ลา
-      </div>
-
-      <button class="btn-main" style="background: var(--primary); color: white; margin-top: 0;" onclick="postSalariesToExpenses()">
-        ⬇️ ดึงยอดลงรายจ่ายวันสิ้นเดือน
-      </button>
-      <button class="btn-main" style="background: #eee; color: #666;" onclick="document.getElementById('salaryOverlay').classList.add('hidden')">
-        ปิดหน้าต่าง
-      </button>
-    </div>
-  </div>
 
   <div id="lockedOverlay" class="full-overlay hidden">
     <div class="overlay-card">
@@ -851,30 +828,55 @@
       const month = document.getElementById('employeeMonth').value;
       const year = document.getElementById('employeeYear').value;
       const key = year + '-' + month;
-      if (employeeOverviewPending === key || (!force && employeeOverviewKey === key && Date.now() - employeeOverviewAt < 60000)) return;
+      if (employeeOverviewPending === key || (!force && currentSalaryPeriod && employeeOverviewKey === key && Date.now() - employeeOverviewAt < 60000)) return;
       employeeOverviewPending = key;
+      currentSalaryData = [];
+      currentSalaryPeriod = null;
+      document.getElementById('postSalaryButton').disabled = true;
       if (employeeOverviewKey !== key) container.innerHTML = '<div class="employee-loading">กำลังโหลดข้อมูลพนักงาน…</div>';
       try {
         const result = await apiCall('employeeOverview', { month: month, year: year });
         if (result.status === 'error') throw new Error(result.message || 'โหลดข้อมูลไม่สำเร็จ');
         if (document.getElementById('employeeYear').value + '-' + document.getElementById('employeeMonth').value !== key) return;
         const employees = result.employees || [];
-        employeeOverviewKey = key;
-        employeeOverviewAt = Date.now();
         staffList = employees.map(function(row) { return row.nickname; }).filter(Boolean);
         localStorage.setItem('BOY_STAFF', JSON.stringify(staffList));
         if (!employees.length) {
           container.innerHTML = '<div class="employee-loading">ยังไม่มีพนักงานของสาขาทาวน่าใน BOY Master</div>';
+          employeeOverviewKey = key;
+          employeeOverviewAt = Date.now();
           return;
         }
-        container.innerHTML = employees.map(function(row) {
-          return '<article class="employee-row"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml(row.position || 'ไม่ระบุตำแหน่ง') + '</div></div><div class="employee-count">' + toUiNumber(row.leaveDays).toLocaleString('th-TH') + '</div><div class="employee-count">' + toUiNumber(row.leaveHours).toLocaleString('th-TH') + '</div></article>';
-        }).join('');
+        renderEmployeeSalaryRows(employees, null);
+        const salaryData = await apiCall('calculateSalary', { month: Number(month), year: Number(year), staffList: staffList });
+        if (!Array.isArray(salaryData) || salaryData.length !== employees.length) throw new Error('ข้อมูลเงินเดือนไม่ครบ กรุณาลองโหลดใหม่');
+        if (document.getElementById('employeeYear').value + '-' + document.getElementById('employeeMonth').value !== key) return;
+        currentSalaryData = salaryData;
+        currentSalaryPeriod = { month: Number(month), year: Number(year) };
+        employeeOverviewKey = key;
+        employeeOverviewAt = Date.now();
+        renderEmployeeSalaryRows(employees, salaryData);
+        document.getElementById('postSalaryButton').disabled = !salaryData.length;
       } catch (error) {
-        if (employeeOverviewKey !== key) container.innerHTML = '<div class="employee-loading">โหลดข้อมูลพนักงานไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>';
+        if (document.getElementById('employeeYear').value + '-' + document.getElementById('employeeMonth').value === key) {
+          container.insertAdjacentHTML('beforeend', '<div class="employee-loading">โหลดข้อมูลพนักงานหรือเงินเดือนไม่สำเร็จ<br><small>' + escapeHtml(error.message) + '</small></div>');
+        }
       } finally {
         if (employeeOverviewPending === key) employeeOverviewPending = '';
       }
+    }
+
+    function renderEmployeeSalaryRows(employees, salaryData) {
+      const salaryByName = {};
+      (salaryData || []).forEach(function(row) { salaryByName[row.name] = row; });
+      document.getElementById('employeeOverview').innerHTML = employees.map(function(row) {
+        const salary = salaryByName[row.nickname] || {};
+        const ready = !!salaryData;
+        const stat = function(label, value, extraClass) {
+          return '<div class="employee-stat ' + (extraClass || '') + '"><small>' + label + '</small><strong>' + escapeHtml(String(value)) + '</strong></div>';
+        };
+        return '<article class="employee-row"><div class="employee-row-head"><div><div class="employee-name">' + escapeHtml(row.nickname || row.fullName || '-') + '</div><div class="employee-meta">' + escapeHtml(row.position || 'ไม่ระบุตำแหน่ง') + '</div></div><div class="employee-pay">' + (ready ? formatMoney(salary.totalNet) : '…') + '</div></div><div class="employee-stats">' + stat('ทำงาน', ready ? salary.workedDays + ' วัน' : '…') + stat('หยุด', ready ? salary.fullLeaves + ' วัน' : row.leaveDays + ' วัน', 'leave') + stat('หยุดชั่วโมง', ready ? salary.leaveHours + ' ชม.' : row.leaveHours + ' ชม.', 'leave') + stat('เงินพิเศษ', ready ? formatMoney(salary.bonusPay) : '…') + '</div></article>';
+      }).join('');
     }
 
     function editEmployee(employeeId) {
@@ -1227,7 +1229,7 @@
       wrapper.innerHTML = `
         <div class="field">
           <label>ชื่อพนักงาน</label>
-          <input type="text" class="hr-name" placeholder="ค้นหาหรือพิมพ์ชื่อ" oninput="showStaffSuggestions(this)" autocomplete="off">
+          <input type="text" class="hr-name" placeholder="ค้นหาหรือเลือกชื่อ" onfocus="showStaffSuggestions(this)" onclick="showStaffSuggestions(this)" oninput="showStaffSuggestions(this)" autocomplete="off">
         </div>
         <div class="radio-group">
           <label>
@@ -1258,33 +1260,22 @@
     }
 
     function showStaffSuggestions(inp) {
-      var val = inp.value.trim();
+      var val = inp.value.trim().toLocaleLowerCase('th');
       closeAllLists();
-      if (!val) return;
-      var a = document.createElement("DIV");
-      a.setAttribute("class", "autocomplete-items");
-      var rect = inp.getBoundingClientRect();
-      a.style.top = (rect.bottom + window.scrollY) + "px";
-      a.style.left = (rect.left + window.scrollX) + "px";
-      a.style.width = rect.width + "px";
-      document.body.appendChild(a); 
-      
-      var count = 0;
-      for (var i = 0; i < staffList.length; i++) {
-        var staffName = staffList[i];
-        if (staffName.toLowerCase().indexOf(val.toLowerCase()) > -1) {
-          var b = document.createElement("DIV");
-          var matchIdx = staffName.toLowerCase().indexOf(val.toLowerCase());
-          b.innerHTML = staffName.substring(0, matchIdx) + "<strong><span style='color: #007aff;'>" + staffName.substring(matchIdx, matchIdx + val.length) + "</span></strong>" + staffName.substring(matchIdx + val.length);
-          b.innerHTML += "<input type='hidden' value='" + staffName + "'>";
-          b.addEventListener("click", function(e) {
-            inp.value = this.getElementsByTagName("input")[0].value;
-            closeAllLists();
-          });
-          a.appendChild(b);
-          if(++count > 5) break; 
-        }
-      }
+      var matches = staffList.filter(function(name) { return name.toLocaleLowerCase('th').includes(val); });
+      if (!matches.length) return;
+      var a = document.createElement('div');
+      a.className = 'autocomplete-items';
+      a.style.top = (inp.offsetTop + inp.offsetHeight + 4) + 'px';
+      a.style.left = inp.offsetLeft + 'px';
+      a.style.width = inp.offsetWidth + 'px';
+      inp.closest('.leave-box').appendChild(a);
+      matches.forEach(function(name) {
+        var option = document.createElement('div');
+        option.textContent = name;
+        option.addEventListener('click', function() { inp.value = name; closeAllLists(); });
+        a.appendChild(option);
+      });
     }
 
     async function saveMultipleLeaves() {
@@ -1414,24 +1405,9 @@
     // ==========================================
     const salaryMonthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-    function setupSalarySelectors(month, year) {
-      const monthSelect = document.getElementById('salaryMonthSelect');
-      const yearInput = document.getElementById('salaryYearInput');
-      if (monthSelect && monthSelect.options.length === 0) {
-        salaryMonthNames.forEach((name, index) => {
-          const opt = document.createElement('option');
-          opt.value = String(index + 1);
-          opt.textContent = name;
-          monthSelect.appendChild(opt);
-        });
-      }
-      if (monthSelect) monthSelect.value = String(month);
-      if (yearInput) yearInput.value = year;
-    }
-
     function getSelectedSalaryPeriod() {
-      const month = parseInt(document.getElementById('salaryMonthSelect').value, 10);
-      const year = parseInt(document.getElementById('salaryYearInput').value, 10);
+      const month = parseInt(document.getElementById('employeeMonth').value, 10);
+      const year = parseInt(document.getElementById('employeeYear').value, 10);
       if (!month || month < 1 || month > 12 || !year) return null;
       return { month, year };
     }
@@ -1443,45 +1419,6 @@
     function getSalaryMonthEndDate(period) {
       const lastDay = new Date(period.year, period.month, 0).getDate();
       return formatDateValue(period.year, period.month, lastDay);
-    }
-
-    async function loadSalaryDashboard() {
-      const period = getSelectedSalaryPeriod();
-      if (!period) return alert("เลือกเดือนและปีให้ถูกต้องก่อนครับ");
-      document.getElementById('loadingOverlay').classList.remove('hidden');
-
-      try {
-        var data = await apiCall('calculateSalary', { month: period.month, year: period.year, staffList: staffList });
-        currentSalaryData = data;
-        currentSalaryPeriod = period;
-        
-        var html = `<table><tr><th>ชื่อ</th><th>วันทำงาน</th><th>ลาเต็มวัน</th><th>ลา(ชม.)</th><th>เงินพิเศษ</th><th>รวมรับ</th></tr>`;
-        data.forEach(s => {
-          html += `<tr>
-            <td><strong>${s.name}</strong></td>
-            <td>${s.workedDays}</td>
-            <td style="color:var(--danger)">${s.fullLeaves || 0}</td>
-            <td style="color:var(--danger)">${s.leaveHours}</td>
-            <td>${s.bonusPay.toLocaleString()}</td>
-            <td style="color:var(--primary); font-weight:bold;">${s.totalNet.toLocaleString()}</td>
-          </tr>`;
-        });
-        html += `</table>`;
-        
-        document.getElementById('salaryMonthText').innerText = `ข้อมูลเดือน ${salaryMonthNames[period.month - 1]} ${period.year} | ลงรายจ่ายวันที่ ${getSalaryMonthEndDate(period)}`;
-        document.getElementById('salaryTableArea').innerHTML = html;
-      } catch (e) { alert("❌ ดึงข้อมูลไม่สำเร็จ สาเหตุ: " + e.message); }
-      document.getElementById('loadingOverlay').classList.add('hidden');
-    }
-
-    async function openSalaryDashboard() {
-      var dateVal = document.getElementById('mainDate').value;
-      var now = dateVal ? new Date(dateVal) : new Date();
-      var month = now.getMonth() + 1;
-      var year = now.getFullYear();
-      setupSalarySelectors(month, year);
-      document.getElementById('salaryOverlay').classList.remove('hidden');
-      await loadSalaryDashboard();
     }
 
     function isSalaryExpenseRowName(name) {
@@ -1500,10 +1437,10 @@
     async function postSalariesToExpenses() {
       const period = currentSalaryPeriod || getSelectedSalaryPeriod();
       if (!period) return alert("เลือกเดือนและปีให้ถูกต้องก่อนครับ");
+      if (!currentSalaryData.length || period.month !== Number(document.getElementById('employeeMonth').value) || period.year !== Number(document.getElementById('employeeYear').value)) return alert('กรุณารอโหลดข้อมูลเงินเดือนให้เสร็จก่อน');
       const salaryDate = getSalaryMonthEndDate(period);
       if (!confirm(`ระบบจะดึงยอดเงินเดือนเดือน ${salaryMonthNames[period.month - 1]} ${period.year}\nไปใส่ในรายจ่ายวันที่ ${salaryDate}\nยืนยันหรือไม่?`)) return;
       
-      document.getElementById('salaryOverlay').classList.add('hidden');
       document.getElementById('mainDate').value = salaryDate;
       await loadData();
       if (!document.getElementById('lockedOverlay').classList.contains('hidden')) {
@@ -1523,6 +1460,7 @@
       });
       
       doSync(); 
+      switchAppView('dailyView', document.querySelector('.bottom-nav-item'));
       alert(`ดึงยอดเงินเดือนลงรายจ่ายวันที่ ${salaryDate} แล้ว\nตรวจสอบและกดปุ่ม “ตรวจสอบและส่งข้อมูลประจำวัน” ได้เลยครับ`);
     }
 

@@ -42,6 +42,8 @@
 
 ## Pending
 
+- POS ร้านน้ำบน Android พร้อมเครื่องพิมพ์ในตัว ยังไม่ได้ build/ติดตั้ง/ทดสอบ: Mac ยังไม่เห็นอุปกรณ์ใน `adb devices -l` (17 ก.ย. 2569) และไม่มี Java Runtime สำหรับ Gradle; ต้องตรวจรุ่นเครื่อง, Android version และ printer SDK หลังเปิด USB debugging/อนุญาตเครื่องนี้ก่อน เลือก bridge เครื่องพิมพ์ตามฮาร์ดแวร์จริง ไม่ควรนำ bridge LAN/Bluetooth ของ Burger POS ไปใช้กับเครื่องพิมพ์ในตัวโดยเดา
+
 - ติดตั้ง migration BOY Central บน Cloud และรัน schema contract ผ่านแล้ว; Data API มองเห็น `boy_central` แต่ผู้ใช้ anonymous ไม่มีสิทธิ์อ่านข้อมูลตามที่ออกแบบ
 - ผู้ดูแลยืนยันอีเมลและล็อกอินสำเร็จแล้ว โปรไฟล์มีบทบาท `admin` และสิทธิ์ Admin ครบ 4 สาขา; หน้า Burger เชื่อมต่อและอ่านข้อมูลผ่าน RLS ได้จริง
 - Master ร้านเบอร์เกอร์พร้อมใช้ใน `boy_central` แล้ว แต่ Master ร้านน้ำและร้านเนื้อย่างยังต้องตรวจและนำเข้าตามลำดับ
