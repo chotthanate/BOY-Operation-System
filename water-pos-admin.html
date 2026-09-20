@@ -5,14 +5,17 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#0f513f">
   <title>จัดการ POS ร้านน้ำ · BOY Operation</title>
-  <link rel="stylesheet" href="assets/css/water-pos-admin.css">
+  <link rel="icon" type="image/png" href="assets/icons/water-logo.png">
+  <link rel="stylesheet" href="assets/css/water-pos-admin.css?v=1.0.0">
+  <link rel="stylesheet" href="assets/css/water-pos-admin-enhancements.css?v=1.0.0">
   <style>.danger-text{color:#b9362b;margin-right:auto}</style>
 </head>
 <body>
   <style id="boyAuthPendingStyle">body{visibility:hidden}</style>
   <header class="topbar">
     <a class="back" href="index.html" aria-label="กลับหน้าหลัก">←</a>
-    <div><small>BOY OPERATION</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div>
+    <img class="topbar-logo" id="topbarLogo" src="assets/icons/water-logo.png" alt="BOY ร้านน้ำ">
+    <div><small>BOY OPERATION · POS v1.0.0</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div>
     <span class="sync-pill" id="syncPill"><i></i><b>กำลังเชื่อมต่อ</b></span>
   </header>
 
@@ -51,9 +54,11 @@
     <section class="panel" id="settingsPanel">
       <div class="page-head"><div><h2>ข้อมูลร้าน การขาย และ VAT</h2><p>ใช้ร่วมกันทุกเครื่องในสาขาทาวน่า</p></div><button class="primary" data-save-config>บันทึกทั้งหมด</button></div>
       <div class="settings-grid">
-        <article class="card"><h3>ข้อมูลร้าน</h3><label>ชื่อร้าน<input id="storeName"></label><label>ชื่อสาขา<input id="branchName" readonly></label><label>เวลาเริ่มวันขาย<input id="businessDayStart" type="time"></label></article>
-        <article class="card"><h3>ภาษีและใบเสร็จ</h3><label class="check"><input id="vatEnabled" type="checkbox"><span>เปิดใช้ VAT</span></label><label>อัตรา VAT (%)<input id="vatRate" type="number" min="0" max="100" step="0.01"></label><label>รูปแบบราคา<select id="vatPriceMode"><option value="included">ราคารวม VAT แล้ว</option><option value="excluded">ราคายังไม่รวม VAT</option></select></label><label>ชื่อผู้ประกอบการ<input id="legalName"></label><label>เลขประจำตัวผู้เสียภาษี<input id="taxId"></label></article>
-        <article class="card"><h3>กะและสต็อก</h3><label class="check"><input id="requireOpeningCash" type="checkbox"><span>บังคับเงินสดเริ่มต้น</span></label><label class="check"><input id="requireClosingCash" type="checkbox"><span>บังคับนับเงินตอนปิดกะ</span></label><label class="check"><input id="preventNegativeStock" type="checkbox"><span>ป้องกันสต็อกติดลบ</span></label><label class="check"><input id="lowStockAlerts" type="checkbox"><span>แจ้งเตือนสต็อกต่ำ</span></label></article>
+        <article class="card"><h3>ข้อมูลร้าน</h3><div class="brand-upload"><img id="brandLogoPreview" src="assets/icons/water-logo.png" alt="โลโก้ร้าน"><label class="row-action">เปลี่ยนโลโก้<input id="brandLogoFile" hidden type="file" accept="image/png,image/jpeg,image/webp"></label></div><label>ชื่อร้าน<input id="storeName"></label><label>ชื่อสาขา<input id="branchName" readonly></label><label>เวลาเริ่มวันขาย<input id="businessDayStart" type="time"></label></article>
+        <article class="card"><h3>ภาษีและใบเสร็จ</h3><label class="check"><input id="vatEnabled" type="checkbox"><span>เปิดใช้ VAT</span></label><label>อัตรา VAT (%)<input id="vatRate" type="number" min="0" max="100" step="0.01"></label><label>รูปแบบราคา<select id="vatPriceMode"><option value="included">ราคารวม VAT แล้ว</option><option value="excluded">ราคายังไม่รวม VAT</option></select></label><label>ชื่อผู้ประกอบการ<input id="legalName"></label><label>เลขประจำตัวผู้เสียภาษี<input id="taxId"></label><label>หัวใบเสร็จ<input id="receiptHeader"></label><label>ข้อความท้ายใบเสร็จ<input id="receiptFooter"></label></article>
+        <article class="card"><h3>กะและสต็อก</h3><label class="check"><input id="requireOpeningCash" type="checkbox"><span>บังคับเงินสดเริ่มต้น</span></label><label class="check"><input id="requireClosingCash" type="checkbox"><span>บังคับนับเงินตอนปิดกะ</span></label><label class="check"><input id="preventNegativeStock" type="checkbox"><span>ป้องกันสต็อกติดลบ</span></label><label class="check"><input id="lowStockAlerts" type="checkbox"><span>แจ้งเตือนสต็อกต่ำ</span></label><label>ตัดสต็อกเมื่อ<select id="stockDeductionTiming"><option value="payment">รับชำระสำเร็จ</option><option value="kitchen">ส่งใบครัว</option></select></label></article>
+        <article class="card"><h3>การพิมพ์และลิ้นชัก</h3><label class="check"><input id="autoKitchenPrint" type="checkbox"><span>พิมพ์ใบครัวอัตโนมัติ</span></label><label class="check"><input id="autoReceiptPrint" type="checkbox"><span>พิมพ์ใบเสร็จอัตโนมัติ</span></label><label class="check"><input id="autoShiftPrint" type="checkbox"><span>พิมพ์ใบปิดกะอัตโนมัติ</span></label><label class="check"><input id="cashDrawer" type="checkbox"><span>เปิดลิ้นชักเมื่อรับเงินสด</span></label></article>
+        <article class="card"><h3>จอลูกค้า</h3><label class="check"><input id="customerDisplayEnabled" type="checkbox"><span>เปิดใช้จอหลัง</span></label><label class="check"><input id="customerShowOptions" type="checkbox"><span>แสดงตัวเลือกสินค้า</span></label><label class="check"><input id="customerShowDiscount" type="checkbox"><span>แสดงส่วนลด</span></label><label class="check"><input id="customerShowVat" type="checkbox"><span>แสดง VAT</span></label><label>ข้อความต้อนรับ<input id="customerIdleMessage"></label></article>
       </div>
     </section>
 
@@ -64,7 +69,7 @@
     </section>
   </main>
 
-  <dialog id="productDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="productDialogTitle">เพิ่มรายการขาย</h2><label>ชื่อรายการ<input id="productName"></label><div class="field-row"><label>ราคา<input id="productPrice" type="number" min="0"></label><label>หมวดหมู่<input id="productCategory" list="categoryOptions"></label></div><label>Emoji หรือสัญลักษณ์<input id="productEmoji" maxlength="8"></label><label class="check"><input id="productActive" type="checkbox" checked><span>เปิดขาย</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="saveProduct">เก็บรายการ</button></menu></form></dialog>
+  <dialog id="productDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="productDialogTitle">เพิ่มรายการขาย</h2><div class="product-image-editor"><div class="product-image-preview" id="productImagePreview">🥤</div><div><label class="row-action">เลือกรูปสินค้า<input id="productImageFile" hidden type="file" accept="image/png,image/jpeg,image/webp"></label><button id="removeProductImage" class="secondary danger-text" type="button">เอารูปออก</button></div></div><label>ชื่อรายการ<input id="productName"></label><div class="field-row"><label>ราคา<input id="productPrice" type="number" min="0"></label><label>หมวดหมู่<input id="productCategory" list="categoryOptions"></label></div><label>Emoji หรือสัญลักษณ์<input id="productEmoji" maxlength="8"></label><label class="check"><input id="productActive" type="checkbox" checked><span>เปิดขาย</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="saveProduct">เก็บรายการ</button></menu></form></dialog>
   <dialog id="paymentDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="paymentDialogTitle">เพิ่มช่องทางชำระเงิน</h2><label>ชื่อช่องทาง<input id="paymentName"></label><div class="field-row"><label>ประเภท<select id="paymentType"><option value="cash">เงินสด</option><option value="transfer">เงินโอน</option><option value="government">โครงการรัฐ</option><option value="delivery">Delivery</option><option value="other">อื่นๆ</option></select></label><label>ค่าธรรมเนียม (%)<input id="paymentFee" type="number" min="0" max="100" step="0.01"></label></div><label>บัญชีหรือปลายทางรับเงิน<input id="paymentAccount"></label><label class="check"><input id="paymentReference" type="checkbox"><span>ต้องกรอกเลขอ้างอิง</span></label><label class="check"><input id="paymentChange" type="checkbox"><span>สามารถทอนเงินได้</span></label><label class="check"><input id="paymentActive" type="checkbox" checked><span>เปิดใช้งาน</span></label><menu><button type="button" class="secondary danger-text" id="deletePayment">ลบ</button><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="savePayment">เก็บรายการ</button></menu></form></dialog>
   <datalist id="categoryOptions"></datalist>
   <div class="toast" id="toast" role="status"></div>
@@ -72,6 +77,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260915-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/water-pos-admin.js?v=20260915-2"></script>
+  <script src="assets/js/water-pos-admin.js?v=1.0.0"></script>
 </body>
 </html>

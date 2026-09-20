@@ -7,11 +7,14 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
   const money = (v) => `฿${Number(v || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 })}`;
+  const POS_VERSION = "1.0.0";
   let branch = null;
   let row = null;
   let config = {};
   let editingProductId = null;
   let editingPaymentId = null;
+  let pendingProductFile = null;
+  let pendingProductImage = "";
   let toastTimer;
 
   function toast(message) { const el = $("#toast"); el.textContent = message; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600); }
@@ -48,7 +51,7 @@
     row = result.data; config = structuredClone(row.config || {});
     config.products ||= []; config.categories ||= []; config.paymentMethods ||= [];
     config.store ||= { name: "BOY ร้านน้ำ", branchName: branch.name, branchCode: branch.code };
-    config.settings ||= {};
+    config.settings ||= {}; config.appVersion = POS_VERSION;
     renderConfig();
   }
 
@@ -62,40 +65,65 @@
   function renderConfig() {
     renderCatalog(); renderPayments();
     const s = config.settings || {}; const store = config.store || {};
+    const brandLogo = store.logoUrl || "assets/icons/water-logo.png";
+    $("#topbarLogo").src = brandLogo; $("#brandLogoPreview").src = brandLogo;
     $("#storeName").value = store.name || ""; $("#branchName").value = branch?.name || store.branchName || "";
-    ["businessDayStart", "vatRate", "vatPriceMode", "legalName", "taxId"].forEach((key) => { const el = $(`#${key}`); if (el) el.value = s[key] ?? (key === "vatRate" ? 7 : key === "vatPriceMode" ? "included" : ""); });
-    ["vatEnabled", "requireOpeningCash", "requireClosingCash", "preventNegativeStock", "lowStockAlerts"].forEach((key) => { $(`#${key}`).checked = s[key] === true; });
+    ["businessDayStart", "vatRate", "vatPriceMode", "legalName", "taxId", "receiptHeader", "receiptFooter", "stockDeductionTiming", "customerIdleMessage"].forEach((key) => { const el = $(`#${key}`); if (el) el.value = s[key] ?? (key === "vatRate" ? 7 : key === "vatPriceMode" ? "included" : key === "stockDeductionTiming" ? "payment" : ""); });
+    ["vatEnabled", "requireOpeningCash", "requireClosingCash", "preventNegativeStock", "lowStockAlerts", "autoKitchenPrint", "autoReceiptPrint", "autoShiftPrint", "cashDrawer", "customerDisplayEnabled", "customerShowOptions", "customerShowDiscount", "customerShowVat"].forEach((key) => { $(`#${key}`).checked = s[key] === true; });
   }
 
   function collectSettings() {
     config.store = { ...(config.store || {}), name: $("#storeName").value.trim() || "BOY ร้านน้ำ", branchName: branch.name, branchCode: branch.code };
     config.settings = { ...(config.settings || {}) };
-    ["businessDayStart", "vatPriceMode", "legalName", "taxId"].forEach((key) => config.settings[key] = $(`#${key}`).value);
+    config.appVersion = POS_VERSION;
+    ["businessDayStart", "vatPriceMode", "legalName", "taxId", "receiptHeader", "receiptFooter", "stockDeductionTiming", "customerIdleMessage"].forEach((key) => config.settings[key] = $(`#${key}`).value);
     config.settings.vatRate = Number($("#vatRate").value || 0);
-    ["vatEnabled", "requireOpeningCash", "requireClosingCash", "preventNegativeStock", "lowStockAlerts"].forEach((key) => config.settings[key] = $(`#${key}`).checked);
+    ["vatEnabled", "requireOpeningCash", "requireClosingCash", "preventNegativeStock", "lowStockAlerts", "autoKitchenPrint", "autoReceiptPrint", "autoShiftPrint", "cashDrawer", "customerDisplayEnabled", "customerShowOptions", "customerShowDiscount", "customerShowVat"].forEach((key) => config.settings[key] = $(`#${key}`).checked);
   }
 
   function renderCatalog() {
     $("#categoryStrip").innerHTML = categories().map((name) => `<span>${esc(name)} · ${products().filter((p) => p.category === name).length}</span>`).join("");
     $("#categoryOptions").innerHTML = categories().map((name) => `<option value="${esc(name)}"></option>`).join("");
-    $("#catalogList").innerHTML = products().map((p) => `<article class="catalog-row"><span class="thumb" style="background:${esc(p.color || "#fff1df")}">${esc(p.emoji || "🥤")}</span><div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${money(p.price)}</small></div><span class="status ${p.active === false ? "off" : ""}">${p.active === false ? "ปิดขาย" : "เปิดขาย"}</span><button class="row-action" data-edit-product="${esc(p.id)}">แก้ไข</button></article>`).join("") || `<article class="card">ยังไม่มีรายการขาย</article>`;
+    $("#catalogList").innerHTML = products().map((p) => `<article class="catalog-row"><span class="thumb" style="background:${esc(p.color || "#fff1df")}">${p.image ? `<img src="${esc(p.image)}" alt="">` : esc(p.emoji || "🥤")}</span><div><strong>${esc(p.name)}</strong><small>${esc(p.category)} · ${money(p.price)}</small></div><span class="status ${p.active === false ? "off" : ""}">${p.active === false ? "ปิดขาย" : "เปิดขาย"}</span><button class="row-action" data-edit-product="${esc(p.id)}">แก้ไข</button></article>`).join("") || `<article class="card">ยังไม่มีรายการขาย</article>`;
   }
 
   function openProduct(id = null) {
     const p = products().find((item) => item.id === id); editingProductId = p?.id || null;
+    pendingProductFile = null; pendingProductImage = p?.image || "";
     $("#productDialogTitle").textContent = p ? `แก้ไข ${p.name}` : "เพิ่มรายการขาย";
-    $("#productName").value = p?.name || ""; $("#productPrice").value = p?.price ?? ""; $("#productCategory").value = p?.category || categories()[0] || ""; $("#productEmoji").value = p?.emoji || "🥤"; $("#productActive").checked = p?.active !== false;
+    $("#productName").value = p?.name || ""; $("#productPrice").value = p?.price ?? ""; $("#productCategory").value = p?.category || categories()[0] || ""; $("#productEmoji").value = p?.emoji || "🥤"; $("#productActive").checked = p?.active !== false; renderProductImagePreview();
     $("#productDialog").showModal();
   }
 
-  function saveProductDraft() {
+  async function saveProductDraft() {
     const name = $("#productName").value.trim(); const price = Number($("#productPrice").value); const category = $("#productCategory").value.trim();
     if (!name || !category || !Number.isFinite(price) || price < 0) return toast("กรุณากรอกชื่อ ราคา และหมวดหมู่ให้ถูกต้อง");
     if (!categories().includes(category)) config.categories.push(category);
     const old = products().find((p) => p.id === editingProductId);
     const product = { ...(old || {}), id: old?.id || `water-${crypto.randomUUID?.() || Date.now()}`, name, price, category, emoji: $("#productEmoji").value.trim() || "🥤", color: old?.color || "#fff1df", active: $("#productActive").checked, optionGroups: old?.optionGroups || [] };
+    if (pendingProductFile) product.image = await uploadAsset("products", product.id, pendingProductFile);
+    else product.image = pendingProductImage;
     if (old) Object.assign(old, product); else config.products.push(product);
     $("#productDialog").close(); renderCatalog(); toast("เก็บการแก้ไขแล้ว กดบันทึกทั้งหมดเพื่อส่งเข้า BOY Central");
+  }
+
+  function renderProductImagePreview() { $("#productImagePreview").innerHTML = pendingProductImage ? `<img src="${esc(pendingProductImage)}" alt="รูปสินค้า">` : esc($("#productEmoji").value.trim() || "🥤"); }
+
+  async function uploadAsset(folder, id, file) {
+    if (!file || !file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) throw new Error("รูปต้องเป็น JPG, PNG หรือ WebP และมีขนาดไม่เกิน 5 MB");
+    const ext = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const path = `${branch.company_id}/${branch.id}/${folder}/${id}-${Date.now()}.${ext}`;
+    const uploaded = await client.storage.from("boy-pos-assets").upload(path, file, { upsert: false, contentType: file.type });
+    if (uploaded.error) throw uploaded.error;
+    return client.storage.from("boy-pos-assets").getPublicUrl(path).data.publicUrl;
+  }
+
+  async function uploadBrandLogo(file) {
+    const url = await uploadAsset("brand", "logo", file);
+    config.store = { ...(config.store || {}), logoUrl: url };
+    config.settings = { ...(config.settings || {}), receiptLogo: url, receiptLogoDisabled: false };
+    await saveConfig();
+    toast("อัปเดตโลโก้เว็บไซต์และหัวใบเสร็จแล้ว");
   }
 
   function renderPayments() {
@@ -144,7 +172,7 @@
   async function loadDevices() {
     const result = await db.from("pos_devices").select("id,device_code,device_name,status,last_seen_at,last_sync_at,app_version").eq("branch_id", branch.id).order("created_at", { ascending: false });
     if (result.error) throw result.error;
-    $("#deviceList").innerHTML = (result.data || []).map((d) => `<article class="device-row"><span class="thumb">▣</span><div><strong>${esc(d.device_name)}</strong><small>${esc(d.device_code)} · ${d.last_sync_at ? `ซิงก์ ${new Date(d.last_sync_at).toLocaleString("th-TH")}` : "ยังไม่เคยซิงก์"}${d.app_version ? ` · v${esc(d.app_version)}` : ""}</small></div><span class="status ${d.status !== "active" ? "off" : ""}">${esc(d.status)}</span></article>`).join("") || `<article class="card">ยังไม่มีเครื่อง POS ที่เชื่อมแล้ว</article>`;
+    $("#deviceList").innerHTML = (result.data || []).map((d) => { const current = d.app_version === POS_VERSION; return `<article class="device-row"><span class="thumb">▣</span><div><strong>${esc(d.device_name)}</strong><small>${esc(d.device_code)} · ${d.last_sync_at ? `ซิงก์ ${new Date(d.last_sync_at).toLocaleString("th-TH")}` : "ยังไม่เคยซิงก์"} · v${esc(d.app_version || "ไม่ทราบ")}</small></div><span class="status ${d.status !== "active" || !current ? "off" : ""}">${current ? "v1.0.0 ล่าสุด" : "ควรอัปเดต"}</span></article>`; }).join("") || `<article class="card">ยังไม่มีเครื่อง POS ที่เชื่อมแล้ว</article>`;
   }
 
   async function createPairing() {
@@ -157,7 +185,11 @@
   document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-product]"); if (edit) openProduct(edit.dataset.editProduct); const paymentEdit = event.target.closest("[data-edit-payment]"); if (paymentEdit) openPaymentEditor(paymentEdit.dataset.editPayment); });
   document.addEventListener("change", (event) => { const input = event.target.closest("[data-payment-image]"); if (input?.files?.[0]) uploadPaymentImage(input.dataset.paymentImage, input.files[0]).catch((e) => toast(e.message)); });
   $$("[data-save-config]").forEach((button) => button.addEventListener("click", () => saveConfig().catch((e) => toast(e.message))));
-  $("#addProduct").addEventListener("click", () => openProduct()); $("#saveProduct").addEventListener("click", saveProductDraft); $("#addPayment").addEventListener("click", () => openPaymentEditor()); $("#savePayment").addEventListener("click", savePaymentDraft); $("#deletePayment").addEventListener("click", deletePaymentDraft);
+  $("#addProduct").addEventListener("click", () => openProduct()); $("#saveProduct").addEventListener("click", () => saveProductDraft().catch((e) => toast(e.message))); $("#addPayment").addEventListener("click", () => openPaymentEditor()); $("#savePayment").addEventListener("click", savePaymentDraft); $("#deletePayment").addEventListener("click", deletePaymentDraft);
+  $("#productImageFile").addEventListener("change", (event) => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) { toast("รูปต้องเป็น JPG, PNG หรือ WebP และไม่เกิน 5 MB"); return; } pendingProductFile = file; pendingProductImage = URL.createObjectURL(file); renderProductImagePreview(); });
+  $("#removeProductImage").addEventListener("click", () => { pendingProductFile = null; pendingProductImage = ""; renderProductImagePreview(); });
+  $("#productEmoji").addEventListener("input", () => { if (!pendingProductImage) renderProductImagePreview(); });
+  $("#brandLogoFile").addEventListener("change", (event) => { const file = event.target.files?.[0]; if (file) uploadBrandLogo(file).catch((e) => toast(e.message)); event.target.value = ""; });
   $("#refreshAll").addEventListener("click", () => Promise.all([loadOverview(), loadDevices()]).then(() => toast("อัปเดตข้อมูลแล้ว")).catch((e) => toast(e.message)));
   $("#refreshStock").addEventListener("click", () => loadStock().then(() => toast("อัปเดตยอดสต็อกแล้ว")).catch((e) => toast(e.message)));
   $("#createPairing").addEventListener("click", () => createPairing().catch((e) => toast(e.message)));
