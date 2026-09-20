@@ -7,7 +7,7 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
   const money = (v) => `฿${Number(v || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 })}`;
-  const POS_VERSION = "1.0.0";
+  const POS_VERSION = "1.1.0";
   let branch = null;
   let row = null;
   let config = {};
@@ -15,7 +15,16 @@
   let editingPaymentId = null;
   let pendingProductFile = null;
   let pendingProductImage = "";
+  let accessData = { branches: [], roles: [], pos_users: [], web_users: [] };
+  let editingPosUserId = null;
+  let editingPosRoleId = null;
   let toastTimer;
+  const permissionLabels = {
+    sell: "ขายและรับชำระเงิน", view_orders: "ดูประวัติขาย", void_orders: "ยกเลิกออร์เดอร์", refund: "คืนเงิน",
+    view_summary: "ดูสรุปยอด", manage_catalog: "จัดการสินค้าและตัวเลือก", manage_promotions: "จัดการโปรโมชั่น",
+    view_stock: "ดูสต็อก", adjust_stock: "ปรับยอดสต็อก", manage_settings: "แก้การตั้งค่า POS",
+    open_drawer: "เปิดลิ้นชัก", cash_movements: "บันทึกเงินเข้า–ออก", close_shift: "ปิดกะ", reprint: "พิมพ์เอกสารย้อนหลัง"
+  };
 
   function toast(message) { const el = $("#toast"); el.textContent = message; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600); }
   function setConnected(ok, label = ok ? "เชื่อม BOY Central แล้ว" : "เชื่อมต่อไม่สำเร็จ") { $("#syncPill").classList.toggle("online", ok); $("#syncPill b").textContent = label; }
@@ -40,7 +49,7 @@
       if (branchResult.error) throw branchResult.error;
       branch = branchResult.data;
       await loadConfig();
-      await Promise.all([loadOverview(), loadStock(), loadDevices()]);
+      await Promise.all([loadOverview(), loadStock(), loadDevices(), loadAccess().catch((error) => { console.warn("Access management is not ready", error); $("#posUserList").innerHTML = '<article class="card">ระบบบัญชีกำลังรออัปเดตฐานข้อมูล</article>'; })]);
       setConnected(true);
     } catch (error) { console.error(error); setConnected(false); toast(error.message || "โหลดข้อมูลไม่สำเร็จ"); }
   }
@@ -172,7 +181,7 @@
   async function loadDevices() {
     const result = await db.from("pos_devices").select("id,device_code,device_name,status,last_seen_at,last_sync_at,app_version").eq("branch_id", branch.id).order("created_at", { ascending: false });
     if (result.error) throw result.error;
-    $("#deviceList").innerHTML = (result.data || []).map((d) => { const current = d.app_version === POS_VERSION; return `<article class="device-row"><span class="thumb">▣</span><div><strong>${esc(d.device_name)}</strong><small>${esc(d.device_code)} · ${d.last_sync_at ? `ซิงก์ ${new Date(d.last_sync_at).toLocaleString("th-TH")}` : "ยังไม่เคยซิงก์"} · v${esc(d.app_version || "ไม่ทราบ")}</small></div><span class="status ${d.status !== "active" || !current ? "off" : ""}">${current ? "v1.0.0 ล่าสุด" : "ควรอัปเดต"}</span></article>`; }).join("") || `<article class="card">ยังไม่มีเครื่อง POS ที่เชื่อมแล้ว</article>`;
+    $("#deviceList").innerHTML = (result.data || []).map((d) => { const current = d.app_version === POS_VERSION; return `<article class="device-row"><span class="thumb">▣</span><div><strong>${esc(d.device_name)}</strong><small>${esc(d.device_code)} · ${d.last_sync_at ? `ซิงก์ ${new Date(d.last_sync_at).toLocaleString("th-TH")}` : "ยังไม่เคยซิงก์"} · v${esc(d.app_version || "ไม่ทราบ")}</small></div><span class="status ${d.status !== "active" || !current ? "off" : ""}">${current ? `v${POS_VERSION} ล่าสุด` : "ควรอัปเดต"}</span></article>`; }).join("") || `<article class="card">ยังไม่มีเครื่อง POS ที่เชื่อมแล้ว</article>`;
   }
 
   async function createPairing() {
@@ -181,8 +190,66 @@
     const panel = $("#pairingResult"); panel.hidden = false; panel.innerHTML = `<span>รหัสเชื่อมเครื่อง (ใช้ได้ 15 นาที)</span><strong>${esc(result.data.pairing_code)}</strong><p>เปิด ตั้งค่า → ร้านและเครื่อง POS ที่เครื่องขาย แล้วกรอกรหัสนี้</p>`; await loadDevices();
   }
 
-  $$("[data-tab]").forEach((button) => button.addEventListener("click", () => { $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === button)); $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `${button.dataset.tab}Panel`)); }));
-  document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-product]"); if (edit) openProduct(edit.dataset.editProduct); const paymentEdit = event.target.closest("[data-edit-payment]"); if (paymentEdit) openPaymentEditor(paymentEdit.dataset.editPayment); });
+  async function loadAccess() {
+    const result = await db.rpc("list_access_accounts");
+    if (result.error) throw result.error;
+    accessData = result.data || accessData;
+    renderAccess();
+  }
+
+  function renderAccess() {
+    const roleById = Object.fromEntries((accessData.roles || []).map((role) => [role.id, role]));
+    const branchById = Object.fromEntries((accessData.branches || []).map((item) => [item.id, item]));
+    $("#webAccountList").innerHTML = (accessData.web_users || []).map((user) => `<article class="device-row"><span class="thumb">◎</span><div><strong>${esc(user.display_name || "ผู้ใช้งาน BOY")}</strong><small>${user.company_role === "admin" ? "ผู้ดูแลระบบ" : esc(user.company_role)} · ${user.active ? "ใช้งานได้" : "ปิดใช้งาน"}</small></div><span class="status ${user.active ? "" : "off"}">${user.active ? "เว็บไซต์" : "ปิด"}</span></article>`).join("") || '<article class="card">ยังไม่มีบัญชีเว็บไซต์</article>';
+    $("#posUserList").innerHTML = (accessData.pos_users || []).map((user) => {
+      const branches = (user.branch_ids || []).map((id) => branchById[id]?.name).filter(Boolean).join(", ");
+      return `<article class="device-row"><span class="thumb">#</span><div><strong>${esc(user.display_name)}</strong><small>${esc(roleById[user.role_id]?.name || "ยังไม่กำหนดตำแหน่ง")} · ${esc(branches || "ยังไม่มีสาขา")}${user.last_login_at ? ` · เข้าใช้ล่าสุด ${new Date(user.last_login_at).toLocaleString("th-TH")}` : ""}</small></div><span class="status ${user.active ? "" : "off"}">${user.active ? "ใช้งาน" : "ปิด"}</span><button class="row-action" data-edit-pos-user="${esc(user.id)}">แก้ไข</button></article>`;
+    }).join("") || '<article class="card">ยังไม่มีบัญชี POS — เพิ่มบัญชีแรกแล้วเครื่อง POS จะเริ่มขอรหัส</article>';
+    $("#posRoleList").innerHTML = (accessData.roles || []).map((role) => {
+      const enabled = Object.entries(permissionLabels).filter(([key]) => role.permissions?.[key]).map(([, label]) => label);
+      return `<button class="role-card" data-edit-pos-role="${esc(role.id)}" type="button"><header><strong>${esc(role.name)}</strong><span class="status ${role.active ? "" : "off"}">${role.active ? "ใช้งาน" : "ปิด"}</span></header><p>${esc(enabled.join(" · ") || "ยังไม่ได้ให้สิทธิ์")}</p></button>`;
+    }).join("");
+  }
+
+  function openPosUser(id = null) {
+    const user = (accessData.pos_users || []).find((item) => item.id === id); editingPosUserId = user?.id || null;
+    $("#posUserDialogTitle").textContent = user ? `แก้ไข ${user.display_name}` : "เพิ่มบัญชี POS";
+    $("#posUserName").value = user?.display_name || ""; $("#posUserPin").value = ""; $("#posUserPin").placeholder = user ? "เว้นว่างถ้าไม่เปลี่ยนรหัส" : "••••••";
+    $("#posUserRole").innerHTML = (accessData.roles || []).filter((role) => role.active || role.id === user?.role_id).map((role) => `<option value="${esc(role.id)}">${esc(role.name)}</option>`).join("");
+    $("#posUserRole").value = user?.role_id || accessData.roles?.[0]?.id || "";
+    $("#posUserBranches").innerHTML = (accessData.branches || []).map((item) => `<label><input type="checkbox" value="${esc(item.id)}" ${(user?.branch_ids || [branch?.id]).includes(item.id) ? "checked" : ""}><span>${esc(item.name)}</span></label>`).join("");
+    $("#posUserActive").checked = user?.active !== false; $("#posUserDialog").showModal();
+  }
+
+  async function savePosUser() {
+    const pin = $("#posUserPin").value.trim();
+    if (!$("#posUserName").value.trim()) return toast("กรุณากรอกชื่อพนักงาน");
+    if ((!editingPosUserId || pin) && !/^\d{6}$/.test(pin)) return toast("รหัสต้องเป็นตัวเลข 6 หลัก");
+    const branchIds = [...$("#posUserBranches").querySelectorAll("input:checked")].map((input) => input.value);
+    if (!branchIds.length) return toast("กรุณาเลือกอย่างน้อย 1 สาขา");
+    const payload = { id: editingPosUserId, display_name: $("#posUserName").value.trim(), role_id: $("#posUserRole").value, branch_ids: branchIds, active: $("#posUserActive").checked };
+    if (pin) payload.pin = pin;
+    const result = await db.rpc("save_pos_user", { payload }); if (result.error) throw result.error;
+    $("#posUserDialog").close(); await loadAccess(); toast("บันทึกบัญชี POS แล้ว");
+  }
+
+  function openPosRole(id = null) {
+    const role = (accessData.roles || []).find((item) => item.id === id); editingPosRoleId = role?.id || null;
+    $("#posRoleDialogTitle").textContent = role ? `แก้ไขสิทธิ์ ${role.name}` : "เพิ่มตำแหน่ง"; $("#posRoleName").value = role?.name || ""; $("#posRoleActive").checked = role?.active !== false;
+    $("#permissionList").innerHTML = Object.entries(permissionLabels).map(([key, label]) => `<label><input type="checkbox" value="${esc(key)}" ${role?.permissions?.[key] ? "checked" : ""}><span>${esc(label)}</span></label>`).join("");
+    $("#posRoleDialog").showModal();
+  }
+
+  async function savePosRole() {
+    const name = $("#posRoleName").value.trim(); if (!name) return toast("กรุณากรอกชื่อตำแหน่ง");
+    const permissions = Object.fromEntries(Object.keys(permissionLabels).map((key) => [key, Boolean($("#permissionList").querySelector(`input[value="${key}"]`)?.checked)]));
+    const result = await db.rpc("save_pos_role", { payload: { id: editingPosRoleId, name, permissions, active: $("#posRoleActive").checked } }); if (result.error) throw result.error;
+    $("#posRoleDialog").close(); await loadAccess(); toast("บันทึกสิทธิ์แล้ว POS จะใช้ในการเข้าสู่ระบบครั้งถัดไป");
+  }
+
+  function activateTab(name) { const button = $(`[data-tab="${name}"]`) || $("[data-tab=\"overview\"]"); $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === button)); $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `${button.dataset.tab}Panel`)); }
+  $$("[data-tab]").forEach((button) => button.addEventListener("click", () => { activateTab(button.dataset.tab); history.replaceState(null, "", button.dataset.tab === "overview" ? location.pathname : `#${button.dataset.tab}`); }));
+  document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-product]"); if (edit) openProduct(edit.dataset.editProduct); const paymentEdit = event.target.closest("[data-edit-payment]"); if (paymentEdit) openPaymentEditor(paymentEdit.dataset.editPayment); const userEdit = event.target.closest("[data-edit-pos-user]"); if (userEdit) openPosUser(userEdit.dataset.editPosUser); const roleEdit = event.target.closest("[data-edit-pos-role]"); if (roleEdit) openPosRole(roleEdit.dataset.editPosRole); });
   document.addEventListener("change", (event) => { const input = event.target.closest("[data-payment-image]"); if (input?.files?.[0]) uploadPaymentImage(input.dataset.paymentImage, input.files[0]).catch((e) => toast(e.message)); });
   $$("[data-save-config]").forEach((button) => button.addEventListener("click", () => saveConfig().catch((e) => toast(e.message))));
   $("#addProduct").addEventListener("click", () => openProduct()); $("#saveProduct").addEventListener("click", () => saveProductDraft().catch((e) => toast(e.message))); $("#addPayment").addEventListener("click", () => openPaymentEditor()); $("#savePayment").addEventListener("click", savePaymentDraft); $("#deletePayment").addEventListener("click", deletePaymentDraft);
@@ -193,5 +260,8 @@
   $("#refreshAll").addEventListener("click", () => Promise.all([loadOverview(), loadDevices()]).then(() => toast("อัปเดตข้อมูลแล้ว")).catch((e) => toast(e.message)));
   $("#refreshStock").addEventListener("click", () => loadStock().then(() => toast("อัปเดตยอดสต็อกแล้ว")).catch((e) => toast(e.message)));
   $("#createPairing").addEventListener("click", () => createPairing().catch((e) => toast(e.message)));
-  start();
+  $("#refreshAccess").addEventListener("click", () => loadAccess().then(() => toast("อัปเดตบัญชีแล้ว")).catch((e) => toast(e.message)));
+  $("#addPosUser").addEventListener("click", () => openPosUser()); $("#savePosUser").addEventListener("click", () => savePosUser().catch((e) => toast(e.message)));
+  $("#addPosRole").addEventListener("click", () => openPosRole()); $("#savePosRole").addEventListener("click", () => savePosRole().catch((e) => toast(e.message)));
+  activateTab(location.hash.slice(1) || "overview"); start();
 })();

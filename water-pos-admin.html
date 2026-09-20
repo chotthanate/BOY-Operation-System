@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#0f513f">
   <title>จัดการ POS ร้านน้ำ · BOY Operation</title>
   <link rel="icon" type="image/png" href="assets/icons/water-logo.png">
-  <link rel="stylesheet" href="assets/css/water-pos-admin.css?v=1.0.0">
-  <link rel="stylesheet" href="assets/css/water-pos-admin-enhancements.css?v=1.0.0">
+  <link rel="stylesheet" href="assets/css/water-pos-admin.css?v=1.1.0">
+  <link rel="stylesheet" href="assets/css/water-pos-admin-enhancements.css?v=1.1.0">
   <style>.danger-text{color:#b9362b;margin-right:auto}</style>
 </head>
 <body>
@@ -15,7 +15,7 @@
   <header class="topbar">
     <a class="back" href="index.html" aria-label="กลับหน้าหลัก">←</a>
     <img class="topbar-logo" id="topbarLogo" src="assets/icons/water-logo.png" alt="BOY ร้านน้ำ">
-    <div><small>BOY OPERATION · POS v1.0.0</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div>
+    <div><small>BOY OPERATION · POS v1.1.0</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div>
     <span class="sync-pill" id="syncPill"><i></i><b>กำลังเชื่อมต่อ</b></span>
   </header>
 
@@ -27,6 +27,7 @@
       <button data-tab="stock">สต็อก</button>
       <button data-tab="settings">ร้านและ VAT</button>
       <button data-tab="devices">เครื่อง POS</button>
+      <button data-tab="access">บัญชีและสิทธิ์</button>
     </nav>
 
     <section class="panel active" id="overviewPanel">
@@ -63,20 +64,29 @@
     </section>
 
     <section class="panel" id="devicesPanel">
-      <div class="page-head"><div><h2>เครื่อง POS และข้อมูลค้างส่ง</h2><p>พนักงานไม่ต้องมีบัญชี ใช้รหัสจับคู่เพียงครั้งแรก</p></div><button class="primary" id="createPairing">สร้างรหัสเชื่อมเครื่อง</button></div>
+      <div class="page-head"><div><h2>เครื่อง POS และข้อมูลค้างส่ง</h2><p>รหัสจับคู่ใช้เชื่อมเครื่องครั้งแรก ส่วนพนักงานใช้รหัสส่วนตัวในแต่ละวัน</p></div><button class="primary" id="createPairing">สร้างรหัสเชื่อมเครื่อง</button></div>
       <div id="pairingResult" class="pairing-result" hidden></div>
       <div id="deviceList" class="edit-list"></div>
+    </section>
+
+    <section class="panel" id="accessPanel">
+      <div class="page-head"><div><h2>บัญชีและสิทธิ์การใช้งาน</h2><p>จัดการบัญชีเว็บไซต์และรหัสพนักงาน POS จากจุดเดียว</p></div><button class="secondary" id="refreshAccess">รีเฟรช</button></div>
+      <div class="access-section"><div class="section-head"><div><h3>บัญชีเว็บไซต์หลังบ้าน</h3><p>บัญชี Supabase Auth ที่เข้า BOY Operation ได้</p></div></div><div id="webAccountList" class="edit-list"></div></div>
+      <div class="access-section"><div class="section-head"><div><h3>บัญชีเข้าเครื่อง POS</h3><p>พนักงานใช้รหัสตัวเลข 6 หลักของตัวเอง ไม่ต้องมี Username</p></div><button class="primary" id="addPosUser">+ เพิ่มบัญชี POS</button></div><div id="posUserList" class="edit-list"></div></div>
+      <div class="access-section"><div class="section-head"><div><h3>ตำแหน่งและสิทธิ์</h3><p>กำหนดครั้งเดียวที่ BOY Operation แล้วทุกเครื่องใช้สิทธิ์ชุดเดียวกัน</p></div><button class="secondary" id="addPosRole">+ เพิ่มตำแหน่ง</button></div><div id="posRoleList" class="role-grid"></div></div>
     </section>
   </main>
 
   <dialog id="productDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="productDialogTitle">เพิ่มรายการขาย</h2><div class="product-image-editor"><div class="product-image-preview" id="productImagePreview">🥤</div><div><label class="row-action">เลือกรูปสินค้า<input id="productImageFile" hidden type="file" accept="image/png,image/jpeg,image/webp"></label><button id="removeProductImage" class="secondary danger-text" type="button">เอารูปออก</button></div></div><label>ชื่อรายการ<input id="productName"></label><div class="field-row"><label>ราคา<input id="productPrice" type="number" min="0"></label><label>หมวดหมู่<input id="productCategory" list="categoryOptions"></label></div><label>Emoji หรือสัญลักษณ์<input id="productEmoji" maxlength="8"></label><label class="check"><input id="productActive" type="checkbox" checked><span>เปิดขาย</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="saveProduct">เก็บรายการ</button></menu></form></dialog>
   <dialog id="paymentDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="paymentDialogTitle">เพิ่มช่องทางชำระเงิน</h2><label>ชื่อช่องทาง<input id="paymentName"></label><div class="field-row"><label>ประเภท<select id="paymentType"><option value="cash">เงินสด</option><option value="transfer">เงินโอน</option><option value="government">โครงการรัฐ</option><option value="delivery">Delivery</option><option value="other">อื่นๆ</option></select></label><label>ค่าธรรมเนียม (%)<input id="paymentFee" type="number" min="0" max="100" step="0.01"></label></div><label>บัญชีหรือปลายทางรับเงิน<input id="paymentAccount"></label><label class="check"><input id="paymentReference" type="checkbox"><span>ต้องกรอกเลขอ้างอิง</span></label><label class="check"><input id="paymentChange" type="checkbox"><span>สามารถทอนเงินได้</span></label><label class="check"><input id="paymentActive" type="checkbox" checked><span>เปิดใช้งาน</span></label><menu><button type="button" class="secondary danger-text" id="deletePayment">ลบ</button><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="savePayment">เก็บรายการ</button></menu></form></dialog>
+  <dialog id="posUserDialog"><form method="dialog" class="dialog-card"><button class="close" value="cancel">×</button><h2 id="posUserDialogTitle">เพิ่มบัญชี POS</h2><label>ชื่อที่แสดง<input id="posUserName" autocomplete="off" placeholder="เช่น นัน"></label><div class="field-row"><label>ตำแหน่ง<select id="posUserRole"></select></label><label>รหัสตัวเลข 6 หลัก<input id="posUserPin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="new-password" placeholder="••••••"></label></div><fieldset class="branch-picker"><legend>เข้าใช้ POS สาขาใดได้บ้าง</legend><div id="posUserBranches"></div></fieldset><label class="check"><input id="posUserActive" type="checkbox" checked><span>เปิดใช้งานบัญชีนี้</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="savePosUser">บันทึกบัญชี</button></menu></form></dialog>
+  <dialog id="posRoleDialog"><form method="dialog" class="dialog-card wide-dialog"><button class="close" value="cancel">×</button><h2 id="posRoleDialogTitle">เพิ่มตำแหน่ง</h2><label>ชื่อตำแหน่ง<input id="posRoleName" placeholder="เช่น หัวหน้ากะ"></label><fieldset class="permission-picker"><legend>ฟีเจอร์ที่ตำแหน่งนี้ใช้ได้</legend><div id="permissionList"></div></fieldset><label class="check"><input id="posRoleActive" type="checkbox" checked><span>เปิดใช้ตำแหน่งนี้</span></label><menu><button value="cancel" class="secondary">ยกเลิก</button><button type="button" class="primary" id="savePosRole">บันทึกสิทธิ์</button></menu></form></dialog>
   <datalist id="categoryOptions"></datalist>
   <div class="toast" id="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260915-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/water-pos-admin.js?v=1.0.0"></script>
+  <script src="assets/js/water-pos-admin.js?v=1.1.0"></script>
 </body>
 </html>
