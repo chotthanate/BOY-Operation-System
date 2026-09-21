@@ -7,7 +7,7 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
   const money = (v) => `฿${Number(v || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 })}`;
-  const POS_VERSION = "1.1.1";
+  const POS_VERSION = "1.1.2";
   let branch = null;
   let row = null;
   let config = {};
