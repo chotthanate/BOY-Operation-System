@@ -7,7 +7,7 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
   const money = (v) => `฿${Number(v || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 })}`;
-  const POS_VERSION = "1.1.6";
+  const POS_VERSION = "1.1.7";
   let branch = null;
   let row = null;
   let config = {};
@@ -59,6 +59,11 @@
     if (result.error) throw result.error;
     row = result.data; config = structuredClone(row.config || {});
     config.products ||= []; config.categories ||= []; config.paymentMethods ||= [];
+    config.paymentMethods = config.paymentMethods.map((method) => ({
+      ...method,
+      label: method.type === "government" && (!method.label || method.label === "โครงการรัฐ") ? "ไทยช่วยไทย" : method.label,
+      account: method.type === "government" && method.account === "โครงการรัฐ" ? "ไทยช่วยไทย" : method.account
+    }));
     config.store ||= { name: "BOY ร้านน้ำ", branchName: branch.name, branchCode: branch.code };
     config.settings ||= {}; config.appVersion = POS_VERSION;
     renderConfig();
@@ -136,7 +141,7 @@
   }
 
   function renderPayments() {
-    const typeLabels = { cash: "เงินสด", transfer: "เงินโอน", government: "โครงการรัฐ", delivery: "Delivery", other: "อื่นๆ" };
+    const typeLabels = { cash: "เงินสด", transfer: "เงินโอน", government: "ไทยช่วยไทย", delivery: "Delivery", other: "อื่นๆ" };
     $("#paymentList").innerHTML = payments().map((p) => `<article class="payment-row">${p.image ? `<img class="payment-qr" src="${esc(p.image)}" alt="QR ${esc(p.label)}">` : `<span class="thumb">${esc(p.icon || "⌁")}</span>`}<div><strong>${esc(p.label)}</strong><small>${esc(typeLabels[p.type] || p.type)}${p.account ? ` · ${esc(p.account)}` : ""}${Number(p.feePercent || 0) ? ` · ค่าธรรมเนียม ${Number(p.feePercent)}%` : ""}${p.active === false ? " · ปิดใช้งาน" : ""}</small></div><div class="actions"><label class="row-action">${p.image ? "เปลี่ยน QR" : "เพิ่ม QR"}<input hidden type="file" accept="image/png,image/jpeg,image/webp" data-payment-image="${esc(p.id)}"></label><button class="row-action" data-edit-payment="${esc(p.id)}">แก้ไข</button></div></article>`).join("");
   }
 
