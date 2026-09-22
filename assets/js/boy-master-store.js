@@ -8,6 +8,12 @@
   let databasePromise;
   let supabaseClient;
 
+  function withTimeout(promise, milliseconds, message) {
+    let timer;
+    const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
   function database() {
     if (!databasePromise) databasePromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, CACHE_VERSION);
@@ -56,9 +62,9 @@
   async function fromSupabase(sheetName) {
     const central = client();
     if (!central) throw new Error("Supabase ยังไม่พร้อม");
-    const { data: sessionData } = await central.auth.getSession();
+    const { data: sessionData } = await withTimeout(central.auth.getSession(), 2500, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (!sessionData?.session) throw new Error("ยังไม่มีเซสชัน Supabase");
-    const { data, error } = await central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName });
+    const { data, error } = await withTimeout(central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName }), 8000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (error) throw error;
     if (!data?.sheetName) throw new Error("ไม่พบข้อมูลใน Supabase");
     return data;
