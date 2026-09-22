@@ -145,19 +145,31 @@ function doPost(e) {
         result = handleMasterCatalog_(payload.entity);
         break;
       case 'masterSave':
-        result = handleMasterSave_(payload.entity, payload.rowNumber, payload.values || {}, payload.branchIds);
+        result = handleMasterSave_(payload.entity, payload.rowNumber, payload.values || {}, payload.branchIds, payload.actor || {}, payload.expectedVersion);
         break;
       case 'masterSetActive':
-        result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active);
+        result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active, payload.actor || {}, payload.expectedVersion);
         break;
       case 'sheetCatalog':
         result = handleSheetCatalog_(payload.sheetName);
         break;
       case 'sheetSave':
-        result = handleSheetSave_(payload.sheetName, payload.rowNumber, payload.values || {});
+        result = handleSheetSave_(payload.sheetName, payload.rowNumber, payload.values || {}, payload.actor || {}, payload.expectedVersion);
         break;
       case 'sheetSetActive':
-        result = handleSheetSetActive_(payload.sheetName, payload.rowNumber, payload.active);
+        result = handleSheetSetActive_(payload.sheetName, payload.rowNumber, payload.active, payload.actor || {}, payload.expectedVersion);
+        break;
+      case 'sheetBulkSave':
+        result = handleSheetBulkSave_(payload.sheetName, payload.rows || [], payload.actor || {});
+        break;
+      case 'masterHistory':
+        result = handleMasterHistory_(payload.sheetName, payload.limit);
+        break;
+      case 'masterUndo':
+        result = handleMasterUndo_(payload.auditId, payload.actor || {});
+        break;
+      case 'masterImpact':
+        result = handleMasterImpact_(payload.sheetName, payload.rowNumber);
         break;
       case 'branchHistory':
         result = handleBranchHistory_(payload.limit);
@@ -364,6 +376,10 @@ function lock_() {
   return LockService.getScriptLock();
 }
 
+function clearMasterHealthCache_() {
+  CacheService.getScriptCache().remove('boy-master-health-v1');
+}
+
 function propKey_(prefix, date) {
   return prefix + ':' + CONFIG.branchName + ':' + dateKey_(date);
 }
@@ -423,6 +439,75 @@ const BOY_MASTER_SHEET_TITLES = [
   'M_สินค้าสายสินค้า', 'M_วัตถุดิบกลาง', 'I_จับคู่_Burger_POS'
 ];
 
+const MASTER_AUDIT_SHEET = '_BOY_WEB_AUDIT';
+const MASTER_AUDIT_HEADERS = [
+  'audit_id', 'changed_at', 'actor', 'sheet_name', 'row_number', 'action',
+  'record_key', 'before_json', 'after_json', 'undone_at', 'undone_by'
+];
+
+function masterRowObject_(headers, values) {
+  const result = {};
+  headers.forEach(function(header, index) { if (header) result[header] = values[index]; });
+  return result;
+}
+
+function masterRowVersion_(headers, values) {
+  const text = JSON.stringify(masterRowObject_(headers, values));
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8);
+  return Utilities.base64EncodeWebSafe(digest).replace(/=+$/, '').slice(0, 22);
+}
+
+function actorLabel_(actor) {
+  actor = actor || {};
+  return normalizeText_(actor.email || actor.name || actor.userId || 'BOY Operation');
+}
+
+function masterAuditSheet_() {
+  const sh = ensureSheet_(CONFIG.spreadsheets.master, MASTER_AUDIT_SHEET, MASTER_AUDIT_HEADERS);
+  if (!sh.isSheetHidden()) sh.hideSheet();
+  return sh;
+}
+
+function recordMasterAudit_(sheetName, rowNumber, action, beforeObject, afterObject, actor) {
+  clearMasterHealthCache_();
+  const audit = masterAuditSheet_();
+  const object = afterObject || beforeObject || {};
+  const key = masterIdHeaderForSheet_(sheetName, Object.keys(object));
+  const auditId = Utilities.getUuid();
+  appendRows_(audit, [[
+    auditId, now_(), actorLabel_(actor), sheetName, Number(rowNumber) || '', action,
+    key ? normalizeText_(object[key]) : '',
+    JSON.stringify(beforeObject || {}), JSON.stringify(afterObject || {}), '', ''
+  ]]);
+  return auditId;
+}
+
+function assertMasterVersion_(headers, currentValues, expectedVersion) {
+  if (!expectedVersion) return;
+  if (masterRowVersion_(headers, currentValues) !== normalizeText_(expectedVersion)) {
+    throw new Error('ข้อมูลรายการนี้ถูกแก้จากอีกเครื่องแล้ว กรุณาปิดหน้าต่างและเปิดใหม่ก่อนบันทึก');
+  }
+}
+
+function dailyBoyMasterBackup() {
+  const timezone = Session.getScriptTimeZone() || 'Asia/Bangkok';
+  const stamp = Utilities.formatDate(now_(), timezone, 'yyyy-MM-dd_HHmm');
+  const source = ss_(CONFIG.spreadsheets.master);
+  const backup = SpreadsheetApp.create('BOY_Master_BACKUP_' + stamp);
+  const defaultSheet = backup.getSheets()[0];
+  source.getSheets().forEach(function(sheet) { sheet.copyTo(backup).setName(sheet.getName()); });
+  backup.deleteSheet(defaultSheet);
+  return { id: backup.getId(), name: backup.getName(), url: backup.getUrl() };
+}
+
+function installBoyMasterBackupTrigger() {
+  ScriptApp.getProjectTriggers().filter(function(trigger) {
+    return trigger.getHandlerFunction() === 'dailyBoyMasterBackup';
+  }).forEach(function(trigger) { ScriptApp.deleteTrigger(trigger); });
+  ScriptApp.newTrigger('dailyBoyMasterBackup').timeBased().atHour(3).everyDays(1).create();
+  return { status: 'installed', hour: 3, timezone: Session.getScriptTimeZone() || 'Asia/Bangkok' };
+}
+
 function safeMasterSheet_(sheetName) {
   const title = normalizeText_(sheetName);
   if (BOY_MASTER_SHEET_TITLES.indexOf(title) < 0) throw new Error('ไม่รองรับชีทนี้ใน BOY Master');
@@ -442,6 +527,11 @@ function sheetIdHeader_(headers) {
   }) || '';
 }
 
+function masterIdHeaderForSheet_(sheetName, headers) {
+  const specKey = Object.keys(MASTER_ENTITY_SPECS).find(function(key) { return MASTER_ENTITY_SPECS[key].sheet === sheetName; });
+  return specKey ? MASTER_ENTITY_SPECS[specKey].id : sheetIdHeader_(headers);
+}
+
 function sheetPrefix_(sheetName, idHeader) {
   const known = {
     'M_เมนู': 'MENU', 'M_สูตรเมนู': 'REC', 'M_UW_ทดลอง': 'UW',
@@ -458,7 +548,7 @@ function genericSheetRows_(sheet, headers) {
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
   return values.map(function(row, index) {
-    const obj = { __rowNumber: index + 2 };
+    const obj = { __rowNumber: index + 2, __version: masterRowVersion_(headers, row) };
     let hasValue = false;
     headers.forEach(function(header, columnIndex) {
       if (!header) return;
@@ -495,12 +585,12 @@ function handleSheetCatalog_(sheetName) {
   };
 }
 
-function handleSheetSave_(sheetName, rowNumber, incoming) {
+function handleSheetSave_(sheetName, rowNumber, incoming, actor, expectedVersion) {
   const sh = safeMasterSheet_(sheetName);
   const headers = genericHeaders_(sh);
   const readonly = {};
   genericFormulaHeaders_(sh, headers).forEach(function(header) { readonly[header] = true; });
-  const idHeader = sheetIdHeader_(headers);
+  const idHeader = masterIdHeaderForSheet_(sheetName, headers);
   const lock = lock_();
   lock.waitLock(15000);
   try {
@@ -508,6 +598,8 @@ function handleSheetSave_(sheetName, rowNumber, incoming) {
     const isUpdate = rn >= 2 && rn <= sh.getMaxRows();
     if (!isUpdate) rn = realLastDataRow_(sh) + 1;
     if (rn > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), rn - sh.getMaxRows());
+    const beforeValues = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0] : new Array(headers.length).fill('');
+    if (isUpdate) assertMasterVersion_(headers, beforeValues, expectedVersion);
     const currentFormulas = sh.getRange(rn, 1, 1, headers.length).getFormulas()[0];
     headers.forEach(function(header, index) {
       if (readonly[header] || currentFormulas[index] || !Object.prototype.hasOwnProperty.call(incoming, header)) return;
@@ -516,13 +608,15 @@ function handleSheetSave_(sheetName, rowNumber, incoming) {
       if (header === 'เปิดใช้งาน') value = toBool_(value, true);
       sh.getRange(rn, index + 1).setValue(value);
     });
+    const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+    recordMasterAudit_(sh.getName(), rn, isUpdate ? 'แก้ไข' : 'เพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   } finally {
     lock.releaseLock();
   }
   return handleSheetCatalog_(sheetName);
 }
 
-function handleSheetSetActive_(sheetName, rowNumber, active) {
+function handleSheetSetActive_(sheetName, rowNumber, active, actor, expectedVersion) {
   const sh = safeMasterSheet_(sheetName);
   const headers = genericHeaders_(sh);
   const activeIndex = headers.indexOf('เปิดใช้งาน');
@@ -530,8 +624,132 @@ function handleSheetSetActive_(sheetName, rowNumber, active) {
   if (activeIndex < 0) throw new Error('ตารางนี้ไม่มีคอลัมน์เปิดใช้งาน');
   if (!rn || rn < 2 || rn > sh.getMaxRows()) throw new Error('แถวข้อมูลไม่ถูกต้อง');
   if (sh.getRange(rn, activeIndex + 1).getFormula()) throw new Error('ช่องสถานะนี้คำนวณด้วยสูตร จึงแก้ตรงนี้ไม่ได้');
+  const beforeValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  assertMasterVersion_(headers, beforeValues, expectedVersion);
   sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
+  const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  recordMasterAudit_(sh.getName(), rn, toBool_(active, false) ? 'เปิดใช้งาน' : 'ปิดใช้งาน', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   return handleSheetCatalog_(sheetName);
+}
+
+function handleSheetBulkSave_(sheetName, incomingRows, actor) {
+  const sh = safeMasterSheet_(sheetName);
+  if (!Array.isArray(incomingRows) || !incomingRows.length) throw new Error('ไม่พบข้อมูลนำเข้า');
+  if (incomingRows.length > 300) throw new Error('นำเข้าได้สูงสุดครั้งละ 300 รายการ');
+  const headers = genericHeaders_(sh);
+  const idHeader = masterIdHeaderForSheet_(sheetName, headers);
+  const idIndex = idHeader ? headers.indexOf(idHeader) : -1;
+  const readonly = {};
+  genericFormulaHeaders_(sh, headers).forEach(function(header) { readonly[header] = true; });
+  const existingById = {};
+  if (idIndex >= 0 && realLastDataRow_(sh) >= 2) {
+    sh.getRange(2, idIndex + 1, realLastDataRow_(sh) - 1, 1).getDisplayValues().forEach(function(row, index) {
+      const key = normalizeText_(row[0]);
+      if (key) existingById[key] = index + 2;
+    });
+  }
+  const lock = lock_();
+  lock.waitLock(30000);
+  let added = 0;
+  let updated = 0;
+  try {
+    incomingRows.forEach(function(incoming) {
+      const suppliedId = idHeader ? normalizeText_(incoming[idHeader]) : '';
+      let rn = suppliedId && existingById[suppliedId] ? existingById[suppliedId] : realLastDataRow_(sh) + 1;
+      if (rn > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), rn - sh.getMaxRows());
+      const isUpdate = !!(suppliedId && existingById[suppliedId]);
+      const beforeValues = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0] : new Array(headers.length).fill('');
+      const currentFormulas = sh.getRange(rn, 1, 1, headers.length).getFormulas()[0];
+      headers.forEach(function(header, index) {
+        if (!header || readonly[header] || currentFormulas[index] || !Object.prototype.hasOwnProperty.call(incoming, header)) return;
+        let value = incoming[header];
+        if (header === idHeader && isBlank_(value)) value = nextMasterId_(sh, index + 1, sheetPrefix_(sh.getName(), idHeader));
+        if (header === 'เปิดใช้งาน') value = toBool_(value, true);
+        sh.getRange(rn, index + 1).setValue(value);
+      });
+      const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+      const finalId = idIndex >= 0 ? normalizeText_(afterValues[idIndex]) : '';
+      if (finalId) existingById[finalId] = rn;
+      recordMasterAudit_(sh.getName(), rn, isUpdate ? 'นำเข้าแก้ไข' : 'นำเข้าเพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
+      if (isUpdate) updated++; else added++;
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  const result = handleSheetCatalog_(sheetName);
+  result.imported = { added: added, updated: updated };
+  return result;
+}
+
+function handleMasterHistory_(sheetName, limit) {
+  safeMasterSheet_(sheetName);
+  const audit = masterAuditSheet_();
+  const lastRow = audit.getLastRow();
+  if (lastRow < 2) return { status: 'success', rows: [] };
+  const max = Math.min(Math.max(Number(limit) || 40, 1), 200);
+  const values = audit.getRange(2, 1, lastRow - 1, MASTER_AUDIT_HEADERS.length).getDisplayValues();
+  const rows = values.map(function(row, index) {
+    const item = masterRowObject_(MASTER_AUDIT_HEADERS, row);
+    item.__rowNumber = index + 2;
+    return item;
+  }).filter(function(row) { return row.sheet_name === sheetName; }).slice(-max).reverse();
+  return { status: 'success', sheetName: sheetName, rows: rows };
+}
+
+function handleMasterUndo_(auditId, actor) {
+  const audit = masterAuditSheet_();
+  const values = audit.getDataRange().getDisplayValues();
+  const idIndex = MASTER_AUDIT_HEADERS.indexOf('audit_id');
+  const auditRowIndex = values.findIndex(function(row, index) { return index > 0 && normalizeText_(row[idIndex]) === normalizeText_(auditId); });
+  if (auditRowIndex < 1) throw new Error('ไม่พบรายการแก้ไขนี้');
+  const entry = masterRowObject_(MASTER_AUDIT_HEADERS, values[auditRowIndex]);
+  if (entry.undone_at) throw new Error('รายการนี้ย้อนกลับไปแล้ว');
+  const sh = safeMasterSheet_(entry.sheet_name);
+  const headers = genericHeaders_(sh);
+  const rn = Number(entry.row_number);
+  if (!rn || rn < 2 || rn > sh.getMaxRows()) throw new Error('ตำแหน่งข้อมูลเดิมไม่ถูกต้อง');
+  const beforeObject = JSON.parse(entry.before_json || '{}');
+  const afterObject = JSON.parse(entry.after_json || '{}');
+  const currentValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  if (masterRowVersion_(headers, currentValues) !== masterRowVersion_(headers, headers.map(function(header) { return afterObject[header] == null ? '' : afterObject[header]; }))) {
+    throw new Error('ข้อมูลถูกแก้ต่อหลังจากรายการนี้ จึงยังย้อนกลับไม่ได้');
+  }
+  const formulas = sh.getRange(rn, 1, 1, headers.length).getFormulas()[0];
+  const beforeHasData = Object.keys(beforeObject).some(function(header) { return !isBlank_(beforeObject[header]); });
+  if (!beforeHasData) {
+    const activeIndex = headers.indexOf('เปิดใช้งาน');
+    if (activeIndex < 0) throw new Error('รายการที่เพิ่มใหม่ไม่มีสถานะปิดใช้งาน จึงไม่ลบอัตโนมัติ');
+    sh.getRange(rn, activeIndex + 1).setValue(false);
+  } else {
+    headers.forEach(function(header, index) {
+      if (!header || formulas[index]) return;
+      sh.getRange(rn, index + 1).setValue(beforeObject[header] == null ? '' : beforeObject[header]);
+    });
+  }
+  const restoredValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  audit.getRange(auditRowIndex + 1, MASTER_AUDIT_HEADERS.indexOf('undone_at') + 1).setValue(now_());
+  audit.getRange(auditRowIndex + 1, MASTER_AUDIT_HEADERS.indexOf('undone_by') + 1).setValue(actorLabel_(actor));
+  recordMasterAudit_(sh.getName(), rn, 'ย้อนกลับ', afterObject, masterRowObject_(headers, restoredValues), actor);
+  return { status: 'success', sheetName: sh.getName(), rowNumber: rn };
+}
+
+function handleMasterImpact_(sheetName, rowNumber) {
+  const sh = safeMasterSheet_(sheetName);
+  const headers = genericHeaders_(sh);
+  const rn = Number(rowNumber);
+  if (!rn || rn < 2 || rn > sh.getMaxRows()) throw new Error('แถวข้อมูลไม่ถูกต้อง');
+  const idHeader = masterIdHeaderForSheet_(sh.getName(), headers);
+  const values = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  const key = idHeader ? normalizeText_(values[headers.indexOf(idHeader)]) : '';
+  if (!key) return { status: 'success', key: '', usages: [] };
+  const allowed = {};
+  BOY_MASTER_SHEET_TITLES.forEach(function(title) { allowed[title] = true; });
+  const usages = ss_(CONFIG.spreadsheets.master).createTextFinder(key).matchEntireCell(true).findAll().filter(function(range) {
+    return allowed[range.getSheet().getName()] && !(range.getSheet().getName() === sh.getName() && range.getRow() === rn);
+  }).slice(0, 30).map(function(range) {
+    return { sheetName: range.getSheet().getName(), cell: range.getA1Notation(), rowNumber: range.getRow() };
+  });
+  return { status: 'success', key: key, usages: usages, truncated: usages.length >= 30 };
 }
 
 function masterSpec_(entity) {
@@ -565,6 +783,10 @@ function handleMasterCatalog_(entity) {
   const rows = tableObjects_(CONFIG.spreadsheets.master, spec.sheet).filter(function(row) {
     if (!isBlank_(row[spec.id])) return true;
     return (spec.required || []).some(function(header) { return !isBlank_(row[header]); });
+  });
+  rows.forEach(function(row) {
+    const values = sh.getRange(row.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+    row.__version = masterRowVersion_(headers, values);
   });
   const references = {};
   const referenceMap = {
@@ -628,7 +850,7 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
   });
 }
 
-function handleMasterSave_(entity, rowNumber, incoming, branchIds) {
+function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expectedVersion) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
   const headers = masterHeaders_(sh);
@@ -644,12 +866,15 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds) {
     const rn = Number(rowNumber);
     const isUpdate = rn >= 2 && rn <= sh.getLastRow();
     const existing = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getValues()[0] : new Array(headers.length).fill('');
+    const beforeValues = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0] : new Array(headers.length).fill('');
+    if (isUpdate) assertMasterVersion_(headers, beforeValues, expectedVersion);
     const row = headers.map(function(header, index) {
       if (header === spec.id) return isUpdate ? existing[index] : nextMasterId_(sh, idIndex + 1, spec.prefix);
       if (!Object.prototype.hasOwnProperty.call(incoming, header)) return existing[index];
       if (header === 'เปิดใช้งาน') return toBool_(incoming[header], true);
       return incoming[header];
     });
+    const targetRow = isUpdate ? rn : realLastDataRow_(sh) + 1;
     if (!isUpdate) {
       const activeIndex = headers.indexOf('เปิดใช้งาน');
       if (activeIndex >= 0 && isBlank_(row[activeIndex])) row[activeIndex] = true;
@@ -662,13 +887,15 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds) {
       const linkedItemIndex = headers.indexOf('item_id');
       if (linkedItemIndex >= 0) setMasterItemBranches_(normalizeText_(row[linkedItemIndex]), branchIds);
     }
+    const afterValues = sh.getRange(targetRow, 1, 1, headers.length).getDisplayValues()[0];
+    recordMasterAudit_(sh.getName(), targetRow, isUpdate ? 'แก้ไข' : 'เพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   } finally {
     lock.releaseLock();
   }
   return handleMasterCatalog_(entity);
 }
 
-function handleMasterSetActive_(entity, rowNumber, active) {
+function handleMasterSetActive_(entity, rowNumber, active, actor, expectedVersion) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
   const headers = masterHeaders_(sh);
@@ -676,7 +903,11 @@ function handleMasterSetActive_(entity, rowNumber, active) {
   const rn = Number(rowNumber);
   if (activeIndex < 0) throw new Error('ตารางนี้ไม่มีคอลัมน์เปิดใช้งาน');
   if (!rn || rn < 2 || rn > sh.getLastRow()) throw new Error('แถวข้อมูลไม่ถูกต้อง');
+  const beforeValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  assertMasterVersion_(headers, beforeValues, expectedVersion);
   sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
+  const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  recordMasterAudit_(sh.getName(), rn, toBool_(active, false) ? 'เปิดใช้งาน' : 'ปิดใช้งาน', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   return handleMasterCatalog_(entity);
 }
 
@@ -718,7 +949,66 @@ function inspectSheetSchema_(spreadsheetId, sheetName, headers) {
   };
 }
 
+function inspectMasterDataQuality_(sh) {
+  const sheetName = sh.getName();
+  const headers = genericHeaders_(sh);
+  const idHeader = masterIdHeaderForSheet_(sheetName, headers);
+  const lastRow = realLastDataRow_(sh);
+  const rowCount = Math.max(0, lastRow - 1);
+  const seen = {};
+  const duplicates = [];
+  let missingRequired = 0;
+  const missingRequiredRows = [];
+  const specKey = Object.keys(MASTER_ENTITY_SPECS).find(function(key) { return MASTER_ENTITY_SPECS[key].sheet === sheetName; });
+  const required = specKey ? (MASTER_ENTITY_SPECS[specKey].required || []) : [];
+  const idValues = idHeader && rowCount ? sh.getRange(2, headers.indexOf(idHeader) + 1, rowCount, 1).getDisplayValues() : [];
+  idValues.forEach(function(row) {
+    const key = normalizeText_(row[0]);
+    if (!key) return;
+    if (seen[key] && duplicates.indexOf(key) < 0) duplicates.push(key);
+    seen[key] = true;
+  });
+  if (required.length && rowCount) {
+    const data = sh.getRange(2, 1, rowCount, headers.length).getDisplayValues();
+    data.forEach(function(row, rowIndex) {
+      const identityIndex = idHeader ? headers.indexOf(idHeader) : -1;
+      const activeIndex = headers.indexOf('เปิดใช้งาน');
+      if (activeIndex >= 0 && !toBool_(row[activeIndex], true)) return;
+      const recordPresent = (identityIndex >= 0 && !isBlank_(row[identityIndex])) || required.some(function(header) { const index = headers.indexOf(header); return index >= 0 && !isBlank_(row[index]); });
+      if (!recordPresent) return;
+      const missingHeaders = required.filter(function(header) { const index = headers.indexOf(header); return index < 0 || isBlank_(row[index]); });
+      if (!missingHeaders.length) return;
+      missingRequired++;
+      if (missingRequiredRows.length < 10) {
+        missingRequiredRows.push({
+          rowNumber: rowIndex + 2,
+          recordKey: identityIndex >= 0 ? normalizeText_(row[identityIndex]) : '',
+          missing: missingHeaders
+        });
+      }
+    });
+  }
+  const issueParts = [];
+  if (duplicates.length) issueParts.push('รหัสซ้ำ ' + duplicates.length);
+  if (missingRequired) {
+    const rowLabels = missingRequiredRows.map(function(item) { return item.recordKey || ('แถว ' + item.rowNumber); });
+    issueParts.push('ข้อมูลจำเป็นไม่ครบ ' + missingRequired + (rowLabels.length ? ' (' + rowLabels.join(', ') + ')' : ''));
+  }
+  return {
+    name: sheetName,
+    ok: duplicates.length === 0 && missingRequired === 0,
+    rows: rowCount,
+    duplicateIds: duplicates.slice(0, 10),
+    missingRequired: missingRequired,
+    missingRequiredRows: missingRequiredRows,
+    message: issueParts.length ? 'พบ' + issueParts.join(' · ') : 'พร้อมใช้งาน'
+  };
+}
+
 function handleSystemHealthCheck_() {
+  const healthCache = CacheService.getScriptCache();
+  const cached = healthCache.get('boy-master-health-v1');
+  if (cached) return JSON.parse(cached);
   const tables = [
     inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions),
     inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionLinesV2, TRANSACTION_V2_HEADERS.lines),
@@ -730,25 +1020,20 @@ function handleSystemHealthCheck_() {
     inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.attachmentsV2),
     inspectSheetSchema_(CONFIG.spreadsheets.transactions, CONFIG.sheets.statusHistoryV2, TRANSACTION_V2_HEADERS.history)
   ];
-  const masterTables = [
-    CONFIG.sheets.masterBranches,
-    CONFIG.sheets.masterItems,
-    CONFIG.sheets.masterUnits,
-    CONFIG.sheets.masterItemUnits,
-    CONFIG.sheets.masterExpenseItems,
-    CONFIG.sheets.masterSuppliers,
-    CONFIG.sheets.masterItemSuppliers,
-    CONFIG.sheets.masterEmployees
-  ].map(function(sheetName) {
-    return inspectSheetSchema_(CONFIG.spreadsheets.master, sheetName);
+  const masterBook = ss_(CONFIG.spreadsheets.master);
+  const masterTables = BOY_MASTER_SHEET_TITLES.map(function(sheetName) {
+    const sh = masterBook.getSheetByName(sheetName);
+    return sh ? inspectMasterDataQuality_(sh) : { name: sheetName, ok: false, rows: 0, duplicateIds: [], message: 'ไม่พบแท็บ' };
   });
-  return {
+  const result = {
     status: 'success',
     ok: tables.concat(masterTables).every(function(item) { return item.ok; }),
     checkedAt: now_(),
     tables: tables,
     masterTables: masterTables
   };
+  healthCache.put('boy-master-health-v1', JSON.stringify(result), 300);
+  return result;
 }
 
 function preProductionResetSummary_() {
