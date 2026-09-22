@@ -423,6 +423,53 @@ const MASTER_ENTITY_SPECS = {
   branchItems: { sheet: 'M_สินค้าสาขา', id: 'branch_item_id', prefix: 'BI', title: 'สินค้าประจำสาขา', required: ['branch_id', 'item_id'] }
 };
 
+// Columns added by BOY Operation after the original Google Sheet was created.
+// Keeping them here makes Google Sheet a compatible mirror/fallback while the
+// web app uses Supabase as its primary catalog.
+const MASTER_EXTRA_HEADERS = {
+  employees: ['รูปแบบค่าแรง', 'ค่าแรงต่อเดือน'],
+  branches: ['ที่อยู่', 'ชื่อผู้ติดต่อ', 'เบอร์โทรติดต่อ', 'อีเมล', 'ผู้จัดการสาขา', 'ผู้ประสานงาน', 'เบอร์ผู้ประสานงาน'],
+  suppliers: ['จัดหาวัตถุดิบ', 'จัดหาบรรจุภัณฑ์', 'จัดหาอุปกรณ์', 'จัดหาของใช้สิ้นเปลือง', 'ให้บริการ', 'ประเภทอื่นๆ'],
+  itemSuppliers: ['รหัสสินค้าของซัพพลายเออร์', 'ยี่ห้อ', 'ขนาดบรรจุ', 'หน่วยขนาดบรรจุ']
+};
+
+function ensureMasterExtraHeaders_(entity, sheet) {
+  const extra = MASTER_EXTRA_HEADERS[entity] || [];
+  if (!extra.length) return;
+  const headers = masterHeaders_(sheet);
+  const missing = extra.filter(function(header) { return headers.indexOf(header) < 0; });
+  if (!missing.length) return;
+  sheet.getRange(1, headers.length + 1, 1, missing.length).setValues([missing]);
+  if (entity === 'suppliers') migrateSupplierLegacyCategories_(sheet);
+}
+
+function migrateSupplierLegacyCategories_(sheet) {
+  const property = 'master_supplier_categories_migrated_v1';
+  const properties = PropertiesService.getScriptProperties();
+  if (properties.getProperty(property) === '1') return;
+  const headers = masterHeaders_(sheet);
+  const noteIndex = headers.indexOf('หมายเหตุ');
+  if (noteIndex < 0 || sheet.getLastRow() < 2) { properties.setProperty(property, '1'); return; }
+  const mappings = [
+    ['วัตถุดิบ', 'จัดหาวัตถุดิบ'], ['อาหาร', 'จัดหาวัตถุดิบ'], ['บรรจุภัณฑ์', 'จัดหาบรรจุภัณฑ์'],
+    ['อุปกรณ์', 'จัดหาอุปกรณ์'], ['ของใช้สิ้นเปลือง', 'จัดหาของใช้สิ้นเปลือง'], ['บริการ', 'ให้บริการ']
+  ];
+  const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, headers.length);
+  const values = range.getValues();
+  values.forEach(function(row) {
+    const note = normalizeText_(row[noteIndex]);
+    if (!/^หลายประเภท\s*:/.test(note)) return;
+    mappings.forEach(function(mapping) {
+      if (note.indexOf(mapping[0]) < 0) return;
+      const index = headers.indexOf(mapping[1]);
+      if (index >= 0) row[index] = true;
+    });
+    row[noteIndex] = '';
+  });
+  range.setValues(values);
+  properties.setProperty(property, '1');
+}
+
 // Every visible tab in BOY_Master is available from BOY Operation. The ten
 // canonical M_* tables above keep their richer purpose-built editors; the
 // remaining tabs use the safe generic editor below.
@@ -779,6 +826,7 @@ function nextMasterId_(sheet, idColumn, prefix) {
 function handleMasterCatalog_(entity) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
+  ensureMasterExtraHeaders_(entity, sh);
   const headers = masterHeaders_(sh);
   const rows = tableObjects_(CONFIG.spreadsheets.master, spec.sheet).filter(function(row) {
     if (!isBlank_(row[spec.id])) return true;
@@ -853,6 +901,7 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
 function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expectedVersion) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
+  ensureMasterExtraHeaders_(entity, sh);
   const headers = masterHeaders_(sh);
   const idIndex = headers.indexOf(spec.id);
   if (idIndex < 0) throw new Error('ไม่พบคอลัมน์รหัส ' + spec.id);
@@ -3029,7 +3078,9 @@ function handleCalculateSalary_(month, year, staffList, employeeLookupsOverride)
 
   return staff.map(function(name) {
     const employee = employeeLookups[lookupKey_(name)] || {};
-    const dailyWage = toNumber_(employee['ค่าแรงต่อวัน']) || 400;
+    const wageType = normalizeText_(employee['รูปแบบค่าแรง']) === 'รายเดือน' ? 'รายเดือน' : 'รายวัน';
+    const monthlyWage = toNumber_(employee['ค่าแรงต่อเดือน']);
+    const dailyWage = wageType === 'รายเดือน' && monthlyWage > 0 ? monthlyWage / daysInMonth : (toNumber_(employee['ค่าแรงต่อวัน']) || 400);
     const hoursPerDay = toNumber_(employee['ชั่วโมง/วัน']) || 10;
     const hourlyRate = dailyWage / hoursPerDay;
     const leaves = leavesByStaff[name] || [];
@@ -3048,13 +3099,15 @@ function handleCalculateSalary_(month, year, staffList, employeeLookupsOverride)
 
     const penaltyDays = Math.min(2, Object.keys(leaveDates).length);
     const workedDays = Math.max(0, daysInMonth - fullLeaves);
-    const basePay = workedDays * dailyWage;
+    const basePay = wageType === 'รายเดือน' && monthlyWage > 0 ? Math.max(0, monthlyWage - (fullLeaves * dailyWage)) : workedDays * dailyWage;
     const hourDeduction = leaveHours * hourlyRate;
     const bonusPay = Math.max(0, (dailyWage * 2) - (penaltyDays * dailyWage));
     const totalNet = basePay - hourDeduction + bonusPay;
 
     return {
       name: name,
+      wageType: wageType,
+      monthlyWage: monthlyWage,
       workedDays: workedDays,
       fullLeaves: fullLeaves,
       leaveHours: leaveHours,
@@ -3100,7 +3153,9 @@ function handleEmployeeOverview_(month, year) {
         startTime: normalizeText_(row['เวลาเริ่มงาน']),
         endTime: normalizeText_(row['เวลาเลิกงาน']),
         hoursPerDay: toNumber_(row['ชั่วโมง/วัน']),
+        wageType: normalizeText_(row['รูปแบบค่าแรง']) || 'รายวัน',
         dailyWage: toNumber_(row['ค่าแรงต่อวัน']),
+        monthlyWage: toNumber_(row['ค่าแรงต่อเดือน']),
         workedDays: Number(stats.workedDays || 0),
         leaveDays: Number(stats.fullLeaves || 0),
         leaveHours: Number(stats.leaveHours || 0)
