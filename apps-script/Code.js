@@ -150,6 +150,15 @@ function doPost(e) {
       case 'masterSetActive':
         result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active);
         break;
+      case 'sheetCatalog':
+        result = handleSheetCatalog_(payload.sheetName);
+        break;
+      case 'sheetSave':
+        result = handleSheetSave_(payload.sheetName, payload.rowNumber, payload.values || {});
+        break;
+      case 'sheetSetActive':
+        result = handleSheetSetActive_(payload.sheetName, payload.rowNumber, payload.active);
+        break;
       case 'branchHistory':
         result = handleBranchHistory_(payload.limit);
         break;
@@ -397,6 +406,133 @@ const MASTER_ENTITY_SPECS = {
   itemSuppliers: { sheet: 'M_ผู้ขายสินค้า', id: 'item_supplier_id', prefix: 'IS', title: 'ผู้ขายสินค้า', required: ['item_id', 'supplier_id'] },
   branchItems: { sheet: 'M_สินค้าสาขา', id: 'branch_item_id', prefix: 'BI', title: 'สินค้าประจำสาขา', required: ['branch_id', 'item_id'] }
 };
+
+// Every visible tab in BOY_Master is available from BOY Operation. The ten
+// canonical M_* tables above keep their richer purpose-built editors; the
+// remaining tabs use the safe generic editor below.
+const BOY_MASTER_SHEET_TITLES = [
+  'Database', 'ประเภทค่าใช้จ่าย', 'พนักงาน', 'Usable Weight', 'หน่วยและการแปลง',
+  'สูตรและเมนู', 'รายการเบิกของ', '_คู่มือ', 'M_สาขา', 'M_หมวดหมู่', 'M_หน่วย',
+  'M_หน่วยสินค้า', 'M_สินค้า', 'M_รายการค่าใช้จ่าย', 'ชีต2', 'M_ผู้ขาย',
+  'M_สินค้าสาขา', 'M_พนักงาน', 'M_UW_สรุป', 'M_เมนู', 'M_สูตรเมนู',
+  'M_UW_ทดลอง', 'DATA_ISSUES', 'M_ผู้ขายสินค้า', 'I_แก้ไขสินค้า',
+  'I_แก้ไข Supplier', 'I_แก้ไขพนักงาน', 'I_แก้ไขสาขา', 'I_ผลการนำเข้า',
+  'I_สินค้า_ร้านน้ำ', 'I_สินค้า_เบอร์เกอร์', 'I_สินค้า_เนื้อย่าง',
+  'I_รายจ่าย_ร้านน้ำ', 'I_รายจ่าย_เบอร์เกอร์', 'I_รายจ่าย_เนื้อย่าง',
+  'I_Supplier_สาขา', 'I_Supplier_สินค้า', 'M_สายสินค้า',
+  'M_สินค้าสายสินค้า', 'M_วัตถุดิบกลาง', 'I_จับคู่_Burger_POS'
+];
+
+function safeMasterSheet_(sheetName) {
+  const title = normalizeText_(sheetName);
+  if (BOY_MASTER_SHEET_TITLES.indexOf(title) < 0) throw new Error('ไม่รองรับชีทนี้ใน BOY Master');
+  return sheet_(CONFIG.spreadsheets.master, title);
+}
+
+function realLastDataRow_(sheet) {
+  const maxRows = sheet.getMaxRows();
+  if (!maxRows) return 1;
+  const keyCell = sheet.getRange(maxRows, 1).getNextDataCell(SpreadsheetApp.Direction.UP);
+  return Math.max(1, isBlank_(keyCell.getDisplayValue()) ? 1 : keyCell.getRow());
+}
+
+function sheetIdHeader_(headers) {
+  return headers.find(function(header) {
+    return /(^id$|_id$|^รหัส)/i.test(normalizeText_(header));
+  }) || '';
+}
+
+function sheetPrefix_(sheetName, idHeader) {
+  const known = {
+    'M_เมนู': 'MENU', 'M_สูตรเมนู': 'REC', 'M_UW_ทดลอง': 'UW',
+    'M_สายสินค้า': 'LINE', 'M_สินค้าสายสินค้า': 'IPL',
+    'M_วัตถุดิบกลาง': 'ING'
+  };
+  if (known[sheetName]) return known[sheetName];
+  const fromHeader = normalizeText_(idHeader).replace(/_id$/i, '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  return fromHeader || 'ROW';
+}
+
+function genericSheetRows_(sheet, headers) {
+  const lastRow = realLastDataRow_(sheet);
+  if (lastRow < 2) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues();
+  return values.map(function(row, index) {
+    const obj = { __rowNumber: index + 2 };
+    let hasValue = false;
+    headers.forEach(function(header, columnIndex) {
+      if (!header) return;
+      obj[header] = row[columnIndex];
+      if (!isBlank_(row[columnIndex])) hasValue = true;
+    });
+    return hasValue ? obj : null;
+  }).filter(Boolean);
+}
+
+function genericHeaders_(sheet) {
+  const headers = masterHeaders_(sheet);
+  while (headers.length && isBlank_(headers[headers.length - 1])) headers.pop();
+  return headers;
+}
+
+function genericFormulaHeaders_(sheet, headers) {
+  const lastRow = Math.max(2, realLastDataRow_(sheet));
+  const formulas = sheet.getRange(2, 1, lastRow - 1, headers.length).getFormulas();
+  return headers.filter(function(header, columnIndex) {
+    return formulas.some(function(row) { return !isBlank_(row[columnIndex]); });
+  });
+}
+
+function handleSheetCatalog_(sheetName) {
+  const sh = safeMasterSheet_(sheetName);
+  const headers = genericHeaders_(sh);
+  const readonlyHeaders = genericFormulaHeaders_(sh, headers);
+  return {
+    status: 'success', entity: 'sheet:' + sh.getName(), title: sh.getName(), sheetName: sh.getName(),
+    idHeader: sheetIdHeader_(headers), headers: headers, rows: genericSheetRows_(sh, headers),
+    required: [], readonlyHeaders: readonlyHeaders,
+    description: readonlyHeaders.length ? 'ช่องคำนวณจากสูตรถูกล็อกเพื่อป้องกันสูตรเสีย' : 'แก้ไขข้อมูลใน Google Sheet โดยตรง'
+  };
+}
+
+function handleSheetSave_(sheetName, rowNumber, incoming) {
+  const sh = safeMasterSheet_(sheetName);
+  const headers = genericHeaders_(sh);
+  const readonly = {};
+  genericFormulaHeaders_(sh, headers).forEach(function(header) { readonly[header] = true; });
+  const idHeader = sheetIdHeader_(headers);
+  const lock = lock_();
+  lock.waitLock(15000);
+  try {
+    let rn = Number(rowNumber);
+    const isUpdate = rn >= 2 && rn <= sh.getMaxRows();
+    if (!isUpdate) rn = realLastDataRow_(sh) + 1;
+    if (rn > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), rn - sh.getMaxRows());
+    const currentFormulas = sh.getRange(rn, 1, 1, headers.length).getFormulas()[0];
+    headers.forEach(function(header, index) {
+      if (readonly[header] || currentFormulas[index] || !Object.prototype.hasOwnProperty.call(incoming, header)) return;
+      let value = incoming[header];
+      if (header === idHeader && isBlank_(value)) value = nextMasterId_(sh, index + 1, sheetPrefix_(sh.getName(), idHeader));
+      if (header === 'เปิดใช้งาน') value = toBool_(value, true);
+      sh.getRange(rn, index + 1).setValue(value);
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  return handleSheetCatalog_(sheetName);
+}
+
+function handleSheetSetActive_(sheetName, rowNumber, active) {
+  const sh = safeMasterSheet_(sheetName);
+  const headers = genericHeaders_(sh);
+  const activeIndex = headers.indexOf('เปิดใช้งาน');
+  const rn = Number(rowNumber);
+  if (activeIndex < 0) throw new Error('ตารางนี้ไม่มีคอลัมน์เปิดใช้งาน');
+  if (!rn || rn < 2 || rn > sh.getMaxRows()) throw new Error('แถวข้อมูลไม่ถูกต้อง');
+  if (sh.getRange(rn, activeIndex + 1).getFormula()) throw new Error('ช่องสถานะนี้คำนวณด้วยสูตร จึงแก้ตรงนี้ไม่ได้');
+  sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
+  return handleSheetCatalog_(sheetName);
+}
 
 function masterSpec_(entity) {
   const key = normalizeText_(entity);
