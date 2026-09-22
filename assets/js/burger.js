@@ -795,7 +795,7 @@
     state.profile = profile;
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
     }
@@ -823,7 +823,7 @@
     state.profile = readCache(profileCacheKey()) || { display_name: "Chotthanate", company_role: "admin" };
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
+    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";

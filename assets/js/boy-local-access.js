@@ -2,8 +2,9 @@
   "use strict";
   const KEY = "boy-owner-local-access-v1";
   const DAYS = 30;
+  const FALLBACK_OWNER_PIN_HASH = "f173cdd5dc0e80d1d8302c1cf349ddba74b423eee33dddb147c627a847c07dca";
   const config = window.BOY_CENTRAL_CONFIG || {};
-  const localSecret = window.BOY_LOCAL_SECRET || {};
+  const localSecret = window.BOY_LOCAL_SECRET || { ownerPinHash: FALLBACK_OWNER_PIN_HASH };
 
   function read() {
     try {
