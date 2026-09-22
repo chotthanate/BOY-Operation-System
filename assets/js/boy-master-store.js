@@ -1,8 +1,8 @@
 (() => {
   "use strict";
-  const DB_NAME = "boy-operation-cache";
+  const DB_NAME = "boy-master-catalog-cache";
   const STORE_NAME = "master-catalogs";
-  const CACHE_VERSION = 2;
+  const CACHE_VERSION = 1;
   const SOFT_TTL = 5 * 60 * 1000;
   const pending = new Map();
   let databasePromise;
