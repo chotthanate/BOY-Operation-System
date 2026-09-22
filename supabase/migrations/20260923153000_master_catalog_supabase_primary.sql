@@ -163,5 +163,38 @@ end;
 $$;
 grant execute on function boy_central.save_master_catalog_row(text,integer,jsonb,text) to authenticated;
 
+create or replace function boy_central.replace_master_catalog_rows(
+  target_sheet_name text,
+  rows jsonb,
+  actor_name text default null
+) returns integer language plpgsql security invoker set search_path = '' as $$
+declare
+  target_sheet boy_central.master_catalog_sheets;
+  imported_count integer := 0;
+begin
+  select * into target_sheet from boy_central.master_catalog_sheets s
+  where s.sheet_name=target_sheet_name and s.active
+    and boy_central_private.is_company_admin(s.company_id) limit 1;
+  if target_sheet.id is null then raise exception 'ไม่พบตารางหรือไม่มีสิทธิ์แก้ไข'; end if;
+
+  delete from boy_central.master_catalog_rows where sheet_id=target_sheet.id;
+  insert into boy_central.master_catalog_rows(company_id,sheet_id,row_number,record_key,row_data,source_version,active)
+  select target_sheet.company_id,target_sheet.id,
+    coalesce((entry->>'__rowNumber')::integer,ordinality::integer+1),
+    nullif(entry->>target_sheet.id_header,''),
+    entry - '__rowNumber' - '__version',
+    coalesce(entry->>'__version',extract(epoch from clock_timestamp())::text),true
+  from jsonb_array_elements(coalesce(rows,'[]'::jsonb)) with ordinality as imported(entry,ordinality);
+  get diagnostics imported_count = row_count;
+
+  update boy_central.master_catalog_sheets set source_name='supabase',source_revision=extract(epoch from clock_timestamp())::text,last_imported_at=now()
+  where id=target_sheet.id;
+  insert into boy_central.master_catalog_changes(company_id,sheet_id,action,after_data,actor_id,actor_label,mirror_status)
+  values(target_sheet.company_id,target_sheet.id,'import',jsonb_build_object('rowCount',imported_count),(select auth.uid()),actor_name,'synced');
+  return imported_count;
+end;
+$$;
+grant execute on function boy_central.replace_master_catalog_rows(text,jsonb,text) to authenticated;
+
 comment on table boy_central.master_catalog_sheets is 'Supabase-primary catalog metadata; Google Sheets is an asynchronous mirror/archive.';
 comment on table boy_central.master_catalog_rows is 'Protected editable BOY master data imported from the latest verified Google Sheet snapshot.';

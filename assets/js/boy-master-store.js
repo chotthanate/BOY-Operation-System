@@ -51,6 +51,47 @@
     return entry.catalog;
   }
 
+  async function remove(key) {
+    try {
+      const db = await database();
+      await new Promise((resolve, reject) => {
+        const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).delete(key);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (_) {}
+  }
+
+  async function queueCatalog(sheetName, catalog) {
+    try {
+      const db = await database();
+      await new Promise((resolve, reject) => {
+        const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put({
+          sheetName: `__outbox__:${sheetName}`,
+          kind: "catalog-outbox",
+          targetSheetName: sheetName,
+          rows: catalog?.rows || [],
+          queuedAt: Date.now()
+        });
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    } catch (_) {}
+  }
+
+  async function flushCatalogOutbox(central, sheetName) {
+    const key = `__outbox__:${sheetName}`;
+    const queued = await cached(key);
+    if (!queued?.rows) return;
+    const { error } = await withTimeout(central.schema("boy_central").rpc("replace_master_catalog_rows", {
+      target_sheet_name: sheetName,
+      rows: queued.rows,
+      actor_name: "ซิงก์รายการที่แก้ไขระหว่างออฟไลน์"
+    }), 15000, "ส่งข้อมูลที่รอซิงก์ไม่สำเร็จ");
+    if (error) throw error;
+    await remove(key);
+  }
+
   function client() {
     if (supabaseClient) return supabaseClient;
     const config = window.BOY_CENTRAL_CONFIG || {};
@@ -64,6 +105,7 @@
     if (!central) throw new Error("Supabase ยังไม่พร้อม");
     const { data: sessionData } = await withTimeout(central.auth.getSession(), 2500, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (!sessionData?.session) throw new Error("ยังไม่มีเซสชัน Supabase");
+    await flushCatalogOutbox(central, sheetName);
     const { data, error } = await withTimeout(central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName }), 8000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (error) throw error;
     if (!data?.sheetName) throw new Error("ไม่พบข้อมูลใน Supabase");
@@ -119,7 +161,9 @@
       } catch (_) {}
     }
     const catalog = await legacySave("fallback");
-    return remember(sheetName, catalog, "google-sheets-fallback");
+    const remembered = await remember(sheetName, catalog, "google-sheets-fallback");
+    await queueCatalog(sheetName, remembered);
+    return remembered;
   }
 
   async function setActive(sheetName, rowNumber, next, currentRow, actorName, legacySave) {
