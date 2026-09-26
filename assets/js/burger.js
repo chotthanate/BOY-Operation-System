@@ -115,7 +115,6 @@
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
     if (page === "stock" && state.session) loadStock();
     if (page === "dashboard" && state.session) loadDashboard();
-    if (page === "reimbursement" && state.session) loadReimbursements();
     if (page === "settings" && state.session) renderMasterList();
   }
 
@@ -1045,9 +1044,6 @@
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
-  $("#refreshReimbursementButton").addEventListener("click", loadReimbursements);
-  $("#reimbursementList").addEventListener("change", updateReimbursementSelection);
-  $("#settleReimbursementsButton").addEventListener("click", settleReimbursements);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#masterSearch").addEventListener("input", renderMasterList);
   $$("[data-master-tab]").forEach((button) => button.addEventListener("click", () => {

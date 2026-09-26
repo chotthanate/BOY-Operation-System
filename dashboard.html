@@ -22,7 +22,7 @@
 </head>
 <body>
 <div class="app">
-  <aside class="side"><div class="brand"><span class="mark">BOY</span><span><strong>BOY Operation</strong><small>ภาพรวมธุรกิจ</small></span></div><nav class="nav"><a href="index.html">หน้าหลัก</a><a class="active" href="dashboard.html">Dashboard รวม</a><a href="reimbursements.html">รอเบิกค่าใช้จ่าย</a><a href="master-data.html">ข้อมูลกลาง BOY</a></nav></aside>
+  <aside class="side"><a class="brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="mark">BOY</span><span><strong>BOY Operation</strong><small>ภาพรวมธุรกิจ</small></span></a><nav class="nav"><a href="index.html">หน้าหลัก</a><a class="active" href="dashboard.html">Dashboard รวม</a><a href="reimbursements.html">รอเบิกค่าใช้จ่าย</a><a href="master-data.html">ข้อมูลกลาง BOY</a></nav></aside>
   <main>
     <header class="top"><div><h1>ภาพรวมวันนี้</h1><div class="sub" id="updated">กำลังเตรียมข้อมูล...</div></div><div class="date-tools"><button class="icon" onclick="moveDate(-1)" aria-label="วันก่อน">‹</button><input class="date" id="dateInput" type="date"><button class="icon" onclick="moveDate(1)" aria-label="วันถัดไป">›</button><button class="icon refresh" id="refreshBtn" onclick="loadDaily(true)" aria-label="รีเฟรช">↻</button></div></header>
     <section class="kpis"><article class="kpi"><span>รายรับรวม</span><strong id="totalIncome">—</strong></article><article class="kpi"><span>รายจ่ายรวม</span><strong id="totalExpense">—</strong></article><article class="kpi"><span>คงเหลือสุทธิ</span><strong id="totalNet">—</strong></article><a class="kpi pending" href="reimbursements.html"><span>รอเบิกค่าใช้จ่าย</span><strong id="pendingTotal">—</strong></a></section>

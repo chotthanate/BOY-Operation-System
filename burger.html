@@ -11,10 +11,12 @@
   <link rel="stylesheet" href="assets/css/burger-history.css">
   <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-7">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
+  <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
+      <a class="boy-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="boy-home-mark">BOY</span><span class="boy-home-copy"><strong>BOY Operation</strong><small>หน้าหลักทุกสาขา</small></span></a>
       <button class="store-button" id="storeButton" type="button" aria-haspopup="dialog">
         <span class="store-mark">BG</span>
         <span><small>กำลังทำงานที่</small><strong>ร้านเบอร์เกอร์</strong></span>
@@ -65,13 +67,6 @@
         <section class="panel"><h2>ช่องทางรายรับ</h2><div id="channelBreakdown" class="breakdown-list"></div></section>
       </section>
 
-      <section class="page" id="reimbursementPage" data-page="reimbursement">
-        <div class="section-heading compact"><div><small>เงินที่สำรองจ่าย</small><h1>รอเบิกค่าใช้จ่าย</h1></div><button class="icon-button" id="refreshReimbursementButton" type="button" aria-label="โหลดใหม่">↻</button></div>
-        <section class="reimbursement-total"><span>ยอดรอเบิกทั้งหมด</span><strong id="reimbursementTotal">฿0.00</strong></section>
-        <div class="reimbursement-list" id="reimbursementList"><div class="empty-state">ยังไม่มีรายการรอเบิก</div></div>
-        <button class="primary-button settle-button" id="settleReimbursementsButton" type="button" disabled>รับเงินและเคลียร์รายการที่เลือก</button>
-      </section>
-
       <section class="page" id="accountPage" data-page="account">
         <div class="section-heading compact"><div><small>บัญชีผู้ใช้</small><h1>บัญชี</h1></div></div>
         <section class="panel account-panel"><div class="account-avatar">BOY</div><strong id="accountName">—</strong><span id="accountEmail">—</span><button class="secondary-button" id="logoutButton" type="button">ออกจากระบบ</button></section>
@@ -93,7 +88,6 @@
     <button class="active" type="button" data-target="expense"><span>＋</span><strong>รายจ่าย</strong></button>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
     <button type="button" data-target="dashboard"><span>▥</span><strong>Dashboard</strong></button>
-    <button type="button" data-target="reimbursement"><span>฿</span><strong>รอเบิก</strong></button>
     <button type="button" data-target="settings"><span>⚙</span><strong>ตั้งค่า</strong></button>
     <button type="button" data-target="account"><span>○</span><strong>บัญชี</strong></button>
   </nav>

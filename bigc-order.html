@@ -19,8 +19,9 @@
         html { background-color: var(--bg); min-height: 100%; overscroll-behavior: none; }
         body { margin: 0; width: 100%; max-width: none; background-color: var(--bg); color: var(--text); padding-bottom: calc(100px + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; overflow-x: hidden; min-height: 100vh; min-height: 100dvh; box-shadow: none; }
         @supports (-webkit-touch-callout: none) { body { min-height: -webkit-fill-available; } }
-        header { background-color: var(--primary); color: white; padding: calc(15px + env(safe-area-inset-top)) 20px 15px; text-align: center; font-size: 20px; font-weight: bold; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.1); width: 100%; max-width: none; margin: 0; }
-        .header-icon { position: absolute; right: 15px; top: calc(12px + env(safe-area-inset-top)); font-size: 22px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;}
+        header { background-color: var(--primary); color: white; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:8px;text-align:left;font-size:16px;font-weight:bold;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.1);width:100%;max-width:none;margin:0; }
+        .order-home{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#fff;color:var(--primary-dark);text-decoration:none;font-size:.72rem;font-weight:950}.order-title small,.order-title strong{display:block}.order-title small{font-size:.68rem;opacity:.82}.order-title strong{margin-top:2px;font-size:.95rem}.branch-back{padding:9px 11px;border-radius:11px;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-size:.72rem}
+        .header-icon { position: static; font-size: 20px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 11px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;}
         .tab-menu { display: flex; background: white; position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 99; border-bottom: 1px solid #eee; width: 100%; max-width: none; margin: 0; }
         .tab-btn { flex: 1; padding: 15px 0; border: none; background: none; font-size: 15px; color: #aaa; font-weight: bold; border-bottom: 3px solid transparent; }
         .tab-btn.active { color: var(--primary); border-bottom: 3px solid var(--primary); }
@@ -74,14 +75,6 @@
         .revenue-box.collapsed .revenue-status { display: block; }
         .revenue-box.collapsed .revenue-toggle .chevron { transform: rotate(180deg); }
         .rev-input { width: 100%; padding: 12px; border: 2px solid #A5D6A7; border-radius: 8px; font-size: 20px; font-weight: bold; text-align: right; outline: none; }
-        .app-switcher-toggle { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 10px; z-index: 10020; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(31,41,55,.14); font-size: 1.45rem; font-weight: 900; cursor: pointer; }
-        .app-switcher-backdrop { position: fixed; inset: 0; z-index: 10010; background: rgba(15,23,42,.38); backdrop-filter: blur(2px); }
-        .app-switcher-panel { position: fixed; top: calc(62px + env(safe-area-inset-top)); left: 10px; z-index: 10021; width: min(310px, calc(100vw - 20px)); background: #fff; border-radius: 18px; padding: 12px; box-shadow: 0 16px 44px rgba(15,23,42,.24); }
-        .app-switcher-title { padding: 8px 10px 10px; color: #667085; font-size: .85rem; font-weight: 800; }
-        .app-switcher-panel a { display: block; padding: 13px 12px; border-radius: 12px; color: #333; text-decoration: none; font-weight: 900; }
-        .app-switcher-panel a.active { background: #E8F5E9; color: var(--primary-dark); }
-        .app-switcher-panel a + a { margin-top: 4px; }
-        .app-switcher-hidden { display: none !important; }
         @media (min-width: 900px) {
             html { background-color: #e9ecef; }
             body { max-width: var(--app-max-width); margin: 0 auto; box-shadow: 0 0 24px rgba(0,0,0,0.08); }
@@ -101,35 +94,10 @@
 
 <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ไม่ส่ง LINE และข้อมูลจะถูกล้างก่อนเปิดใช้งานจริง</div>
 
-<button class="app-switcher-toggle" type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูระบบ">☰</button>
-<div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
-<nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
-    <div class="app-switcher-title">เลือกใช้งาน</div>
-    <a href="./tawana.html">ทาวน่า</a>
-    <a href="./bigc.html">บิ๊กซีพัทยากลาง</a>
-    <a class="active" href="./bigc-order.html">รายการเบิกของบิ๊กซีพัทยากลาง</a>
-    <a href="./dashboard.html">Dashboard</a>
-    <a href="./index.html">หน้ารวม</a>
-</nav>
-
-<script>
-function closeAppSwitcher() {
-    document.getElementById('appSwitcherBackdrop').classList.add('app-switcher-hidden');
-    document.getElementById('appSwitcherPanel').classList.add('app-switcher-hidden');
-}
-function toggleAppSwitcher() {
-    document.getElementById('appSwitcherBackdrop').classList.toggle('app-switcher-hidden');
-    document.getElementById('appSwitcherPanel').classList.toggle('app-switcher-hidden');
-}
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') closeAppSwitcher();
-});
-</script>
-
 <div id="cute-loader"><div class="cup-icon">🥤</div><div class="loader-text" id="loader-msg">กำลังโหลดข้อมูล...</div></div>
 
 <header>
-    🥤 BOY | Order V9.1
+    <a class="order-home" href="index.html" aria-label="กลับหน้าหลัก">BOY</a><span class="order-title"><small>บิ๊กซี พัทยากลาง</small><strong>เบิกและรับสินค้า</strong></span><a class="branch-back" href="bigc.html">หน้าสาขา</a>
     <div class="header-icon" onclick="window.openManageModal()">⚙️</div>
 </header>
 

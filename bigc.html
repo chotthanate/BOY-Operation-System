@@ -11,6 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
   <title>บิ๊กซีพัทยากลาง | รายจ่าย</title>
   <style>
     :root {
@@ -232,27 +233,31 @@
       .expense-row input { padding: 10px 8px; font-size: 15px; }
       .delete-btn { width: 38px; height: 40px; }
     }
+    .store-shell-header { max-width:880px; min-height:64px; margin:0 auto 10px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px; }
+    .store-context-button { min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr) 18px; align-items:center; gap:9px; padding:5px; border:0; background:transparent; color:var(--ink); text-align:left; }
+    .store-context-button strong,.store-context-button small{display:block}.store-context-button small{color:var(--muted);font-size:.68rem}.store-context-button strong{margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92rem}
+    .store-avatar{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(145deg,#f2b705,#d99a00);color:#3c2c00;font-weight:950;box-shadow:0 8px 20px rgba(217,154,0,.2)}
+    .compact-page-header{max-width:880px;margin:8px auto 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.compact-page-header h1{margin:0;color:var(--ink);font-size:1.45rem;text-align:left}.page-context{color:var(--muted);font-size:.76rem;font-weight:800}
+    .app-switcher-panel{top:auto;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));width:min(480px,calc(100vw - 24px));transform:translateX(-50%);padding:14px;border-radius:22px}.sheet-handle{width:48px;height:5px;margin:0 auto 12px;border-radius:99px;background:#d9dedb}.app-switcher-panel a{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:58px;padding:8px;border-radius:14px}.app-switcher-panel a span:first-child{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#f2f4f2;font-weight:950}.app-switcher-panel a small{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}.app-switcher-panel a b{color:#8a9a94}.app-switcher-panel a.active b{color:var(--primary-dark)}
+    .panel{border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(98,75,10,.07)}.quick-expense-hint{display:none}.actions{position:static;max-width:880px;margin:0 auto 76px;padding:0;background:transparent;backdrop-filter:none}.store-bottom-nav{position:fixed;z-index:90;left:50%;bottom:0;width:min(620px,100%);transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}.store-bottom-nav a{min-height:56px;display:grid;place-items:center;align-content:center;gap:3px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:.68rem;font-weight:850}.store-bottom-nav a span{font-size:1.12rem}.store-bottom-nav a.active{background:var(--soft);color:var(--primary-dark)}
+    @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:auto minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
-  <button class="app-switcher-toggle" type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูระบบ">☰</button>
   <div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
-  <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เมนูระบบ">
-    <div class="app-switcher-title">เลือกใช้งาน</div>
-    <a href="./tawana.html">ทาวน่า</a>
-    <a class="active" href="./bigc.html">บิ๊กซีพัทยากลาง</a>
-    <a href="./bigc-order.html">รายการเบิกของบิ๊กซีพัทยากลาง</a>
-    <a href="./dashboard.html">Dashboard</a>
-    <a href="./index.html">หน้ารวม</a>
+  <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เลือกร้านค้า">
+    <div class="sheet-handle"></div><div class="app-switcher-title">เลือกร้านที่ต้องการทำงาน</div>
+    <a href="./tawana.html"><span>TW</span><span><strong>ทาวน่า</strong><small>ร้านน้ำ · รายรับ รายจ่าย สต็อก และพนักงาน</small></span><b>เปิด</b></a>
+    <a class="active" href="./bigc.html"><span>BC</span><span><strong>บิ๊กซี พัทยากลาง</strong><small>ร้านน้ำ · รายจ่ายและงานสาขา</small></span><b>กำลังใช้</b></a>
+    <a href="./burger.html"><span>BG</span><span><strong>เบอร์เกอร์</strong><small>รายจ่าย สต็อก และ Dashboard</small></span><b>เปิด</b></a>
   </nav>
 
+  <header class="store-shell-header"><a class="boy-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="boy-home-mark">BOY</span><span class="boy-home-copy"><strong>BOY Operation</strong><small>หน้าหลักทุกสาขา</small></span></a><button class="store-context-button" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="store-avatar">BC</span><span><small>กำลังทำงานที่</small><strong>บิ๊กซี พัทยากลาง</strong></span><span>⌄</span></button><button class="settings-btn" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button></header>
+
   <main>
-    <div class="topbar">
-      <h1>บิ๊กซีพัทยากลาง รายจ่าย</h1>
-      <button class="settings-btn" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button>
-    </div>
+    <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายจ่าย</span></div>
 
     <section class="panel date-panel">
       <div>
@@ -274,6 +279,7 @@
     <button class="btn btn-danger" type="button" onclick="clearAllData()">ล้างข้อมูล</button>
     <button class="btn btn-primary" type="button" onclick="submitExpenses()">บันทึกรายจ่าย</button>
   </div>
+  <nav class="store-bottom-nav" aria-label="เมนูสาขา"><a class="active" href="bigc.html"><span>＋</span>รายจ่าย</a><a href="bigc-order.html"><span>▦</span>เบิก / รับของ</a><a href="dashboard.html"><span>▥</span>ภาพรวม</a><a href="index.html"><span>⌂</span>หน้าหลัก</a></nav>
 
   <div id="loadingOverlay" class="overlay hidden">
     <div class="overlay-card">
