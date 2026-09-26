@@ -43,7 +43,7 @@
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", subcategory_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, conversion_overridden: false, line_total: 0, supplier_name: "", note: "", expanded: true });
 
   async function legacyApi(action, data = {}) {
     const response = await fetch(LEGACY_API_URL, {
@@ -261,7 +261,7 @@
     return state.expenseItems.find((expense) => isExpenseActive(expense) && (expense.name.trim().toLocaleLowerCase("th") === query || expense.code.toLocaleLowerCase("th") === query));
   }
   function mainCategories() {
-    return state.categories.filter((category) => category.category_type === "item" && !category.parent_id && /^CAT-\d+$/.test(category.code));
+    return state.categories.filter((category) => category.category_type === "item" && !category.parent_id);
   }
   function subcategories(mainId) {
     return state.categories.filter((category) => category.category_type === "item" && category.parent_id === mainId);
@@ -275,8 +275,24 @@
     }
     return category.category_type === "item" ? category.id : "";
   }
+  function subcategoryId(categoryId) {
+    const category = state.categories.find((row) => row.id === categoryId);
+    if (category?.category_type === "item" && category.parent_id) return category.id;
+    if (category?.code?.startsWith("EXP-CAT-")) {
+      const itemCode = category.code.replace("EXP-", "");
+      const mapped = state.categories.find((row) => row.category_type === "item" && row.code === itemCode);
+      return mapped?.parent_id ? mapped.id : "";
+    }
+    return "";
+  }
+  function lineMainCategoryId(line, expense = expenseById(line.expense_item_id)) {
+    return line.category_id || mainCategoryId(line.subcategory_id) || mainCategoryId(expense?.category_id);
+  }
+  function lineSubcategoryId(line, expense = expenseById(line.expense_item_id)) {
+    return Object.prototype.hasOwnProperty.call(line, "subcategory_id") ? line.subcategory_id : subcategoryId(expense?.category_id);
+  }
   function lineCategoryId(line, expense = expenseById(line.expense_item_id)) {
-    return line.category_id || mainCategoryId(expense?.category_id);
+    return lineSubcategoryId(line, expense) || lineMainCategoryId(line, expense);
   }
   function itemUnitChoices(itemId) {
     const rows = state.itemUnits.filter((row) => row.item_id === itemId && row.active !== false && (row.is_base_unit || row.allow_purchase));
@@ -306,7 +322,8 @@
     $("#expenseLines").innerHTML = state.lines.map((line, index) => {
       const item = itemById(line.item_id);
       const expense = expenseById(line.expense_item_id);
-      const categoryId = lineCategoryId(line, expense);
+      const categoryId = lineMainCategoryId(line, expense);
+      const selectedSubcategoryId = lineSubcategoryId(line, expense);
       const unit = unitById(line.unit_id);
       const unitLink = state.itemUnits.find((row) => row.item_id === item?.id && row.unit_id === line.unit_id && row.active !== false);
       const requirements = lineRequirements(line, expense, item);
@@ -333,11 +350,15 @@
             <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" value="${escapeHtml(line.expense_search || line.description || expense?.name)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off" aria-autocomplete="list" aria-expanded="false"></label>
             <div class="expense-picker-options" role="listbox" hidden></div>
           </div>
-          <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
-          ${item?.track_stock && unit ? `<div class="conversion-field"><span>1 ${escapeHtml(unit.name)} เพิ่มสต็อก</span><input data-field="conversion_to_base" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}"><strong>${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}</strong></div>` : ""}
-          ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
             <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
+            <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}</select></label>
+          </div>
+          <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
+          ${item?.track_stock && unit ? `<div class="conversion-field ${line.conversion_overridden ? "is-editing" : ""}"><div><span>อัตราจากข้อมูลสินค้า</span><strong>1 ${escapeHtml(unit.name)} = ${escapeHtml(conversion)} ${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}</strong><small>ใช้กับรายการซื้อครั้งนี้เท่านั้น ไม่แก้ข้อมูลสินค้า</small></div><label class="conversion-toggle"><input data-field="conversion_overridden" type="checkbox" ${line.conversion_overridden ? "checked" : ""}><span>ปรับครั้งนี้</span></label>${line.conversion_overridden ? `<input data-field="conversion_to_base" aria-label="จำนวนที่เพิ่มเข้าสต็อกครั้งนี้" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}">` : ""}</div>` : ""}
+          ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
+          <div class="field-grid">
+            <label>ชำระด้วย<select data-field="payment_method"><option value="cash" ${$("#expensePaymentMethod").value === "cash" ? "selected" : ""}>เงินสด</option><option value="credit_card" ${$("#expensePaymentMethod").value === "credit_card" ? "selected" : ""}>บัตรเครดิต</option><option value="reimbursement_pending" ${$("#expensePaymentMethod").value === "reimbursement_pending" ? "selected" : ""}>รอเบิก</option></select></label>
             <label>Supplier<input data-field="supplier_name" list="suppliers-${line.id}" value="${escapeHtml(line.supplier_name)}" placeholder="เลือกหรือพิมพ์ชื่อ"><datalist id="suppliers-${line.id}">${suppliers.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("")}</datalist></label>
           </div>
           <label>หมายเหตุ<textarea data-field="note" placeholder="ไม่บังคับ">${escapeHtml(line.note)}</textarea></label>
@@ -379,13 +400,16 @@
     line.source_expense_item_id = expense.id;
     line.expense_search = expense.name;
     line.description = expense.name;
-    line.category_id = mainCategoryId(expense.category_id);
+    const linkedItem = expense.item_id ? itemById(expense.item_id) : null;
+    const sourceCategoryId = linkedItem?.category_id || expense.category_id;
+    line.category_id = mainCategoryId(sourceCategoryId);
+    line.subcategory_id = subcategoryId(sourceCategoryId);
     if (expense.item_id) {
-      const linkedItem = itemById(expense.item_id);
       const purchaseUnit = defaultPurchaseUnit(expense.item_id);
       line.item_id = expense.item_id;
       line.unit_id = purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
       line.conversion_to_base = Number(purchaseUnit?.conversion_to_base || 1);
+      line.conversion_overridden = false;
       if (linkedItem?.track_stock && !(Number(line.quantity) > 0)) line.quantity = 1;
       if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
       const choices = supplierChoices(linkedItem?.id);
@@ -393,6 +417,7 @@
     } else {
       line.item_id = "";
       line.conversion_to_base = 1;
+      line.conversion_overridden = false;
       if (!expense.requires_quantity) line.quantity = 0;
       if (!expense.requires_unit) line.unit_id = "";
       if (previousItem) line.supplier_name = "";
@@ -410,8 +435,12 @@
       line.expense_item_id = "";
       line.source_expense_item_id = "";
       line.description = String(line.expense_search || "").trim();
+      line.category_id = "";
+      line.subcategory_id = "";
       line.quantity = 0;
       line.unit_id = "";
+      line.conversion_to_base = 1;
+      line.conversion_overridden = false;
     }
     renderLines();
     scheduleDraftSave();
@@ -420,10 +449,17 @@
   function updateLine(card, field, value) {
     const line = state.lines.find((row) => row.id === card.dataset.lineId);
     if (!line) return;
-    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(value) : value;
+    if (field === "payment_method") {
+      $("#expensePaymentMethod").value = value;
+      $$('#expenseLines [data-field="payment_method"]').forEach((select) => { select.value = value; });
+      scheduleDraftSave();
+      return;
+    }
+    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(value) : field === "conversion_overridden" ? Boolean(value) : value;
     if (field === "unit_id" && line.item_id) {
       const link = state.itemUnits.find((row) => row.item_id === line.item_id && row.unit_id === value && row.active !== false);
       line.conversion_to_base = Number(link?.conversion_to_base || 1);
+      line.conversion_overridden = false;
     }
     if (field === "expense_search") {
       const expense = expenseBySearch(value);
@@ -436,12 +472,18 @@
         line.quantity = 0;
         line.unit_id = "";
         line.conversion_to_base = 1;
+        line.conversion_overridden = false;
         line.description = String(value).trim();
       }
     }
     if (field === "category_id") {
+      if (!subcategories(value).some((category) => category.id === line.subcategory_id)) line.subcategory_id = "";
       const sourceExpense = expenseById(line.source_expense_item_id);
       line.expense_item_id = sourceExpense && mainCategoryId(sourceExpense.category_id) === value ? sourceExpense.id : "";
+    }
+    if (field === "conversion_overridden" && !line.conversion_overridden && line.item_id) {
+      const link = state.itemUnits.find((row) => row.item_id === line.item_id && row.unit_id === line.unit_id && row.active !== false);
+      line.conversion_to_base = Number(link?.conversion_to_base || 1);
     }
     renderLines();
     scheduleDraftSave();
@@ -456,7 +498,7 @@
       const requirements = lineRequirements(line, expense, item);
       if (!line.description.trim()) errors.push(`รายการ ${index + 1}: ระบุชื่อรายการ`);
       if (!(Number(line.line_total) > 0)) errors.push(`รายการ ${index + 1}: ระบุยอดรวม`);
-      if (!lineCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
+      if (!lineMainCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
       if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
       if (item?.track_stock && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนหน่วยฐานต่อหน่วยซื้อ`);
@@ -642,7 +684,12 @@
     const categoryRows = refs.categories?.rows || [];
     state.branch = { id: branchId, company_id: branchRow.company_id || "BOY", code: branchApp.branchCode, name: branchRow["ชื่อสาขา"] || branchApp.name, active: mirrorBool(branchRow["เปิดใช้งาน"], true) };
     state.units = unitRows.map((row) => ({ id: row.unit_id, name: row["ชื่อหน่วย"] || row.name || row.unit_id, code: row["รหัสหน่วย"] || row.code || row.unit_id }));
-    state.categories = categoryRows.map((row) => ({ id: row.subcategory_id || row.category_id, name: row["ชื่อประเภทย่อย"] || row["ชื่อประเภทหลัก"] || "ไม่ระบุ", code: row["รหัสประเภทย่อย"] || row.subcategory_id || row.category_id, parent_id: row.subcategory_id ? row.category_id : null, category_type: row["ประเภทหมวดหมู่"] || "expense" }));
+    const categoryMap = new Map();
+    categoryRows.forEach((row) => {
+      if (row.category_id && !categoryMap.has(String(row.category_id))) categoryMap.set(String(row.category_id), { id: row.category_id, name: row["ชื่อประเภทหลัก"] || row.category_id, code: row["รหัสประเภทหลัก"] || row.category_id, parent_id: null, category_type: "item" });
+      if (row.subcategory_id) categoryMap.set(String(row.subcategory_id), { id: row.subcategory_id, name: row["ชื่อประเภทย่อย"] || row.subcategory_id, code: row["รหัสประเภทย่อย"] || row.subcategory_id, parent_id: row.category_id || null, category_type: "item" });
+    });
+    state.categories = [...categoryMap.values()];
     state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => ({ id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: mirrorBool(row["ติดตามสต็อก"]), purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }));
     state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
     const relevantExpense = (row) => itemIds.has(String(row.item_id || "")) || String(row.default_branch_id || "") === String(branchId) || String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase().includes(branchApp.branchCode);
@@ -1076,12 +1123,12 @@
     closeExpensePickers(card);
     renderExpenseOptions(card, event.target.value);
   });
-  $("#expenseLines").addEventListener("change", (event) => { const field = event.target.dataset.field; if (field) updateLine(event.target.closest(".expense-card"), field, event.target.value); });
+  $("#expenseLines").addEventListener("change", (event) => { const field = event.target.dataset.field; if (field) updateLine(event.target.closest(".expense-card"), field, event.target.type === "checkbox" ? event.target.checked : event.target.value); });
   $("#expenseLines").addEventListener("input", (event) => {
     const field = event.target.dataset.field;
     const card = event.target.closest(".expense-card");
     const line = card && state.lines.find((row) => row.id === card.dataset.lineId);
-    if (!field || !line || event.target.matches("select")) return;
+    if (!field || !line || event.target.matches("select") || event.target.type === "checkbox") return;
     if (field === "expense_search") {
       const hadKnownSelection = Boolean(line.source_expense_item_id || line.item_id || line.expense_item_id);
       line.expense_search = event.target.value;
@@ -1090,7 +1137,7 @@
       line.source_expense_item_id = "";
       line.item_id = "";
       line.unit_id = "";
-      if (hadKnownSelection) { line.category_id = ""; line.supplier_name = ""; }
+      if (hadKnownSelection) { line.category_id = ""; line.subcategory_id = ""; line.supplier_name = ""; }
       renderExpenseOptions(card, event.target.value);
       scheduleDraftSave();
       return;

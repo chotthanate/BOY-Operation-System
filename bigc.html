@@ -241,8 +241,8 @@
     .app-switcher-panel{top:auto;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));width:min(480px,calc(100vw - 24px));transform:translateX(-50%);padding:14px;border-radius:22px}.sheet-handle{width:48px;height:5px;margin:0 auto 12px;border-radius:99px;background:#d9dedb}.app-switcher-panel a{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:58px;padding:8px;border-radius:14px}.app-switcher-panel a span:first-child{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#f2f4f2;font-weight:950}.app-switcher-panel a small{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}.app-switcher-panel a b{color:#8a9a94}.app-switcher-panel a.active b{color:var(--primary-dark)}
     .panel{border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(98,75,10,.07)}.quick-expense-hint{display:none}.actions{position:static;max-width:880px;margin:0 auto 76px;padding:0;background:transparent;backdrop-filter:none}.store-bottom-nav{position:fixed;z-index:90;left:50%;bottom:0;width:min(760px,100%);transform:translateX(-50%);display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}.store-bottom-nav a{min-height:58px;display:grid;place-items:center;align-content:center;gap:3px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:.65rem;font-weight:850}.store-bottom-nav a span{font-size:1.12rem}.store-bottom-nav a.active{background:var(--soft);color:var(--primary-dark)}
     .expense-row{display:block;overflow:hidden;padding:0;border:1px solid #ead99a;border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(75,62,20,.06)}
-    .expense-summary{width:100%;min-height:76px;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 12px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.expense-index{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:var(--soft);color:var(--primary-dark);font-weight:900}.expense-summary-copy{min-width:0}.expense-summary-copy strong,.expense-summary-copy small{display:block}.expense-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.expense-summary-copy small{margin-top:4px;color:var(--muted);font-size:.72rem}.expense-summary-amount{color:var(--primary-dark);font-weight:900}.expense-detail{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(64px,.55fr) minmax(72px,.65fr) minmax(84px,.7fr) 42px;gap:7px;align-items:start;padding:10px;border-top:1px solid #f0e6bd;background:#fffdf4}.expense-row:not(.expanded) .expense-detail{display:none}.expense-detail .payment{grid-column:1 / 3}.expense-detail .note{grid-column:3 / 5}.expense-detail .type-hint{grid-column:1 / 5}
-    @media(max-width:520px){.expense-detail{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 38px}.expense-detail .item{grid-column:1 / 4}.expense-detail .delete-btn{grid-column:4;grid-row:1}.expense-detail .qty{grid-column:1}.expense-detail .unit{grid-column:2}.expense-detail .amount{grid-column:3 / 5}.expense-detail .payment{grid-column:1 / 3}.expense-detail .note{grid-column:3 / 5}.expense-detail .type-hint{grid-column:1 / 5}}
+    .expense-summary{width:100%;min-height:76px;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 12px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.expense-index{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:var(--soft);color:var(--primary-dark);font-weight:900}.expense-summary-copy{min-width:0}.expense-summary-copy strong,.expense-summary-copy small{display:block}.expense-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.expense-summary-copy small{margin-top:4px;color:var(--muted);font-size:.72rem}.expense-summary-amount{color:var(--primary-dark);font-weight:900}.expense-detail{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px;align-items:start;padding:12px;border-top:1px solid #f0e6bd;background:#fffdf4}.expense-row:not(.expanded) .expense-detail{display:none}.expense-detail .form-field{display:grid;gap:5px;min-width:0}.expense-detail .form-field>span{color:var(--muted);font-size:.72rem;font-weight:800}.expense-detail .item-field{grid-column:1/-2}.expense-detail .delete-btn{grid-column:6;grid-row:1;align-self:end;height:46px}.expense-detail .main-field{grid-column:1/4}.expense-detail .sub-field{grid-column:4/7}.expense-detail .qty-field{grid-column:1/3}.expense-detail .unit-field{grid-column:3/5}.expense-detail .amount-field{grid-column:5/7}.expense-detail .payment-field{grid-column:1/4}.expense-detail .note-field{grid-column:4/7}.expense-detail .type-hint{display:none}
+    @media(max-width:520px){.expense-detail{grid-template-columns:repeat(6,minmax(0,1fr));padding:11px}.expense-detail .item-field{grid-column:1/6}.expense-detail .delete-btn{grid-column:6;grid-row:1}.expense-detail .main-field{grid-column:1/4}.expense-detail .sub-field{grid-column:4/7}.expense-detail .qty-field{grid-column:1/3}.expense-detail .unit-field{grid-column:3/5}.expense-detail .amount-field{grid-column:5/7}.expense-detail .payment-field{grid-column:1/4}.expense-detail .note-field{grid-column:4/7}}
     @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}.store-bottom-nav a{font-size:.58rem}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
@@ -447,13 +447,21 @@
           (categories[category] || []).forEach(function(displayName) {
             const parsed = parseSharedItemName(displayName);
             if (parsed.name) dict[parsed.name] = parsed.unit;
-            const source = itemMeta[displayName] || itemMeta[parsed.name] || {};
+            const rawSource = itemMeta[displayName] || itemMeta[parsed.name] || {};
+            const source = Object.assign({}, rawSource, { mainType: rawSource.mainType || category });
             setItemMeta(meta, parsed.name, parsed.unit, source);
           });
         });
         if (Object.keys(dict).length) {
           applyItemDict(dict, meta);
           refreshAllUnitOptions();
+          document.querySelectorAll('.expense-row').forEach(function(row) {
+            const itemName = row.querySelector('.item')?.value.trim() || '';
+            const itemMeta = getExpenseMeta(itemName, row.querySelector('.unit')?.value || '');
+            const currentMain = row.querySelector('.main-type')?.value || '';
+            const currentSub = row.querySelector('.sub-type')?.value || '';
+            updateCategoryOptions(row, currentMain || itemMeta.mainType || '', currentSub || itemMeta.subType || '');
+          });
           setStatus('อัปเดตรายการแล้ว ' + Object.keys(dict).length + ' รายการ');
         }
       } catch (e) {
@@ -467,9 +475,49 @@
       return itemMetaDict[cleanName + '||' + cleanUnit] || itemMetaDict[cleanName] || {};
     }
 
+    function categoryChoices() {
+      const mains = [];
+      const subs = {};
+      Object.keys(itemMetaDict).forEach(function(key) {
+        if (key.indexOf('||') !== -1) return;
+        const meta = itemMetaDict[key] || {};
+        const main = String(meta.mainType || '').trim();
+        const sub = String(meta.subType || '').trim();
+        if (main && mains.indexOf(main) === -1) mains.push(main);
+        if (main && sub) {
+          if (!subs[main]) subs[main] = [];
+          if (subs[main].indexOf(sub) === -1) subs[main].push(sub);
+        }
+      });
+      return { mains: mains.sort(), subs: subs };
+    }
+
+    function selectOptions(values, selected, placeholder) {
+      let html = '<option value="">' + escapeHtml(placeholder) + '</option>';
+      (values || []).forEach(function(value) {
+        html += '<option value="' + escapeHtml(value) + '"' + (value === selected ? ' selected' : '') + '>' + escapeHtml(value) + '</option>';
+      });
+      if (selected && (values || []).indexOf(selected) === -1) html += '<option value="' + escapeHtml(selected) + '" selected>' + escapeHtml(selected) + '</option>';
+      return html;
+    }
+
+    function updateCategoryOptions(row, preferredMain, preferredSub) {
+      if (!row) return;
+      const choices = categoryChoices();
+      const mainSelect = row.querySelector('.main-type');
+      const subSelect = row.querySelector('.sub-type');
+      if (!mainSelect || !subSelect) return;
+      const main = preferredMain !== undefined ? String(preferredMain || '') : mainSelect.value;
+      const sub = preferredSub !== undefined ? String(preferredSub || '') : subSelect.value;
+      mainSelect.innerHTML = selectOptions(choices.mains, main, 'เลือกประเภทหลัก');
+      subSelect.innerHTML = selectOptions(choices.subs[main] || [], sub, 'เลือกประเภทย่อย');
+      refreshExpenseSummary(row);
+    }
+
     function getUnitOptionsForItem(name, currentUnit) {
       const meta = getExpenseMeta(name, currentUnit);
-      const fallbackUnit = itemDict[String(name || '').trim()] || currentUnit;
+      const knownItem = Object.prototype.hasOwnProperty.call(itemDict, String(name || '').trim());
+      const fallbackUnit = knownItem ? itemDict[String(name || '').trim()] : currentUnit;
       return uniqueUnitOptions((meta.unitOptions || []).concat([fallbackUnit]));
     }
 
@@ -483,7 +531,8 @@
       datalist.innerHTML = options.map(function(option) {
         return '<option value="' + escapeHtml(option) + '"></option>';
       }).join('');
-      if (!unitInput.value && options.length) unitInput.value = options[0];
+      const knownItem = Object.prototype.hasOwnProperty.call(itemDict, itemInput.value.trim());
+      if (knownItem && !unitInput.value && options.length) unitInput.value = options[0];
       const meta = getExpenseMeta(itemInput.value, unitInput.value);
       if (meta.mainType || meta.subType) {
         hint.textContent = [meta.mainType, meta.subType].filter(Boolean).join(' / ');
@@ -541,8 +590,12 @@
       const row = input.closest('.expense-row');
       const unitInput = row.querySelector('.unit');
       const itemName = input.value.trim();
-      if (!unitInput.value && itemDict[itemName]) unitInput.value = itemDict[itemName];
+      const knownItem = Object.prototype.hasOwnProperty.call(itemDict, itemName);
+      if (knownItem && !unitInput.value && itemDict[itemName]) unitInput.value = itemDict[itemName];
+      if (!knownItem) unitInput.value = '';
       updateUnitOptions(row);
+      const meta = knownItem ? getExpenseMeta(itemName, unitInput.value) : {};
+      updateCategoryOptions(row, meta.mainType || '', meta.subType || '');
       refreshExpenseSummary(row);
       doSync();
     }
@@ -559,8 +612,10 @@
       const amount = Number(row.querySelector('.amount')?.value || 0);
       const nameNode = row.querySelector('.expense-summary-copy strong');
       const amountNode = row.querySelector('.expense-summary-amount');
+      const categoryNode = row.querySelector('.expense-summary-category');
       if (nameNode) nameNode.textContent = name;
       if (amountNode) amountNode.textContent = amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (categoryNode) categoryNode.textContent = [row.querySelector('.main-type')?.value, row.querySelector('.sub-type')?.value].filter(Boolean).join(' · ') || 'ยังไม่เลือกหมวด';
     }
 
     function nav(event, index) {
@@ -578,28 +633,36 @@
       else addRow().querySelector('.item').focus();
     }
 
-    function addRow(i = '', q = '', u = '', p = '', n = '', pay = 'cash') {
+    function addRow(i = '', q = '', u = '', p = '', n = '', pay = 'cash', mainType = '', subType = '') {
       rowCounter++;
       const unitListId = 'unitOptions_' + rowCounter;
       const row = document.createElement('div');
       row.className = 'expense-row expanded';
       row.innerHTML = `
-        <button class="expense-summary" type="button" onclick="toggleExpenseRow(this)"><span class="expense-index">${rowCounter}</span><span class="expense-summary-copy"><strong>${escapeHtml(i || 'ยังไม่ระบุรายการ')}</strong><small>แตะเพื่อดูหรือแก้รายละเอียด</small></span><span class="expense-summary-amount">${Number(p || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></button>
+        <button class="expense-summary" type="button" onclick="toggleExpenseRow(this)"><span class="expense-index">${rowCounter}</span><span class="expense-summary-copy"><strong>${escapeHtml(i || 'ยังไม่ระบุรายการ')}</strong><small class="expense-summary-category">${escapeHtml([mainType, subType].filter(Boolean).join(' · ') || 'ยังไม่เลือกหมวด')}</small></span><span class="expense-summary-amount">${Number(p || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></button>
         <div class="expense-detail">
-          <input class="item" type="text" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" value="${escapeHtml(i)}" autocomplete="off" oninput="showSuggestions(this); refreshExpenseSummary(this.closest('.expense-row'))" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)">
-          <input class="qty" type="number" inputmode="decimal" placeholder="จำนวน" value="${escapeHtml(q)}" onchange="doSync()" onkeydown="nav(event, 1)">
-          <input class="unit" type="text" placeholder="หน่วย" value="${escapeHtml(u)}" list="${unitListId}" onchange="updateUnitOptions(this.closest('.expense-row')); doSync()" onkeydown="nav(event, 2)">
+          <label class="form-field item-field"><span>รายการรายจ่าย</span><input class="item" type="text" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" value="${escapeHtml(i)}" autocomplete="off" oninput="showSuggestions(this); refreshExpenseSummary(this.closest('.expense-row'))" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)"></label>
+          <label class="form-field main-field"><span>ประเภทหลัก</span><select class="main-type" onchange="updateCategoryOptions(this.closest('.expense-row'), this.value, ''); refreshExpenseSummary(this.closest('.expense-row')); doSync()"></select></label>
+          <label class="form-field sub-field"><span>ประเภทย่อย</span><select class="sub-type" onchange="refreshExpenseSummary(this.closest('.expense-row')); doSync()"></select></label>
+          <label class="form-field qty-field"><span>จำนวน</span><input class="qty" type="number" inputmode="decimal" placeholder="0" value="${escapeHtml(q)}" onchange="doSync()" onkeydown="nav(event, 1)"></label>
+          <label class="form-field unit-field"><span>หน่วย</span><input class="unit" type="text" placeholder="กรอกหรือเลือกหน่วย" value="${escapeHtml(u)}" list="${unitListId}" onchange="updateUnitOptions(this.closest('.expense-row')); doSync()" onkeydown="nav(event, 2)"></label>
           <datalist id="${unitListId}"></datalist>
-          <input class="amount" type="number" inputmode="decimal" placeholder="ยอดรวม" value="${escapeHtml(p)}" oninput="refreshExpenseSummary(this.closest('.expense-row'))" onchange="doSync()" onkeydown="nav(event, 3)">
+          <label class="form-field amount-field"><span>ยอดรวม</span><input class="amount" type="number" inputmode="decimal" placeholder="0.00" value="${escapeHtml(p)}" oninput="refreshExpenseSummary(this.closest('.expense-row'))" onchange="doSync()" onkeydown="nav(event, 3)"></label>
           <button class="delete-btn" type="button" onclick="removeRow(this)">×</button>
-          <select class="payment" aria-label="ช่องทางชำระเงิน" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select>
-          <input class="note" type="text" placeholder="หมายเหตุ" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)">
+          <label class="form-field payment-field"><span>ชำระด้วย</span><select class="payment" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select></label>
+          <label class="form-field note-field"><span>หมายเหตุ</span><input class="note" type="text" placeholder="รายละเอียดเพิ่มเติม" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)"></label>
           <div class="type-hint"></div>
         </div>
       `;
       document.getElementById('expenseList').appendChild(row);
       document.querySelectorAll('.expense-row').forEach(function(entry) { if (entry !== row) entry.classList.remove('expanded'); });
       updateUnitOptions(row);
+      updateCategoryOptions(row, mainType, subType);
+      if (!mainType && !subType && i) {
+        const meta = getExpenseMeta(i, u);
+        updateCategoryOptions(row, meta.mainType || '', meta.subType || '');
+      }
+      refreshExpenseSummary(row);
       return row;
     }
 
@@ -618,15 +681,14 @@
         const note = row.querySelector('.note').value.trim();
         const pay = row.querySelector('.payment').value;
         if (!item && !qty && !unit && !amount && !note) return;
-        const meta = getExpenseMeta(item, unit);
         exp.push({
           i: item,
           q: qty,
           u: unit,
           p: amount,
           n: note,
-          m: meta.mainType || '',
-          t: meta.subType || '',
+          m: row.querySelector('.main-type').value,
+          t: row.querySelector('.sub-type').value,
           pay: pay || 'cash'
         });
       });
@@ -637,7 +699,7 @@
       document.getElementById('expenseList').innerHTML = '';
       const rows = snapshot && Array.isArray(snapshot.exp) ? snapshot.exp : [];
       if (rows.length) {
-        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay); });
+        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay, row.m, row.t); });
         addRow();
       } else {
         addRow();

@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.json">
   <title>ร้านเบอร์เกอร์ | BOY Operations</title>
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
-  <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260926-1">
+  <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
   <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-7">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
@@ -40,7 +40,7 @@
           <span class="draft-status" id="draftStatus">พร้อมบันทึกร่าง</span>
         </div>
         <div id="expenseLines" class="expense-list"></div>
-        <section class="payment-card">
+        <section class="payment-card shared-payment-source" hidden>
           <label>ชำระเงินด้วย<select id="expensePaymentMethod"><option value="cash">เงินสด</option><option value="credit_card">บัตรเครดิต</option><option value="reimbursement_pending">รอเบิกค่าใช้จ่าย</option></select></label>
         </section>
         <div class="action-row">
@@ -164,6 +164,6 @@
   <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7',legacyEnabled:false}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9',legacyEnabled:true};</script>
-  <script src="assets/js/burger.js?v=20260926-2"></script>
+  <script src="assets/js/burger.js?v=20260927-1"></script>
 </body>
 </html>

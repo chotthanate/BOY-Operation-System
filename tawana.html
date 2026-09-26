@@ -559,6 +559,7 @@
     .unit-price-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; padding: 7px 9px; border-radius: 10px; background: var(--primary-soft); color: var(--primary-strong); font-size: .7rem; }
     .unit-price-value { font-weight: 900; }
     .expense-extra-row input, .expense-extra-row textarea { height: 54px; min-height: 54px; }
+    .expense-note-field { grid-column: 1 / -1; }
     .expense-note-field textarea { resize: vertical; }
     .delete-action { min-height: 40px; margin-top: 1px; border-color: #f2cec5; background: #fff; }
     .section-actions { display: grid; grid-template-columns: 1.35fr .85fr; }
@@ -1631,7 +1632,8 @@
 
     function getUnitOptionsForItem(name, currentUnit) {
       var meta = getExpenseMeta(name, currentUnit);
-      var fallbackUnit = itemDict[String(name || '').trim()] || currentUnit;
+      var knownItem = Object.prototype.hasOwnProperty.call(itemDict, String(name || '').trim());
+      var fallbackUnit = knownItem ? itemDict[String(name || '').trim()] : currentUnit;
       return uniqueUnitOptions((meta.unitOptions || []).concat([fallbackUnit]));
     }
 
@@ -1650,7 +1652,8 @@
         }).join('');
       }
 
-      if (!unitInput.value && options.length > 0) unitInput.value = options[0];
+      var knownItem = Object.prototype.hasOwnProperty.call(itemDict, itemInput.value.trim());
+      if (knownItem && !unitInput.value && options.length > 0) unitInput.value = options[0];
       if (wrapper.querySelector('.expense-summary')) updateExpenseCard(wrapper);
     }
 
@@ -1847,12 +1850,14 @@
 
     function checkAutoFill(inputEl) {
       var val = inputEl.value.trim();
+      var knownItem = Object.prototype.hasOwnProperty.call(itemDict, val);
       if (itemDict[val]) { 
         var row = inputEl.closest('.exp-row');
         var unitInput = row.querySelector('.u');
         if (!unitInput.value) { unitInput.value = itemDict[val]; }
       }
       var wrapper = inputEl.closest('.swipe-wrapper');
+      if (!knownItem) wrapper.querySelector('.u').value = '';
       updateUnitOptions(wrapper);
       updateSupplierOptions(wrapper);
       syncCategoryFromItem(wrapper);
@@ -1953,6 +1958,7 @@
         '</div>' +
         '<div class="expense-details"><div class="exp-row">' +
           '<div class="exp-field exp-item-field expense-typeable"><label>รายการรายจ่าย</label><div class="expense-typeable-control"><input type="text" class="i" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" value="'+escapeHtml(i)+'" oninput="showSuggestions(this); updateExpenseCard(this.closest(\'.swipe-wrapper\'))" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)" autocomplete="off" aria-autocomplete="list" aria-expanded="false"><button class="expense-picker-toggle" type="button" aria-label="เปิดรายการรายจ่าย" onclick="showSuggestions(this.previousElementSibling)">⌄</button></div><div class="expense-picker-options" role="listbox" hidden></div></div>' +
+          '<div class="expense-category-row"><div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div><div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div></div>' +
           '<div class="expense-compact-row">' +
             '<div class="exp-field"><label>จำนวน</label><input type="text" inputmode="decimal" class="q" placeholder="0" value="'+escapeHtml(q)+'" oninput="updateExpenseCard(this.closest(\'.swipe-wrapper\'))" onchange="doSync()" onkeydown="nav(event, 1)"></div>' +
             '<div class="exp-field"><label>หน่วย</label><input type="text" class="u" placeholder="หน่วย" value="'+escapeHtml(u)+'" list="'+unitListId+'" onchange="updateUnitOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()" onkeydown="nav(event, 2)"></div>' +
@@ -1960,7 +1966,6 @@
             '<div class="exp-field"><label>ยอดรวม</label><input type="text" inputmode="decimal" class="p" placeholder="0.00" value="'+escapeHtml(p)+'" oninput="updateExpenseCard(this.closest(\'.swipe-wrapper\'))" onchange="doSync()" onkeydown="nav(event, 3)"></div>' +
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
-          '<div class="expense-category-row"><div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div><div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div></div>' +
           '<div class="expense-extra-row"><div class="exp-field"><label>ชำระด้วย</label><select class="exp-payment" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"><option value="cash"'+(paymentMethod === 'cash' ? ' selected' : '')+'>เงินสด</option><option value="credit_card"'+(paymentMethod === 'credit_card' ? ' selected' : '')+'>บัตรเครดิต</option><option value="reimbursement_pending"'+(paymentMethod === 'reimbursement_pending' ? ' selected' : '')+'>รอเบิก</option></select></div><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
           '<button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button>' +
         '</div></div>';
