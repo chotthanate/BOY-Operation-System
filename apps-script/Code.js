@@ -145,10 +145,10 @@ function doPost(e) {
         result = handleMasterCatalog_(payload.entity);
         break;
       case 'masterSave':
-        result = handleMasterSave_(payload.entity, payload.rowNumber, payload.values || {}, payload.branchIds, payload.actor || {}, payload.expectedVersion);
+        result = handleMasterSave_(payload.entity, payload.rowNumber, payload.values || {}, payload.branchIds, payload.actor || {}, payload.expectedVersion, payload.compact);
         break;
       case 'masterSetActive':
-        result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active, payload.actor || {}, payload.expectedVersion);
+        result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active, payload.actor || {}, payload.expectedVersion, payload.compact);
         break;
       case 'sheetCatalog':
         result = handleSheetCatalog_(payload.sheetName);
@@ -828,12 +828,16 @@ function handleMasterCatalog_(entity) {
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
   ensureMasterExtraHeaders_(entity, sh);
   const headers = masterHeaders_(sh);
+  const lastRow = sh.getLastRow();
+  const displayRows = lastRow > 1
+    ? sh.getRange(2, 1, lastRow - 1, headers.length).getDisplayValues()
+    : [];
   const rows = tableObjects_(CONFIG.spreadsheets.master, spec.sheet).filter(function(row) {
     if (!isBlank_(row[spec.id])) return true;
     return (spec.required || []).some(function(header) { return !isBlank_(row[header]); });
   });
   rows.forEach(function(row) {
-    const values = sh.getRange(row.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+    const values = displayRows[row.__rowNumber - 2] || [];
     row.__version = masterRowVersion_(headers, values);
   });
   const references = {};
@@ -881,7 +885,10 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
   existing.forEach(function(row) {
     const branchId = normalizeText_(row.branch_id);
     existingByBranch[branchId] = true;
-    sh.getRange(row.__rowNumber, activeIndex + 1).setValue(!!selected[branchId]);
+    const shouldBeActive = !!selected[branchId];
+    if (toBool_(row['เปิดใช้งาน'], false) !== shouldBeActive) {
+      sh.getRange(row.__rowNumber, activeIndex + 1).setValue(shouldBeActive);
+    }
   });
 
   Object.keys(selected).forEach(function(branchId) {
@@ -898,7 +905,7 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
   });
 }
 
-function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expectedVersion) {
+function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expectedVersion, compact) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
   ensureMasterExtraHeaders_(entity, sh);
@@ -909,6 +916,8 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expect
     if (isBlank_(incoming[header])) throw new Error('กรุณากรอก ' + header);
   });
 
+  let savedRow = null;
+  let savedRowNumber = 0;
   const lock = lock_();
   lock.waitLock(15000);
   try {
@@ -937,14 +946,40 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expect
       if (linkedItemIndex >= 0) setMasterItemBranches_(normalizeText_(row[linkedItemIndex]), branchIds);
     }
     const afterValues = sh.getRange(targetRow, 1, 1, headers.length).getDisplayValues()[0];
+    savedRow = masterRowObject_(headers, afterValues);
+    savedRow.__rowNumber = targetRow;
+    savedRow.__version = masterRowVersion_(headers, afterValues);
+    savedRowNumber = targetRow;
     recordMasterAudit_(sh.getName(), targetRow, isUpdate ? 'แก้ไข' : 'เพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   } finally {
     lock.releaseLock();
   }
+  if (toBool_(compact, false)) {
+    const result = {
+      status: 'success', entity: entity, sheetName: spec.sheet, idHeader: spec.id,
+      headers: headers, required: spec.required || [], rowNumber: savedRowNumber, row: savedRow
+    };
+    if (entity === 'items' || entity === 'expenseItems') {
+      const itemId = entity === 'items' ? normalizeText_(savedRow[spec.id]) : normalizeText_(savedRow.item_id);
+      if (itemId) {
+        result.referencePatches = {
+          branchItems: {
+            idHeader: MASTER_ENTITY_SPECS.branchItems.id,
+            matchField: 'item_id',
+            matchValue: itemId,
+            rows: tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems).filter(function(row) {
+              return normalizeText_(row.item_id) === itemId;
+            })
+          }
+        };
+      }
+    }
+    return result;
+  }
   return handleMasterCatalog_(entity);
 }
 
-function handleMasterSetActive_(entity, rowNumber, active, actor, expectedVersion) {
+function handleMasterSetActive_(entity, rowNumber, active, actor, expectedVersion, compact) {
   const spec = masterSpec_(entity);
   const sh = sheet_(CONFIG.spreadsheets.master, spec.sheet);
   const headers = masterHeaders_(sh);
@@ -957,6 +992,15 @@ function handleMasterSetActive_(entity, rowNumber, active, actor, expectedVersio
   sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
   const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
   recordMasterAudit_(sh.getName(), rn, toBool_(active, false) ? 'เปิดใช้งาน' : 'ปิดใช้งาน', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
+  if (toBool_(compact, false)) {
+    const row = masterRowObject_(headers, afterValues);
+    row.__rowNumber = rn;
+    row.__version = masterRowVersion_(headers, afterValues);
+    return {
+      status: 'success', entity: entity, sheetName: spec.sheet, idHeader: spec.id,
+      headers: headers, required: spec.required || [], rowNumber: rn, row: row
+    };
+  }
   return handleMasterCatalog_(entity);
 }
 

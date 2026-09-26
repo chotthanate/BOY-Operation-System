@@ -141,7 +141,30 @@
     return refresh(sheetName, legacyLoad, false);
   }
 
-  async function save(sheetName, rowNumber, values, actorName, legacySave) {
+  function mergeCompactResult(currentCatalog, result) {
+    if (!result?.row || !currentCatalog?.rows) return result;
+    const rowNumber = String(result.row.__rowNumber || result.rowNumber || "");
+    const rows = currentCatalog.rows.slice();
+    const index = rows.findIndex(row => String(row.__rowNumber) === rowNumber);
+    if (index >= 0) rows[index] = result.row;
+    else rows.push(result.row);
+    const references = { ...(currentCatalog.references || {}) };
+    Object.entries(result.referencePatches || {}).forEach(([name, patch]) => {
+      const existing = references[name] || { idHeader: patch.idHeader, rows: [] };
+      const kept = (existing.rows || []).filter(row => String(row[patch.matchField]) !== String(patch.matchValue));
+      references[name] = { ...existing, idHeader: patch.idHeader || existing.idHeader, rows: kept.concat(patch.rows || []) };
+    });
+    return {
+      ...currentCatalog,
+      status: "success",
+      headers: result.headers?.length ? result.headers : currentCatalog.headers,
+      required: result.required || currentCatalog.required,
+      rows,
+      references
+    };
+  }
+
+  async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog) {
     const central = client();
     if (central) {
       try {
@@ -160,17 +183,18 @@
         }
       } catch (_) {}
     }
-    const catalog = await legacySave("fallback");
+    const result = await legacySave("fallback");
+    const catalog = mergeCompactResult(currentCatalog, result);
     const remembered = await remember(sheetName, catalog, "google-sheets-fallback");
     await queueCatalog(sheetName, remembered);
     return remembered;
   }
 
-  async function setActive(sheetName, rowNumber, next, currentRow, actorName, legacySave) {
+  async function setActive(sheetName, rowNumber, next, currentRow, actorName, legacySave, currentCatalog) {
     const values = { ...(currentRow || {}), "เปิดใช้งาน": Boolean(next) };
     delete values.__rowNumber;
     delete values.__version;
-    return save(sheetName, rowNumber, values, actorName, legacySave);
+    return save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog);
   }
 
   async function prefetch(entries, legacyLoader) {
