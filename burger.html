@@ -15,14 +15,9 @@
 </head>
 <body>
   <div class="app-shell">
-    <header class="topbar">
-      <a class="boy-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="boy-home-mark">BOY</span><span class="boy-home-copy"><strong>BOY Operation</strong><small>หน้าหลักทุกสาขา</small></span></a>
-      <button class="store-button" id="storeButton" type="button" aria-haspopup="dialog">
-        <span class="store-mark">BG</span>
-        <span><small>กำลังทำงานที่</small><strong>ร้านเบอร์เกอร์</strong></span>
-        <span aria-hidden="true">⌄</span>
-      </button>
-      <span class="connection-badge" id="connectionBadge">กำลังเชื่อมต่อ</span>
+    <header class="topbar branch-shell-header">
+      <button class="branch-identity" id="storeButton" type="button" aria-haspopup="dialog"><span class="branch-identity-mark store-mark" id="branchMark">BG</span><span class="branch-identity-copy"><strong id="branchName">ร้านเบอร์เกอร์</strong><small id="branchSubtitle">ร้านอาหาร · แตะเพื่อเปลี่ยนสาขา</small></span></button>
+      <div class="branch-header-actions"><span class="connection-badge" id="connectionBadge">กำลังเชื่อมต่อ</span><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
     </header>
 
     <main>
@@ -37,7 +32,7 @@
 
       <section class="page active" id="expensePage" data-page="expense">
         <div class="section-heading compact">
-          <div><small>ร้านเบอร์เกอร์</small><h1>บันทึกรายจ่าย</h1></div>
+          <div><small id="expenseBranchLabel">ร้านเบอร์เกอร์</small><h1>บันทึกรายจ่าย</h1></div>
           <span class="count-pill" id="expenseCount">1 รายการ</span>
         </div>
         <div class="toolbar-card">
@@ -73,7 +68,7 @@
       </section>
 
       <section class="page" id="settingsPage" data-page="settings">
-        <div class="section-heading compact"><div><small>ข้อมูลร้านเบอร์เกอร์</small><h1>รายการตั้งต้น</h1></div><button class="secondary-button compact-button" id="addMasterButton" type="button">+ เพิ่ม</button></div>
+        <div class="section-heading compact"><div><small id="settingsBranchLabel">ข้อมูลร้านเบอร์เกอร์</small><h1>เพิ่มเติม</h1></div><div><button class="secondary-button compact-button" id="accountQuickButton" type="button">บัญชี</button> <button class="secondary-button compact-button" id="addMasterButton" type="button">+ เพิ่ม</button></div></div>
         <div class="master-tabs" role="tablist">
           <button class="active" type="button" data-master-tab="items">สินค้าและวัตถุดิบ</button>
           <button type="button" data-master-tab="expenses">รายการรายจ่าย</button>
@@ -85,11 +80,11 @@
   </div>
 
   <nav class="bottom-nav" aria-label="เมนูหลัก">
-    <button class="active" type="button" data-target="expense"><span>＋</span><strong>รายจ่าย</strong></button>
+    <button class="active" type="button" data-target="expense"><span>＋</span><strong>บันทึก</strong></button>
+    <button type="button" data-target="dashboard"><span>◷</span><strong>ประวัติ</strong></button>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
-    <button type="button" data-target="dashboard"><span>▥</span><strong>Dashboard</strong></button>
-    <button type="button" data-target="settings"><span>⚙</span><strong>ตั้งค่า</strong></button>
-    <button type="button" data-target="account"><span>○</span><strong>บัญชี</strong></button>
+    <a id="employeeNavLink" href="master-data.html?entity=employees&store=burger"><span>♙</span><strong>พนักงาน</strong></a>
+    <button type="button" data-target="settings"><span>•••</span><strong>เพิ่มเติม</strong></button>
   </nav>
 
   <dialog id="storeDialog" class="sheet-dialog">
@@ -97,8 +92,8 @@
     <a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong><small>ทุกสาขาและข้อมูลกลาง</small></a>
     <a href="tawana.html"><span>TW</span><strong>ทาวน่า</strong><small>ร้านน้ำ</small></a>
     <a href="bigc.html"><span>BC</span><strong>บิ๊กซี พัทยากลาง</strong><small>ค่าใช้จ่ายสาขา</small></a>
-    <a class="active" href="burger.html"><span>BG</span><strong>ร้านเบอร์เกอร์</strong><small>กำลังใช้</small></a>
-    <button type="button" disabled><span>GR</span><strong>ร้านเนื้อ / Grill</strong><small>เร็ว ๆ นี้</small></button>
+    <a id="burgerStoreChoice" class="active" href="burger.html"><span>BG</span><strong>ร้านเบอร์เกอร์</strong><small>เปิด</small></a>
+    <a id="grillStoreChoice" href="burger.html?branch=GRILL"><span>GR</span><strong>ร้านเนื้อย่าง</strong><small>เปิด</small></a>
     <button class="dialog-close" type="button" data-close-dialog="storeDialog">ปิด</button>
   </dialog>
 
@@ -168,6 +163,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
+  <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7',legacyEnabled:false}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9',legacyEnabled:true};</script>
   <script src="assets/js/burger.js?v=20260926-2"></script>
 </body>
 </html>

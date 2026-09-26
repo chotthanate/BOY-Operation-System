@@ -233,14 +233,17 @@
       .expense-row input { padding: 10px 8px; font-size: 15px; }
       .delete-btn { width: 38px; height: 40px; }
     }
-    .store-shell-header { max-width:880px; min-height:64px; margin:0 auto 10px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px; }
+    .store-shell-header { max-width:880px; min-height:64px; margin:0 auto 10px; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:10px; }
     .store-context-button { min-width:0; display:grid; grid-template-columns:42px minmax(0,1fr) 18px; align-items:center; gap:9px; padding:5px; border:0; background:transparent; color:var(--ink); text-align:left; }
     .store-context-button strong,.store-context-button small{display:block}.store-context-button small{color:var(--muted);font-size:.68rem}.store-context-button strong{margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.92rem}
     .store-avatar{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:linear-gradient(145deg,#f2b705,#d99a00);color:#3c2c00;font-weight:950;box-shadow:0 8px 20px rgba(217,154,0,.2)}
     .compact-page-header{max-width:880px;margin:8px auto 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}.compact-page-header h1{margin:0;color:var(--ink);font-size:1.45rem;text-align:left}.page-context{color:var(--muted);font-size:.76rem;font-weight:800}
     .app-switcher-panel{top:auto;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));width:min(480px,calc(100vw - 24px));transform:translateX(-50%);padding:14px;border-radius:22px}.sheet-handle{width:48px;height:5px;margin:0 auto 12px;border-radius:99px;background:#d9dedb}.app-switcher-panel a{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:58px;padding:8px;border-radius:14px}.app-switcher-panel a span:first-child{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#f2f4f2;font-weight:950}.app-switcher-panel a small{display:block;margin-top:2px;color:var(--muted);font-size:.7rem}.app-switcher-panel a b{color:#8a9a94}.app-switcher-panel a.active b{color:var(--primary-dark)}
-    .panel{border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(98,75,10,.07)}.quick-expense-hint{display:none}.actions{position:static;max-width:880px;margin:0 auto 76px;padding:0;background:transparent;backdrop-filter:none}.store-bottom-nav{position:fixed;z-index:90;left:50%;bottom:0;width:min(620px,100%);transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}.store-bottom-nav a{min-height:56px;display:grid;place-items:center;align-content:center;gap:3px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:.68rem;font-weight:850}.store-bottom-nav a span{font-size:1.12rem}.store-bottom-nav a.active{background:var(--soft);color:var(--primary-dark)}
-    @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:auto minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}}
+    .panel{border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(98,75,10,.07)}.quick-expense-hint{display:none}.actions{position:static;max-width:880px;margin:0 auto 76px;padding:0;background:transparent;backdrop-filter:none}.store-bottom-nav{position:fixed;z-index:90;left:50%;bottom:0;width:min(760px,100%);transform:translateX(-50%);display:grid;grid-template-columns:repeat(6,1fr);gap:4px;padding:8px 8px calc(8px + env(safe-area-inset-bottom));border:1px solid var(--line);border-bottom:0;border-radius:18px 18px 0 0;background:rgba(255,255,255,.96);backdrop-filter:blur(14px)}.store-bottom-nav a{min-height:58px;display:grid;place-items:center;align-content:center;gap:3px;border-radius:12px;color:var(--muted);text-decoration:none;font-size:.65rem;font-weight:850}.store-bottom-nav a span{font-size:1.12rem}.store-bottom-nav a.active{background:var(--soft);color:var(--primary-dark)}
+    .expense-row{display:block;overflow:hidden;padding:0;border:1px solid #ead99a;border-radius:18px;background:#fff;box-shadow:0 8px 24px rgba(75,62,20,.06)}
+    .expense-summary{width:100%;min-height:76px;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;padding:11px 12px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}.expense-index{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:var(--soft);color:var(--primary-dark);font-weight:900}.expense-summary-copy{min-width:0}.expense-summary-copy strong,.expense-summary-copy small{display:block}.expense-summary-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.expense-summary-copy small{margin-top:4px;color:var(--muted);font-size:.72rem}.expense-summary-amount{color:var(--primary-dark);font-weight:900}.expense-detail{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(64px,.55fr) minmax(72px,.65fr) minmax(84px,.7fr) 42px;gap:7px;align-items:start;padding:10px;border-top:1px solid #f0e6bd;background:#fffdf4}.expense-row:not(.expanded) .expense-detail{display:none}.expense-detail .payment{grid-column:1 / 3}.expense-detail .note{grid-column:3 / 5}.expense-detail .type-hint{grid-column:1 / 5}
+    @media(max-width:520px){.expense-detail{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr) 38px}.expense-detail .item{grid-column:1 / 4}.expense-detail .delete-btn{grid-column:4;grid-row:1}.expense-detail .qty{grid-column:1}.expense-detail .unit{grid-column:2}.expense-detail .amount{grid-column:3 / 5}.expense-detail .payment{grid-column:1 / 3}.expense-detail .note{grid-column:3 / 5}.expense-detail .type-hint{grid-column:1 / 5}}
+    @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}.store-bottom-nav a{font-size:.58rem}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
@@ -252,9 +255,10 @@
     <a href="./tawana.html"><span>TW</span><span><strong>ทาวน่า</strong><small>ร้านน้ำ · รายรับ รายจ่าย สต็อก และพนักงาน</small></span><b>เปิด</b></a>
     <a class="active" href="./bigc.html"><span>BC</span><span><strong>บิ๊กซี พัทยากลาง</strong><small>ร้านน้ำ · รายจ่ายและงานสาขา</small></span><b>กำลังใช้</b></a>
     <a href="./burger.html"><span>BG</span><span><strong>เบอร์เกอร์</strong><small>รายจ่าย สต็อก และ Dashboard</small></span><b>เปิด</b></a>
+    <a href="./burger.html?branch=GRILL"><span>GR</span><span><strong>ร้านเนื้อย่าง</strong><small>รายจ่าย สต็อก และข้อมูลร้าน</small></span><b>เปิด</b></a>
   </nav>
 
-  <header class="store-shell-header"><a class="boy-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="boy-home-mark">BOY</span><span class="boy-home-copy"><strong>BOY Operation</strong><small>หน้าหลักทุกสาขา</small></span></a><button class="store-context-button" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="store-avatar">BC</span><span><small>กำลังทำงานที่</small><strong>บิ๊กซี พัทยากลาง</strong></span><span>⌄</span></button><button class="settings-btn" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button></header>
+  <header class="store-shell-header branch-shell-header"><button class="branch-identity" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="branch-identity-mark" style="background:linear-gradient(145deg,#f2b705,#d99a00);color:#3c2c00">BC</span><span class="branch-identity-copy"><strong>บิ๊กซี พัทยากลาง</strong><small>ร้านน้ำ · แตะเพื่อเปลี่ยนสาขา</small></span></button><div class="branch-header-actions"><button class="branch-action-button" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div></header>
 
   <main>
     <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายจ่าย</span></div>
@@ -279,7 +283,7 @@
     <button class="btn btn-danger" type="button" onclick="clearAllData()">ล้างข้อมูล</button>
     <button class="btn btn-primary" type="button" onclick="submitExpenses()">บันทึกรายจ่าย</button>
   </div>
-  <nav class="store-bottom-nav" aria-label="เมนูสาขา"><a class="active" href="bigc.html"><span>＋</span>รายจ่าย</a><a href="bigc-order.html"><span>▦</span>เบิก / รับของ</a><a href="dashboard.html"><span>▥</span>ภาพรวม</a><a href="index.html"><span>⌂</span>หน้าหลัก</a></nav>
+  <nav class="store-bottom-nav" aria-label="เมนูสาขา"><a class="active" href="bigc.html"><span>＋</span>บันทึก</a><a href="dashboard.html"><span>◷</span>ประวัติ</a><a href="bigc-order.html#receive"><span>▦</span>สต็อก</a><a href="master-data.html?entity=employees&store=water"><span>♙</span>พนักงาน</a><a href="master-data.html?entity=branches&store=water"><span>•••</span>เพิ่มเติม</a><a href="bigc-order.html"><span>⇄</span>เบิก / รับของ</a></nav>
 
   <div id="loadingOverlay" class="overlay hidden">
     <div class="overlay-card">
@@ -539,7 +543,24 @@
       const itemName = input.value.trim();
       if (!unitInput.value && itemDict[itemName]) unitInput.value = itemDict[itemName];
       updateUnitOptions(row);
+      refreshExpenseSummary(row);
       doSync();
+    }
+
+    function toggleExpenseRow(button) {
+      const row = button.closest('.expense-row');
+      document.querySelectorAll('.expense-row').forEach(function(entry) { if (entry !== row) entry.classList.remove('expanded'); });
+      row.classList.toggle('expanded');
+    }
+
+    function refreshExpenseSummary(row) {
+      if (!row) return;
+      const name = row.querySelector('.item')?.value.trim() || 'ยังไม่ระบุรายการ';
+      const amount = Number(row.querySelector('.amount')?.value || 0);
+      const nameNode = row.querySelector('.expense-summary-copy strong');
+      const amountNode = row.querySelector('.expense-summary-amount');
+      if (nameNode) nameNode.textContent = name;
+      if (amountNode) amountNode.textContent = amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function nav(event, index) {
@@ -561,19 +582,23 @@
       rowCounter++;
       const unitListId = 'unitOptions_' + rowCounter;
       const row = document.createElement('div');
-      row.className = 'expense-row';
+      row.className = 'expense-row expanded';
       row.innerHTML = `
-        <input class="item" type="text" placeholder="รายการ" value="${escapeHtml(i)}" autocomplete="off" oninput="showSuggestions(this)" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)">
-        <input class="qty" type="number" inputmode="decimal" placeholder="จำนวน" value="${escapeHtml(q)}" onchange="doSync()" onkeydown="nav(event, 1)">
-        <input class="unit" type="text" placeholder="หน่วย" value="${escapeHtml(u)}" list="${unitListId}" onchange="updateUnitOptions(this.closest('.expense-row')); doSync()" onkeydown="nav(event, 2)">
-        <datalist id="${unitListId}"></datalist>
-        <input class="amount" type="number" inputmode="decimal" placeholder="บาท" value="${escapeHtml(p)}" onchange="doSync()" onkeydown="nav(event, 3)">
-        <button class="delete-btn" type="button" onclick="removeRow(this)">×</button>
-        <select class="payment" aria-label="ช่องทางชำระเงิน" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select>
-        <input class="note" type="text" placeholder="หมายเหตุ" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)">
-        <div class="type-hint"></div>
+        <button class="expense-summary" type="button" onclick="toggleExpenseRow(this)"><span class="expense-index">${rowCounter}</span><span class="expense-summary-copy"><strong>${escapeHtml(i || 'ยังไม่ระบุรายการ')}</strong><small>แตะเพื่อดูหรือแก้รายละเอียด</small></span><span class="expense-summary-amount">${Number(p || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></button>
+        <div class="expense-detail">
+          <input class="item" type="text" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" value="${escapeHtml(i)}" autocomplete="off" oninput="showSuggestions(this); refreshExpenseSummary(this.closest('.expense-row'))" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)">
+          <input class="qty" type="number" inputmode="decimal" placeholder="จำนวน" value="${escapeHtml(q)}" onchange="doSync()" onkeydown="nav(event, 1)">
+          <input class="unit" type="text" placeholder="หน่วย" value="${escapeHtml(u)}" list="${unitListId}" onchange="updateUnitOptions(this.closest('.expense-row')); doSync()" onkeydown="nav(event, 2)">
+          <datalist id="${unitListId}"></datalist>
+          <input class="amount" type="number" inputmode="decimal" placeholder="ยอดรวม" value="${escapeHtml(p)}" oninput="refreshExpenseSummary(this.closest('.expense-row'))" onchange="doSync()" onkeydown="nav(event, 3)">
+          <button class="delete-btn" type="button" onclick="removeRow(this)">×</button>
+          <select class="payment" aria-label="ช่องทางชำระเงิน" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select>
+          <input class="note" type="text" placeholder="หมายเหตุ" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)">
+          <div class="type-hint"></div>
+        </div>
       `;
       document.getElementById('expenseList').appendChild(row);
+      document.querySelectorAll('.expense-row').forEach(function(entry) { if (entry !== row) entry.classList.remove('expanded'); });
       updateUnitOptions(row);
       return row;
     }
@@ -615,7 +640,7 @@
         rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay); });
         addRow();
       } else {
-        for (let i = 0; i < 4; i++) addRow();
+        addRow();
       }
     }
 
@@ -686,7 +711,7 @@
     function clearAllData() {
       if (!confirm('ล้างข้อมูลที่กรอกอยู่?')) return;
       document.getElementById('expenseList').innerHTML = '';
-      for (let i = 0; i < 4; i++) addRow();
+      addRow();
       doSync();
     }
 

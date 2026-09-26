@@ -4,6 +4,7 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
+  const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", legacyEnabled: true, ...(window.BOY_BRANCH_CONFIG || {}) };
   const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
@@ -12,6 +13,31 @@
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
   const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterTab: "items", draftTimer: null, syncing: false };
+
+  function applyBranchIdentity() {
+    document.documentElement.style.setProperty("--store-accent", branchApp.accent);
+    document.documentElement.style.setProperty("--store-accent-soft", branchApp.accentSoft);
+    if (branchApp.branchCode === "GRILL") {
+      document.documentElement.style.setProperty("--green", "#7d3f31");
+      document.documentElement.style.setProperty("--green2", "#a85a43");
+      document.documentElement.style.setProperty("--green-soft", "#f5e8e3");
+      document.documentElement.style.setProperty("--orange", "#a85a43");
+      document.documentElement.style.setProperty("--orange-soft", "#f8ece7");
+      document.documentElement.style.setProperty("--paper", "#fbf5f0");
+    }
+    document.title = `${branchApp.name} | BOY Operations`;
+    const values = { branchMark: branchApp.mark, branchName: branchApp.name, expenseBranchLabel: branchApp.name, settingsBranchLabel: `ข้อมูล${branchApp.name}` };
+    Object.entries(values).forEach(([id, value]) => { const node = document.getElementById(id); if (node) node.textContent = value; });
+    const burgerChoice = document.getElementById("burgerStoreChoice");
+    const grillChoice = document.getElementById("grillStoreChoice");
+    burgerChoice?.classList.toggle("active", branchApp.branchCode === "BURGER");
+    grillChoice?.classList.toggle("active", branchApp.branchCode === "GRILL");
+    const activeChoice = branchApp.branchCode === "GRILL" ? grillChoice : burgerChoice;
+    activeChoice?.querySelector("small") && (activeChoice.querySelector("small").textContent = "กำลังใช้");
+    const employeeLink = document.getElementById("employeeNavLink");
+    if (employeeLink) employeeLink.href = `master-data.html?entity=employees&store=${branchApp.slug}`;
+    if (branchApp.branchCode === "GRILL") document.body.classList.add("grill-branch");
+  }
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
@@ -45,9 +71,9 @@
     badge.className = `connection-badge ${type}`;
   }
 
-  const outboxKey = () => `boy-burger-outbox:${state.session?.user?.id || "guest"}`;
-  const profileCacheKey = () => `boy-burger-profile:${state.session?.user?.id || "guest"}`;
-  const masterCacheKey = () => `boy-burger-master:${state.session?.user?.id || "guest"}`;
+  const outboxKey = () => `boy-${branchApp.slug}-outbox:${state.session?.user?.id || "guest"}`;
+  const profileCacheKey = () => `boy-${branchApp.slug}-profile:${state.session?.user?.id || "guest"}`;
+  const masterCacheKey = () => `boy-${branchApp.slug}-master:${state.session?.user?.id || "guest"}`;
   function readCache(key) {
     try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { return null; }
   }
@@ -118,7 +144,7 @@
     if (page === "settings" && state.session) renderMasterList();
   }
 
-  const draftKeyForDate = (date) => `boy-burger-draft:${state.session?.user?.id || "guest"}:${date || today()}`;
+  const draftKeyForDate = (date) => `boy-${branchApp.slug}-draft:${state.session?.user?.id || "guest"}:${date || today()}`;
   const draftKey = () => draftKeyForDate($("#expenseDate").value);
 
   function draftPayload() {
@@ -458,7 +484,7 @@
     const payload = {
       branch_id: state.branch.id,
       transaction_date: $("#expenseDate").value,
-      source_system: "boy_burger_web",
+      source_system: branchApp.sourceSystem,
       idempotency_key: crypto.randomUUID(),
       payment_method: paymentMethod,
       payment: { method: paymentMethod, amount: totalAmount },
@@ -513,7 +539,7 @@
 
   async function loadMaster() {
     const [branchResult, unitsResult, categoriesResult] = await Promise.all([
-      client.schema("boy_central").from("branches").select("id,company_id,code,name").eq("code", "BURGER").eq("active", true).single(),
+      client.schema("boy_central").from("branches").select("id,company_id,code,name,active").eq("code", branchApp.branchCode).single(),
       client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name"),
       client.schema("boy_central").from("categories").select("id,name,code,parent_id,category_type").eq("active", true).order("sort_order")
     ]);
@@ -579,7 +605,7 @@
   }
 
   function applyLegacyCatalog(data) {
-    if (!data?.branch || !Array.isArray(data.items)) throw new Error("ข้อมูลรายการร้านเบอร์เกอร์ไม่สมบูรณ์");
+    if (!data?.branch || !Array.isArray(data.items)) throw new Error(`ข้อมูลรายการ${branchApp.name}ไม่สมบูรณ์`);
     state.branch = data.branch;
     state.branchItems = data.branchItems || [];
     state.items = data.items || [];
@@ -596,8 +622,42 @@
     updateSyncStatus();
   }
 
+  const mirrorBool = (value, fallback = false) => value === undefined || value === null || value === "" ? fallback : ![false, 0, "0", "false", "FALSE", "ปิด", "ไม่ใช้งาน"].includes(value);
+  async function loadMirrorMaster() {
+    setConnection(`กำลังโหลดข้อมูล${branchApp.name}`, "pending");
+    const [itemCatalog, expenseCatalog, supplierCatalog, itemUnitCatalog, itemSupplierCatalog] = await Promise.all([
+      legacyApi("masterCatalog", { entity: "items" }),
+      legacyApi("masterCatalog", { entity: "expenseItems" }),
+      legacyApi("masterCatalog", { entity: "suppliers" }),
+      legacyApi("masterCatalog", { entity: "itemUnits" }),
+      legacyApi("masterCatalog", { entity: "itemSuppliers" })
+    ]);
+    const refs = itemCatalog.references || {};
+    const branchRow = (refs.branches?.rows || []).find((row) => String(row["รหัสสาขา"] || row.code || "").toUpperCase() === branchApp.branchCode);
+    if (!branchRow) throw new Error(`ยังไม่พบสาขา ${branchApp.branchCode} ในข้อมูลกลาง`);
+    const branchId = branchRow.branch_id;
+    const branchLinks = (refs.branchItems?.rows || []).filter((row) => String(row.branch_id) === String(branchId) && mirrorBool(row["เปิดใช้งาน"], true));
+    const itemIds = new Set(branchLinks.map((row) => String(row.item_id)));
+    const unitRows = refs.units?.rows || [];
+    const categoryRows = refs.categories?.rows || [];
+    state.branch = { id: branchId, company_id: branchRow.company_id || "BOY", code: branchApp.branchCode, name: branchRow["ชื่อสาขา"] || branchApp.name, active: mirrorBool(branchRow["เปิดใช้งาน"], true) };
+    state.units = unitRows.map((row) => ({ id: row.unit_id, name: row["ชื่อหน่วย"] || row.name || row.unit_id, code: row["รหัสหน่วย"] || row.code || row.unit_id }));
+    state.categories = categoryRows.map((row) => ({ id: row.subcategory_id || row.category_id, name: row["ชื่อประเภทย่อย"] || row["ชื่อประเภทหลัก"] || "ไม่ระบุ", code: row["รหัสประเภทย่อย"] || row.subcategory_id || row.category_id, parent_id: row.subcategory_id ? row.category_id : null, category_type: row["ประเภทหมวดหมู่"] || "expense" }));
+    state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => ({ id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: mirrorBool(row["ติดตามสต็อก"]), purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }));
+    state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
+    const relevantExpense = (row) => itemIds.has(String(row.item_id || "")) || String(row.default_branch_id || "") === String(branchId) || String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase().includes(branchApp.branchCode);
+    state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
+    state.suppliers = (supplierCatalog.rows || []).filter((row) => mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ id: row.supplier_id, name: row["ชื่อผู้ขาย"] || row.name || row.supplier_id, code: row["รหัสผู้ขาย"] || row.code || row.supplier_id }));
+    state.itemUnits = (itemUnitCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, unit_id: row.unit_id, conversion_to_base: Number(row["อัตราแปลงเป็นหน่วยฐาน"] || 1), is_base_unit: mirrorBool(row["เป็นหน่วยฐาน"]), allow_purchase: mirrorBool(row["ใช้หน่วยนี้ตอนซื้อ"]), allow_issue: mirrorBool(row["ใช้หน่วยนี้ตอนเบิก"]), active: true }));
+    state.itemSuppliers = (itemSupplierCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && (!row.branch_id || String(row.branch_id) === String(branchId)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, supplier_id: row.supplier_id, active: true, is_primary: mirrorBool(row["เป็นผู้ขายหลัก"]) }));
+    state.catalogSource = "google-sheets";
+    renderLines(); renderMasterList(); saveMasterCache(); updateSyncStatus();
+    setConnection(`พร้อมใช้ · ${state.expenseItems.filter(isExpenseActive).length} รายการ`, "online");
+  }
+
   async function loadLegacyMaster() {
-    setConnection("กำลังโหลดรายการร้านเบอร์เกอร์", "pending");
+    if (!branchApp.legacyEnabled) return loadMirrorMaster();
+    setConnection(`กำลังโหลดรายการ${branchApp.name}`, "pending");
     const result = await legacyApi("burgerCatalog");
     applyLegacyCatalog(result);
     setConnection(`พร้อมใช้ · ${state.expenseItems.filter(isExpenseActive).length} รายการ`, "online");
@@ -927,7 +987,7 @@
     state.profile = profile;
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && /^(tawana|bigc|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
     }
@@ -942,7 +1002,7 @@
         catch (error) {
           if (!isNetworkError(error)) throw error;
           await loadLegacyMaster();
-          toast("ใช้ข้อมูลร้านเบอร์เกอร์จากระบบสำรอง");
+          toast(`ใช้ข้อมูล${branchApp.name}จากระบบสำรอง`);
         }
       }
       else if (!loadMasterCache()) throw new Error("ยังไม่มีข้อมูลร้านที่เก็บไว้ในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตก่อน");
@@ -962,15 +1022,15 @@
     state.profile = readCache(profileCacheKey()) || { display_name: "Chotthanate", company_role: "admin" };
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
+    if (next && /^(tawana|bigc|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = state.profile.display_name || "ผู้ดูแล BOY";
     const hadCache = loadMasterCache();
-    try { await loadLegacyMaster(); }
+    try { branchApp.legacyEnabled ? await loadLegacyMaster() : await loadMaster(); }
     catch (error) {
-      if (!hadCache) toast(`โหลดรายการร้านเบอร์เกอร์ไม่สำเร็จ: ${error.message}`);
+      if (!hadCache) toast(`โหลดรายการ${branchApp.name}ไม่สำเร็จ: ${error.message}`);
       else toast("กำลังใช้รายการที่บันทึกไว้ในเครื่อง");
     }
     if (state.branch) { await flushOutbox(); await loadDraftForDate(); await loadExpenseHistory(); }
@@ -979,7 +1039,8 @@
   }
 
   async function init() {
-    if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("burger-sw.js").catch(() => {});
+    applyBranchIdentity();
+    if (branchApp.branchCode === "BURGER" && "serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("burger-sw.js").catch(() => {});
     $("#expenseDate").value = today();
     $("#dashboardMonth").value = monthNow();
     state.lines = [newLine()];
@@ -1053,6 +1114,7 @@
   }));
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterTab === "items" ? "item" : "expense_item"));
+  $("#accountQuickButton").addEventListener("click", () => setPage("account"));
   $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
   $("#masterPurchaseUnit").addEventListener("change", () => refreshMasterPurchaseUnits($("#masterPurchaseUnit").value));

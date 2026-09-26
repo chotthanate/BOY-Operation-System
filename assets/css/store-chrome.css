@@ -1,4 +1,11 @@
 :root{--store-accent:#0b876b;--store-accent-soft:#e8f6f0}
+.branch-shell-header{min-width:0;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
+.branch-identity{min-width:0;display:flex;align-items:center;gap:10px;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.branch-identity-mark{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;border-radius:14px;background:var(--store-accent);color:#fff;font-size:.76rem;font-weight:950;box-shadow:0 8px 20px color-mix(in srgb,var(--store-accent) 24%,transparent)}
+.branch-identity-copy{min-width:0}.branch-identity-copy strong,.branch-identity-copy small{display:block}.branch-identity-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.96rem}.branch-identity-copy small{margin-top:2px;color:var(--muted,#71817c);font-size:.68rem;white-space:nowrap}
+.branch-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.branch-home-button,.branch-action-button{width:44px;height:44px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--store-accent) 15%,#dfe7e3);border-radius:13px;background:#fff;color:var(--store-accent);text-decoration:none;font-size:1.15rem;font-weight:900;box-shadow:0 7px 20px rgba(28,53,45,.07)}
+.branch-home-button svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .boy-home-brand{min-width:0;display:flex;align-items:center;gap:9px;color:inherit;text-decoration:none}
 .boy-home-mark{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:13px;background:var(--store-accent);color:#fff;font-size:.72rem;font-weight:950;box-shadow:0 8px 20px color-mix(in srgb,var(--store-accent) 24%,transparent)}
 .boy-home-copy{min-width:0}.boy-home-copy strong,.boy-home-copy small{display:block}.boy-home-copy strong{font-size:.88rem;white-space:nowrap}.boy-home-copy small{margin-top:2px;color:var(--muted,#71817c);font-size:.64rem;white-space:nowrap}
@@ -6,6 +13,7 @@
 .app-topbar:has(.boy-home-brand){display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px}.app-topbar:has(.boy-home-brand) .store-switcher-button{justify-self:end}
 .topbar:has(.boy-home-brand)+main{}
 .bottom-nav{grid-template-columns:repeat(5,1fr)!important}.bottom-nav button.active{background:var(--store-accent-soft)!important;color:var(--store-accent)!important}
-body:has(.store-mark){--store-accent:#ef6c4d;--store-accent-soft:#fff0e9}
-body:has(.store-mark) .store-mark{background:linear-gradient(145deg,#c95535,#ef6c4d);box-shadow:0 9px 22px rgba(201,85,53,.22)}
-@media(max-width:640px){.boy-home-copy{display:none}.topbar:has(.boy-home-brand){grid-template-columns:auto minmax(0,1fr) auto}.topbar:has(.boy-home-brand) .connection-badge{max-width:92px;overflow:hidden;text-overflow:ellipsis}.bottom-nav button{border-radius:12px!important}.app-topbar:has(.boy-home-brand){grid-template-columns:auto minmax(0,1fr)}}
+.bottom-nav button,.bottom-nav a,.store-bottom-nav a{min-height:58px!important;border-radius:12px!important}
+.bottom-nav a{display:grid;place-items:center;align-content:center;gap:4px;color:#7b8883;text-decoration:none}.bottom-nav a span{font-size:1.25rem;line-height:1}.bottom-nav a strong{font-size:.7rem}
+body:has(.store-mark) .store-mark{background:linear-gradient(145deg,color-mix(in srgb,var(--store-accent) 82%,#713323),var(--store-accent));box-shadow:0 9px 22px color-mix(in srgb,var(--store-accent) 24%,transparent)}
+@media(max-width:640px){.boy-home-copy{display:none}.branch-identity-copy small{font-size:.62rem}.branch-identity-copy strong{font-size:.88rem}.topbar:has(.boy-home-brand){grid-template-columns:auto minmax(0,1fr) auto}.topbar:has(.boy-home-brand) .connection-badge{max-width:92px;overflow:hidden;text-overflow:ellipsis}.bottom-nav button{border-radius:12px!important}.app-topbar:has(.boy-home-brand){grid-template-columns:auto minmax(0,1fr)}}

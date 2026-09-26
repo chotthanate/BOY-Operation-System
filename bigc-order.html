@@ -19,8 +19,8 @@
         html { background-color: var(--bg); min-height: 100%; overscroll-behavior: none; }
         body { margin: 0; width: 100%; max-width: none; background-color: var(--bg); color: var(--text); padding-bottom: calc(100px + env(safe-area-inset-bottom)); -webkit-tap-highlight-color: transparent; overflow-x: hidden; min-height: 100vh; min-height: 100dvh; box-shadow: none; }
         @supports (-webkit-touch-callout: none) { body { min-height: -webkit-fill-available; } }
-        header { background-color: var(--primary); color: white; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:8px;text-align:left;font-size:16px;font-weight:bold;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.1);width:100%;max-width:none;margin:0; }
-        .order-home{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#fff;color:var(--primary-dark);text-decoration:none;font-size:.72rem;font-weight:950}.order-title small,.order-title strong{display:block}.order-title small{font-size:.68rem;opacity:.82}.order-title strong{margin-top:2px;font-size:.95rem}.branch-back{padding:9px 11px;border-radius:11px;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-size:.72rem}
+        header { background-color: var(--primary); color: white; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;text-align:left;font-size:16px;font-weight:bold;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.1);width:100%;max-width:none;margin:0; }
+        .order-identity{min-width:0;display:flex;align-items:center;gap:9px;color:#fff;text-decoration:none}.order-mark{width:42px;height:42px;flex:0 0 42px;display:grid;place-items:center;border-radius:13px;background:#fff;color:var(--primary-dark);font-size:.72rem;font-weight:950}.order-title{min-width:0}.order-title small,.order-title strong{display:block}.order-title small{font-size:.68rem;opacity:.82}.order-title strong{margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.95rem}.order-home{width:40px;height:40px;display:grid;place-items:center;border-radius:11px;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;font-size:1.05rem}
         .header-icon { position: static; font-size: 20px; cursor: pointer; background: rgba(255,255,255,0.2); border-radius: 11px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;}
         .tab-menu { display: flex; background: white; position: sticky; top: calc(56px + env(safe-area-inset-top)); z-index: 99; border-bottom: 1px solid #eee; width: 100%; max-width: none; margin: 0; }
         .tab-btn { flex: 1; padding: 15px 0; border: none; background: none; font-size: 15px; color: #aaa; font-weight: bold; border-bottom: 3px solid transparent; }
@@ -97,7 +97,7 @@
 <div id="cute-loader"><div class="cup-icon">🥤</div><div class="loader-text" id="loader-msg">กำลังโหลดข้อมูล...</div></div>
 
 <header>
-    <a class="order-home" href="index.html" aria-label="กลับหน้าหลัก">BOY</a><span class="order-title"><small>บิ๊กซี พัทยากลาง</small><strong>เบิกและรับสินค้า</strong></span><a class="branch-back" href="bigc.html">หน้าสาขา</a>
+    <a class="order-identity" href="bigc.html" aria-label="กลับหน้าสาขา"><span class="order-mark">BC</span><span class="order-title"><strong>บิ๊กซี พัทยากลาง</strong><small>เบิกและรับสินค้า · แตะเพื่อกลับหน้าสาขา</small></span></a><a class="order-home" href="index.html" aria-label="กลับหน้าหลัก">⌂</a>
     <div class="header-icon" onclick="window.openManageModal()">⚙️</div>
 </header>
 
@@ -820,6 +820,8 @@
     // ฟังก์ชันย่อยอื่นๆ (UI/UX)
     window.updateOrderTotal = function() { let t = document.getElementById('total-qty'); if(t) t.innerText = Object.values(window.orderCart).reduce((a, b) => a + b, 0); }
     window.switchTab = function(id) { document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.getElementById(`tab-${id}`).classList.add('active'); document.getElementById(`tab-btn-${id}`).classList.add('active'); document.getElementById('cart-bar').style.display = id === 'order' ? 'flex' : 'none'; window.scrollTo(0, 0); }
+    const initialTab = location.hash.replace('#', '');
+    if (['order', 'receive', 'return'].includes(initialTab)) setTimeout(() => window.switchTab(initialTab), 0);
     window.copyOrderText = function() { const now = new Date(); const dateThai = now.getDate() + "/" + (now.getMonth() + 1) + "/" + (now.getFullYear() + 543); let text = `📦 รายการสั่งของ Big C (${dateThai})\n`; let hasItem = false; window.categoryOrder.forEach(cat => { if(!window.activeCategories[cat]) return; let catContent = ""; window.activeCategories[cat].forEach(item => { if (window.orderCart[item] > 0) { catContent += `- ${item} x ${window.orderCart[item]}\n`; hasItem = true; } }); if (catContent !== "") text += `\n${cat}\n${catContent}`; }); if (!hasItem) return alert("ไม่มีสินค้าในตะกร้า"); var textArea = document.createElement("textarea"); textArea.value = text; document.body.appendChild(textArea); textArea.select(); document.execCommand('copy'); document.body.removeChild(textArea); alert("📋 คัดลอกแล้ว นำไปวางใน LINE ได้เลยครับ"); };
     window.showLoader = function(text) { document.getElementById('loader-msg').innerText = text; document.getElementById('cute-loader').style.display = 'flex'; }
     window.hideLoader = function() { document.getElementById('cute-loader').style.display = 'none'; }
