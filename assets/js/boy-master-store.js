@@ -142,16 +142,19 @@
   }
 
   function mergeCompactResult(currentCatalog, result) {
-    if (!result?.row || !currentCatalog?.rows) return result;
-    const rowNumber = String(result.row.__rowNumber || result.rowNumber || "");
+    if (!currentCatalog?.rows) return result;
     const rows = currentCatalog.rows.slice();
-    const index = rows.findIndex(row => String(row.__rowNumber) === rowNumber);
-    if (index >= 0) rows[index] = result.row;
-    else rows.push(result.row);
+    if (result?.row) {
+      const rowNumber = String(result.row.__rowNumber || result.rowNumber || "");
+      const index = rows.findIndex(row => String(row.__rowNumber) === rowNumber);
+      if (index >= 0) rows[index] = result.row;
+      else rows.push(result.row);
+    }
     const references = { ...(currentCatalog.references || {}) };
     Object.entries(result.referencePatches || {}).forEach(([name, patch]) => {
       const existing = references[name] || { idHeader: patch.idHeader, rows: [] };
-      const kept = (existing.rows || []).filter(row => String(row[patch.matchField]) !== String(patch.matchValue));
+      const values = new Set((patch.matchValues || [patch.matchValue]).filter(value => value != null).map(String));
+      const kept = (existing.rows || []).filter(row => !values.has(String(row[patch.matchField])));
       references[name] = { ...existing, idHeader: patch.idHeader || existing.idHeader, rows: kept.concat(patch.rows || []) };
     });
     return {
@@ -162,6 +165,10 @@
       rows,
       references
     };
+  }
+
+  async function applyPatch(sheetName, currentCatalog, result) {
+    return remember(sheetName, mergeCompactResult(currentCatalog, result), "google-sheets-fallback");
   }
 
   async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog) {
@@ -205,5 +212,5 @@
     }
   }
 
-  window.BOY_MASTER_STORE = { load, save, setActive, refresh, prefetch, cached };
+  window.BOY_MASTER_STORE = { load, save, setActive, applyPatch, refresh, prefetch, cached };
 })();

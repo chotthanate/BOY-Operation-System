@@ -150,6 +150,9 @@ function doPost(e) {
       case 'masterSetActive':
         result = handleMasterSetActive_(payload.entity, payload.rowNumber, payload.active, payload.actor || {}, payload.expectedVersion, payload.compact);
         break;
+      case 'masterBulkItemBranches':
+        result = handleMasterBulkItemBranches_(payload.assignments || [], payload.actor || {});
+        break;
       case 'sheetCatalog':
         result = handleSheetCatalog_(payload.sheetName);
         break;
@@ -903,6 +906,98 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
     });
     appendRows_(sh, [row]);
   });
+}
+
+function handleMasterBulkItemBranches_(assignments, actor) {
+  if (!Array.isArray(assignments) || !assignments.length) {
+    return { status: 'success', updatedItems: 0, changedLinks: 0, referencePatches: { branchItems: { idHeader: MASTER_ENTITY_SPECS.branchItems.id, matchField: 'item_id', matchValues: [], rows: [] } } };
+  }
+  if (assignments.length > 1000) throw new Error('บันทึกพร้อมกันได้ไม่เกิน 1,000 รายการ');
+  const itemIds = {};
+  tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).forEach(function(row) {
+    const itemId = normalizeText_(row.item_id);
+    if (itemId) itemIds[itemId] = true;
+  });
+  const allowedBranches = {};
+  tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranches).forEach(function(row) {
+    const branchId = normalizeText_(row.branch_id);
+    if (branchId) allowedBranches[branchId] = true;
+  });
+  const selectedByItem = {};
+  assignments.forEach(function(assignment) {
+    const itemId = normalizeText_(assignment && assignment.itemId);
+    if (!itemIds[itemId]) return;
+    const selected = {};
+    (Array.isArray(assignment.branchIds) ? assignment.branchIds : []).forEach(function(value) {
+      const branchId = normalizeText_(value);
+      if (allowedBranches[branchId]) selected[branchId] = true;
+    });
+    selectedByItem[itemId] = selected;
+  });
+  const changedItemIds = Object.keys(selectedByItem);
+  if (!changedItemIds.length) throw new Error('ไม่พบสินค้าที่ต้องการบันทึก');
+
+  const sh = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems);
+  const headers = masterHeaders_(sh);
+  const itemIndex = headers.indexOf('item_id');
+  const branchIndex = headers.indexOf('branch_id');
+  const activeIndex = headers.indexOf('เปิดใช้งาน');
+  if (itemIndex < 0 || branchIndex < 0 || activeIndex < 0) throw new Error('หัวตารางสินค้าประจำสาขาไม่ครบ');
+  const lastRow = sh.getLastRow();
+  const values = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, headers.length).getValues() : [];
+  const existing = {};
+  const activeValues = values.map(function(row) { return [toBool_(row[activeIndex], false)]; });
+  const auditRows = [];
+  let changedLinks = 0;
+  values.forEach(function(row, index) {
+    const itemId = normalizeText_(row[itemIndex]);
+    if (!(itemId in selectedByItem)) return;
+    const branchId = normalizeText_(row[branchIndex]);
+    existing[itemId + '\n' + branchId] = true;
+    const beforeActive = toBool_(row[activeIndex], false);
+    const afterActive = !!selectedByItem[itemId][branchId];
+    if (beforeActive === afterActive) return;
+    const before = masterRowObject_(headers, row);
+    row[activeIndex] = afterActive;
+    activeValues[index][0] = afterActive;
+    auditRows.push([Utilities.getUuid(), now_(), actorLabel_(actor), sh.getName(), index + 2, 'แก้ไขหลายรายการ', normalizeText_(before.branch_item_id), JSON.stringify(before), JSON.stringify(masterRowObject_(headers, row)), '', '']);
+    changedLinks++;
+  });
+  const newRows = [];
+  changedItemIds.forEach(function(itemId) {
+    Object.keys(selectedByItem[itemId]).forEach(function(branchId) {
+      if (existing[itemId + '\n' + branchId]) return;
+      const relationId = 'BRI-' + branchId + '-' + itemId.replace(/^ITEM-/, '');
+      const row = headers.map(function(header) {
+        if (header === 'branch_item_id') return relationId;
+        if (header === 'branch_id') return branchId;
+        if (header === 'item_id') return itemId;
+        if (header === 'เปิดใช้งาน') return true;
+        return '';
+      });
+      newRows.push(row);
+      auditRows.push([Utilities.getUuid(), now_(), actorLabel_(actor), sh.getName(), lastRow + newRows.length, 'เพิ่มหลายรายการ', relationId, '{}', JSON.stringify(masterRowObject_(headers, row)), '', '']);
+      changedLinks++;
+    });
+  });
+
+  const lock = lock_();
+  lock.waitLock(15000);
+  try {
+    if (activeValues.length && changedLinks) sh.getRange(2, activeIndex + 1, activeValues.length, 1).setValues(activeValues);
+    if (newRows.length) appendRows_(sh, newRows);
+    if (auditRows.length) appendRows_(masterAuditSheet_(), auditRows);
+    if (changedLinks) clearMasterHealthCache_();
+  } finally {
+    lock.releaseLock();
+  }
+  const patchRows = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems).filter(function(row) {
+    return changedItemIds.indexOf(normalizeText_(row.item_id)) >= 0;
+  });
+  return {
+    status: 'success', updatedItems: changedItemIds.length, changedLinks: changedLinks,
+    referencePatches: { branchItems: { idHeader: MASTER_ENTITY_SPECS.branchItems.id, matchField: 'item_id', matchValues: changedItemIds, rows: patchRows } }
+  };
 }
 
 function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expectedVersion, compact) {
