@@ -150,7 +150,8 @@
       border-radius: 12px;
       padding: 8px;
     }
-    .expense-row .note { grid-column: 1 / 5; }
+    .expense-row .payment { grid-column: 1 / 3; }
+    .expense-row .note { grid-column: 3 / 5; }
     .expense-row .type-hint {
       grid-column: 1 / 5;
       display: none;
@@ -225,7 +226,9 @@
       .expense-row .qty { grid-column: 1; }
       .expense-row .unit { grid-column: 2; }
       .expense-row .amount { grid-column: 3 / 5; }
-      .expense-row .note, .expense-row .type-hint { grid-column: 1 / 5; }
+      .expense-row .payment { grid-column: 1 / 3; }
+      .expense-row .note { grid-column: 3 / 5; }
+      .expense-row .type-hint { grid-column: 1 / 5; }
       .expense-row input { padding: 10px 8px; font-size: 15px; }
       .delete-btn { width: 38px; height: 40px; }
     }
@@ -548,7 +551,7 @@
       else addRow().querySelector('.item').focus();
     }
 
-    function addRow(i = '', q = '', u = '', p = '', n = '') {
+    function addRow(i = '', q = '', u = '', p = '', n = '', pay = 'cash') {
       rowCounter++;
       const unitListId = 'unitOptions_' + rowCounter;
       const row = document.createElement('div');
@@ -560,6 +563,7 @@
         <datalist id="${unitListId}"></datalist>
         <input class="amount" type="number" inputmode="decimal" placeholder="บาท" value="${escapeHtml(p)}" onchange="doSync()" onkeydown="nav(event, 3)">
         <button class="delete-btn" type="button" onclick="removeRow(this)">×</button>
+        <select class="payment" aria-label="ช่องทางชำระเงิน" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select>
         <input class="note" type="text" placeholder="หมายเหตุ" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)">
         <div class="type-hint"></div>
       `;
@@ -581,6 +585,7 @@
         const unit = row.querySelector('.unit').value.trim();
         const amount = row.querySelector('.amount').value;
         const note = row.querySelector('.note').value.trim();
+        const pay = row.querySelector('.payment').value;
         if (!item && !qty && !unit && !amount && !note) return;
         const meta = getExpenseMeta(item, unit);
         exp.push({
@@ -590,7 +595,8 @@
           p: amount,
           n: note,
           m: meta.mainType || '',
-          t: meta.subType || ''
+          t: meta.subType || '',
+          pay: pay || 'cash'
         });
       });
       return { exp };
@@ -600,7 +606,7 @@
       document.getElementById('expenseList').innerHTML = '';
       const rows = snapshot && Array.isArray(snapshot.exp) ? snapshot.exp : [];
       if (rows.length) {
-        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n); });
+        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay); });
         addRow();
       } else {
         for (let i = 0; i < 4; i++) addRow();

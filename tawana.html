@@ -1901,12 +1901,14 @@
       var amount = wrapper.querySelector('.p');
       var mainType = wrapper.querySelector('.exp-main-type');
       var subType = wrapper.querySelector('.exp-sub-type');
+      var payment = wrapper.querySelector('.exp-payment');
       var nameText = String(item && item.value || '').trim();
       var qtyValue = toUiNumber(qty && qty.value);
       var amountValue = toUiNumber(amount && amount.value);
       var unitText = String(unit && unit.value || '').trim();
       var meta = getExpenseMeta(nameText, unitText);
-      var category = [mainType && mainType.value, subType && subType.value].filter(Boolean).join(' · ');
+      var paymentText = payment && payment.options[payment.selectedIndex] ? payment.options[payment.selectedIndex].text : 'เงินสด';
+      var category = [mainType && mainType.value, subType && subType.value, paymentText].filter(Boolean).join(' · ');
       wrapper.querySelector('.expense-summary-name').textContent = nameText || 'รายการใหม่';
       wrapper.querySelector('.expense-summary-category').textContent = category || 'ยังไม่เลือกหมวด';
       wrapper.querySelector('.expense-summary-amount').textContent = formatMoney(amountValue);
@@ -1930,10 +1932,11 @@
       refreshExpenseIndexes();
     }
 
-    function addRow(i, q, u, p, mainType, subType, supplier, note) {
+    function addRow(i, q, u, p, mainType, subType, supplier, note, paymentMethod) {
       if(!i) i = ''; if(!q) q = ''; if(!u) u = ''; if(!p) p = '';
       if(!mainType) mainType = ''; if(!subType) subType = '';
       if(!supplier) supplier = ''; if(!note) note = '';
+      if(!paymentMethod) paymentMethod = 'cash';
       expenseRowCounter++;
       var unitListId = 'unitOptions_' + expenseRowCounter;
       var supplierListId = 'supplierOptions_' + expenseRowCounter;
@@ -1956,7 +1959,7 @@
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
           '<div class="expense-category-row"><div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div><div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div></div>' +
-          '<div class="expense-extra-row"><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
+          '<div class="expense-extra-row"><div class="exp-field"><label>ชำระด้วย</label><select class="exp-payment" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"><option value="cash"'+(paymentMethod === 'cash' ? ' selected' : '')+'>เงินสด</option><option value="credit_card"'+(paymentMethod === 'credit_card' ? ' selected' : '')+'>บัตรเครดิต</option><option value="reimbursement_pending"'+(paymentMethod === 'reimbursement_pending' ? ' selected' : '')+'>รอเบิก</option></select></div><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
           '<button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button>' +
         '</div></div>';
       document.getElementById('expenseList').appendChild(wrapper);
@@ -2014,6 +2017,7 @@
         var subSelect = wrappers[w].querySelector('.exp-sub-type');
         var supplierInput = wrappers[w].querySelector('.exp-supplier');
         var noteInput = wrappers[w].querySelector('.exp-note');
+        var paymentInput = wrappers[w].querySelector('.exp-payment');
         if (!itemInput || !qtyInput || !unitInput || !amountInput) continue;
         if (itemInput.value || qtyInput.value || unitInput.value || amountInput.value || (mainSelect && mainSelect.value) || (subSelect && subSelect.value) || (supplierInput && supplierInput.value) || (noteInput && noteInput.value)) {
           var itemName = itemInput.value.trim();
@@ -2029,7 +2033,8 @@
             m: mainType,
             t: subType,
             s: supplierInput ? supplierInput.value : '',
-            n: noteInput ? noteInput.value : ''
+            n: noteInput ? noteInput.value : '',
+            pay: paymentInput ? paymentInput.value : 'cash'
           });
         }
       }
@@ -2154,7 +2159,7 @@
         document.getElementById('otherIncomeNote').value = (d.other) ? d.other.n : '';
         restoreIncomeCardState();
         if (d.exp && d.exp.length > 0) {
-          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t, d.exp[r].s, d.exp[r].n); }
+          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t, d.exp[r].s, d.exp[r].n, d.exp[r].pay); }
         } else { addRow(); }
         if (parsed.submitted) {
           document.getElementById('lockedDate').value = date; 

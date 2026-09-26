@@ -10,7 +10,8 @@ const CONFIG = {
     master: '11LqJbnCQQvNIV8tNgoh2x_JGLZWofUaxrpzHUp6U-po',
     transactions: '1HGipIF8DIJO5zZhugXS96k909pF-EsSpeup41Y82-aQ',
     costing: '1d1RZDzCT8CI1Nmow-JiRYZjfZuAevkYDITpo0ynpWzk',
-    reports: '1duSHa5Pzjyw9kAstn_UPu1PlXQWkVD6ukFVf7zXHnqc'
+    reports: '1duSHa5Pzjyw9kAstn_UPu1PlXQWkVD6ukFVf7zXHnqc',
+    burgerPos: '1-JJ9u2NjqBrQtgrBb4sUsmwdV36GP25g-rJPrwv8mpI'
   },
   sheets: {
     database: 'Database',
@@ -165,6 +166,12 @@ function doPost(e) {
       case 'burgerReimbursementsSettle':
         result = handleBurgerReimbursementsSettle_(payload.transactionIds || [], payload.actor || {});
         break;
+      case 'reimbursements':
+        result = handleReimbursements_(payload.branchId || '');
+        break;
+      case 'reimbursementsSettle':
+        result = handleReimbursementsSettle_(payload.ids || payload.transactionIds || [], payload.actor || {});
+        break;
       case 'sheetCatalog':
         result = handleSheetCatalog_(payload.sheetName);
         break;
@@ -233,6 +240,9 @@ function doPost(e) {
         break;
       case 'dashboardGetMonthlySummary':
         result = handleDashboardGetMonthlySummary_(payload);
+        break;
+      case 'dashboardGetDailyOverview':
+        result = handleDashboardGetDailyOverview_(payload);
         break;
       case 'systemHealthCheck':
         result = handleSystemHealthCheck_();
@@ -1628,21 +1638,54 @@ function handleBurgerExpenseSave_(payload, actor) {
 
 function handleBurgerReimbursements_() {
   const lookups = normalizedMasterLookups_();
-  const branchId = normalizedBranchId_(lookups, 'เบอร์เกอร์');
-  const transactions = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2);
-  const lines = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionLinesV2);
-  const rows = transactions.filter(function(row) {
-    return normalizeText_(row.branch_id) === branchId && normalizeText_(row['ประเภทธุรกรรม']) === 'รายจ่าย' && normalizeText_(row['ช่องทางชำระเงิน']) === 'รอเบิกค่าใช้จ่าย' && normalizeText_(row['สถานะ']) === 'รอเบิก';
-  }).map(function(row) {
-    const transactionId = normalizeText_(row.transaction_id);
-    return { id: transactionId, transaction_date: dateKey_(parseDate_(row['วันที่รายการ'])), total_amount: toNumber_(row['ยอดสุทธิ']), descriptions: lines.filter(function(line) { return normalizeText_(line.transaction_id) === transactionId; }).map(function(line) { return normalizeText_(line['รายละเอียด']); }).filter(Boolean) };
-  });
-  return { status: 'success', rows: rows, total: rows.reduce(function(sum, row) { return sum + row.total_amount; }, 0) };
+  return handleReimbursements_(normalizedBranchId_(lookups, 'เบอร์เกอร์'));
 }
 
 function handleBurgerReimbursementsSettle_(transactionIds, actor) {
+  return handleReimbursementsSettle_(transactionIds, actor);
+}
+
+function handleReimbursements_(branchId) {
+  const transactions = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2);
+  const payments = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.paymentsV2);
+  const lines = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionLinesV2);
+  const branches = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranches);
+  const transactionById = {}, branchById = {}, linesByTransaction = {};
+  transactions.forEach(function(row) { transactionById[normalizeText_(row.transaction_id)] = row; });
+  branches.forEach(function(row) { branchById[normalizeText_(row.branch_id)] = row; });
+  lines.forEach(function(row) {
+    const transactionId = normalizeText_(row.transaction_id);
+    if (!linesByTransaction[transactionId]) linesByTransaction[transactionId] = [];
+    const description = normalizeText_(row['รายละเอียด']);
+    if (description) linesByTransaction[transactionId].push(description);
+  });
+  const rows = payments.filter(function(payment) {
+    if (normalizeText_(payment['ช่องทางชำระเงิน']) !== 'รอเบิกค่าใช้จ่าย' || normalizeText_(payment['สถานะ']) !== 'รอเบิก') return false;
+    const transaction = transactionById[normalizeText_(payment.transaction_id)];
+    if (!transaction || normalizeText_(transaction['สถานะ']) === 'ยกเลิก') return false;
+    return !branchId || normalizeText_(transaction.branch_id) === normalizeText_(branchId);
+  }).map(function(payment) {
+    const transactionId = normalizeText_(payment.transaction_id);
+    const transaction = transactionById[transactionId];
+    const branch = branchById[normalizeText_(transaction.branch_id)] || {};
+    return {
+      id: normalizeText_(payment.payment_id) || transactionId,
+      payment_id: normalizeText_(payment.payment_id),
+      transaction_id: transactionId,
+      transaction_date: dateKey_(parseDate_(transaction['วันที่รายการ'])),
+      branch_id: normalizeText_(transaction.branch_id),
+      branch_name: normalizeText_(branch['ชื่อสาขา']) || normalizeText_(transaction.branch_id),
+      total_amount: toNumber_(payment['จำนวนเงิน']) || toNumber_(transaction['ยอดสุทธิ']),
+      descriptions: linesByTransaction[transactionId] || [],
+      note: normalizeText_(transaction['หมายเหตุ'])
+    };
+  }).sort(function(a, b) { return String(b.transaction_date).localeCompare(String(a.transaction_date)); });
+  return { status: 'success', rows: rows, total: rows.reduce(function(sum, row) { return sum + row.total_amount; }, 0), count: rows.length };
+}
+
+function handleReimbursementsSettle_(ids, actor) {
   const wanted = {};
-  (transactionIds || []).forEach(function(id) { if (!isBlank_(id)) wanted[normalizeText_(id)] = true; });
+  (ids || []).forEach(function(id) { if (!isBlank_(id)) wanted[normalizeText_(id)] = true; });
   if (!Object.keys(wanted).length) throw new Error('กรุณาเลือกรายการที่รับเงินแล้ว');
   const transactionSheet = normalizedSheet_(CONFIG.sheets.transactionsV2, TRANSACTION_V2_HEADERS.transactions);
   const transactionRows = transactionSheet.getLastRow() > 1 ? transactionSheet.getRange(2, 1, transactionSheet.getLastRow() - 1, TRANSACTION_V2_HEADERS.transactions.length).getValues() : [];
@@ -1650,17 +1693,24 @@ function handleBurgerReimbursementsSettle_(transactionIds, actor) {
   const paymentRows = paymentSheet.getLastRow() > 1 ? paymentSheet.getRange(2, 1, paymentSheet.getLastRow() - 1, TRANSACTION_V2_HEADERS.payments.length).getValues() : [];
   const changedAt = now_(), history = [];
   let settled = 0, total = 0;
-  transactionRows.forEach(function(row, index) {
-    const id = normalizeText_(row[0]);
-    if (!wanted[id] || normalizeText_(row[17]) !== 'รอเบิก') return;
-    total += toNumber_(row[14]); row[17] = 'ยืนยันแล้ว'; row[22] = actorLabel_(actor); row[23] = changedAt;
-    transactionSheet.getRange(index + 2, 1, 1, row.length).setValues([row]);
-    history.push(normalizedHistoryRow_('ธุรกรรม', id, 'รอเบิก', 'ยืนยันแล้ว', 'รับเงินเบิกคืนแล้ว', '', changedAt)); settled++;
-  });
+  const settledTransactionIds = {};
   paymentRows.forEach(function(row, index) {
-    if (!wanted[normalizeText_(row[1])] || normalizeText_(row[6]) !== 'รอเบิก') return;
+    const paymentId = normalizeText_(row[0]);
+    const transactionId = normalizeText_(row[1]);
+    if ((!wanted[paymentId] && !wanted[transactionId]) || normalizeText_(row[6]) !== 'รอเบิก') return;
+    total += toNumber_(row[3]); settledTransactionIds[transactionId] = true;
     row[5] = changedAt; row[6] = 'ชำระแล้ว'; row[9] = 'รับเงินเบิกคืนแล้ว';
     paymentSheet.getRange(index + 2, 1, 1, row.length).setValues([row]);
+    settled++;
+  });
+  transactionRows.forEach(function(row, index) {
+    const id = normalizeText_(row[0]);
+    if (!settledTransactionIds[id]) return;
+    const oldStatus = normalizeText_(row[17]);
+    if (oldStatus === 'รอเบิก') row[17] = 'ยืนยันแล้ว';
+    row[22] = actorLabel_(actor); row[23] = changedAt;
+    transactionSheet.getRange(index + 2, 1, 1, row.length).setValues([row]);
+    history.push(normalizedHistoryRow_('ธุรกรรม', id, oldStatus, normalizeText_(row[17]), 'รับเงินเบิกคืนแล้ว', '', changedAt));
   });
   if (history.length) appendRows_(normalizedSheet_(CONFIG.sheets.statusHistoryV2, TRANSACTION_V2_HEADERS.history), history);
   return { status: 'success', settled: settled, total: total };
@@ -1810,7 +1860,7 @@ function writeExpenseTransactionsV2_(date, data, options) {
   if (!branchId) throw new Error('ไม่พบ branch_id สำหรับ ' + options.branchName + ' ใน BOY_Master');
   const dateObj = parseDate_(date);
   const createdAt = now_();
-  const batch = { transactions: [], lines: [], history: [] };
+  const batch = { transactions: [], lines: [], payments: [], history: [] };
   batch.history = cancelNormalizedTransactions_(dateObj, branchId, options.sourceName, 'รายจ่าย', 'บันทึกรายจ่ายใหม่ของวันเดียวกัน');
   const expenses = Array.isArray(data && data.exp) ? data.exp : [];
 
@@ -1821,6 +1871,8 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const amount = toNumber_(entry.p);
     const note = normalizeText_(entry.n);
     const supplierName = normalizeText_(entry.s);
+    const paymentKey = normalizeExpensePaymentKey_(entry.pay || entry.payment_method);
+    const paymentMethod = expensePaymentLabel_(paymentKey);
     const supplierInfo = normalizedSupplierInfo_(lookups, supplierName);
     if (!name && qty === 0 && !unitName && amount === 0 && !note && !supplierName) return;
 
@@ -1840,18 +1892,61 @@ function writeExpenseTransactionsV2_(date, data, options) {
 
     batch.transactions.push([
       transactionId, dateObj, createdAt, 'รายจ่าย', mode, branchId, supplierInfo.supplierId, '', expenseItemId, '',
-      options.sourceName + ':' + dateKey_(dateObj) + ':' + String(index + 1), amount || '', '', '', amount || '', '',
+      options.sourceName + ':' + dateKey_(dateObj) + ':' + String(index + 1), amount || '', '', '', amount || '', paymentMethod,
       affectsStock, status, combinedNote, options.sourceName, 'WEB', createdAt, '', '', ''
     ]);
     batch.lines.push([
       lineId, transactionId, index + 1, itemInfo.itemId, expenseItemId, name || 'ไม่ระบุรายการ', qty || '', itemInfo.unitId,
       itemInfo.conversion || 1, baseQty, unitPrice, '', '', amount || '', '', '', '', note, createdAt
     ]);
-    batch.history.push(normalizedHistoryRow_('ธุรกรรม', transactionId, '', status, 'สร้างรายการ', options.sourceName, createdAt));
+    batch.payments.push([
+      makeId_('PAY', dateObj, String(index + 1)), transactionId, paymentMethod, amount || '', '',
+      paymentKey === 'reimbursement_pending' ? '' : createdAt,
+      paymentKey === 'reimbursement_pending' ? 'รอเบิก' : 'ชำระแล้ว', '', createdAt,
+      paymentKey === 'reimbursement_pending' ? 'พนักงานสำรองจ่าย' : ''
+    ]);
+    batch.history.push(normalizedHistoryRow_('ธุรกรรม', transactionId, '', status, 'สร้างรายการ', options.sourceName + ' | ' + paymentMethod, createdAt));
   });
 
   appendNormalizedRows_(batch);
   return batch.transactions.length;
+}
+
+function normalizeExpensePaymentKey_(value) {
+  const text = normalizeText_(value).toLowerCase();
+  if (text === 'credit_card' || text.indexOf('บัตร') >= 0) return 'credit_card';
+  if (text === 'reimbursement_pending' || text.indexOf('รอเบิก') >= 0) return 'reimbursement_pending';
+  return 'cash';
+}
+
+function expensePaymentLabel_(value) {
+  const key = normalizeExpensePaymentKey_(value);
+  if (key === 'credit_card') return 'บัตรเครดิต';
+  if (key === 'reimbursement_pending') return 'รอเบิกค่าใช้จ่าย';
+  return 'เงินสด';
+}
+
+function expensePaymentMapForDate_(date, branchName, sourceName) {
+  const lookups = normalizedMasterLookups_();
+  const branchId = normalizedBranchId_(lookups, branchName);
+  const prefix = sourceName + ':' + dateKey_(date) + ':';
+  const map = {};
+  tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2).forEach(function(row) {
+    if (normalizeText_(row.branch_id) !== branchId || normalizeText_(row['ประเภทธุรกรรม']) !== 'รายจ่าย') return;
+    if (normalizeText_(row['สถานะ']) === 'ยกเลิก') return;
+    const reference = normalizeText_(row['เลขอ้างอิงภายนอก']);
+    if (reference.indexOf(prefix) !== 0) return;
+    const index = Number(reference.slice(prefix.length)) - 1;
+    if (index >= 0) map[index] = normalizeExpensePaymentKey_(row['ช่องทางชำระเงิน']);
+  });
+  return map;
+}
+
+function applyExpensePaymentsToSnapshot_(snapshot, date, branchName, sourceName) {
+  if (!snapshot || !Array.isArray(snapshot.exp) || !snapshot.exp.length) return snapshot;
+  const map = expensePaymentMapForDate_(date, branchName, sourceName);
+  snapshot.exp.forEach(function(row, index) { row.pay = map[index] || row.pay || 'cash'; });
+  return snapshot;
 }
 
 function writeIncomeTransactionsV2_(date, branchName, sourceName, idPrefix, entries) {
@@ -2463,7 +2558,7 @@ function handleLoadData_(date) {
   const incomeRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income, 9);
   const expenseRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12);
   const submitted = hasSubmittedRowsFromData_(key, incomeRows, expenseRows) || propSubmitted;
-  const sheetSnapshot = buildSnapshotFromRows_(key, incomeRows, expenseRows);
+  const sheetSnapshot = applyExpensePaymentsToSnapshot_(buildSnapshotFromRows_(key, incomeRows, expenseRows), key, CONFIG.branchName, CONFIG.sourceName);
   const hasSheetData = snapshotHasData_(sheetSnapshot);
   const result = {
     status: 'success',
@@ -2693,7 +2788,7 @@ function handleBigcExpenseLoadData_(date) {
   const branchName = CONFIG.bigcBranchName;
   const key = dateKey_(date);
   const expenseRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.expenses, 12);
-  const snapshot = buildExpenseSnapshotForBranch_(key, branchName, expenseRows);
+  const snapshot = applyExpensePaymentsToSnapshot_(buildExpenseSnapshotForBranch_(key, branchName, expenseRows), key, branchName, 'BOY Operation System:BigC Expense');
   const hasSheetData = Array.isArray(snapshot.exp) && snapshot.exp.length > 0;
   const submitted = hasSheetData ||
     PropertiesService.getScriptProperties().getProperty(scopedPropKey_('submitted', scope, key)) === 'true';
@@ -3615,6 +3710,118 @@ function getLeavesForMonth_(month, year) {
     });
   });
   return result;
+}
+
+function handleDashboardGetDailyOverview_(payload) {
+  payload = payload || {};
+  const date = dateKey_(payload.date || now_());
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'dashboard:daily:v2:' + date;
+  if (!payload.force) {
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      parsed.cacheHit = true;
+      return parsed;
+    }
+  }
+
+  const branches = [
+    dashboardDailyBranch_('BR-001', 'ทาวน่า', 'tawana'),
+    dashboardDailyBranch_('BR-002', 'บิ๊กซีพัทยากลาง', 'bigc'),
+    dashboardDailyBranch_('BR-004', 'เนื้อย่าง', 'grill'),
+    dashboardDailyBranch_('BR-005', 'เบอร์เกอร์', 'burger')
+  ];
+  const byId = {}, byKey = {};
+  branches.forEach(function(branch) { byId[branch.branch_id] = branch; byKey[branch.key] = branch; });
+
+  const incomeRows = tableValues_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income, 9);
+  incomeRows.slice(1).forEach(function(row) {
+    if (!rowDateMatches_(row[0], date)) return;
+    const branchName = canonicalBranch_(row[1]);
+    const branch = isBranch_(branchName, CONFIG.branchName) ? byKey.tawana : (isBranch_(branchName, CONFIG.bigcBranchName) ? byKey.bigc : null);
+    if (!branch) return;
+    const amount = toNumber_(row[4]);
+    const channel = normalizeText_(row[3]);
+    dashboardDailyAddIncome_(branch, amount, channel, normalizeText_(row[2]) + (channel ? ' · ' + channel : ''));
+  });
+
+  const transactions = tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.transactionsV2);
+  const activeTransactions = {};
+  transactions.forEach(function(row) {
+    activeTransactions[normalizeText_(row.transaction_id)] = normalizeText_(row['สถานะ']) !== 'ยกเลิก';
+    if (!rowDateMatches_(row['วันที่รายการ'], date) || normalizeText_(row['สถานะ']) === 'ยกเลิก') return;
+    const branch = byId[normalizeText_(row.branch_id)];
+    if (!branch) return;
+    const type = normalizeText_(row['ประเภทธุรกรรม']);
+    const amount = toNumber_(row['ยอดสุทธิ']);
+    if (type === 'รายจ่าย') {
+      branch.expense += amount;
+      branch.expense_count++;
+    } else if (type === 'รายรับ' && branch.key === 'grill') {
+      dashboardDailyAddIncome_(branch, amount, normalizeText_(row['ช่องทางชำระเงิน']), normalizeText_(row['หมายเหตุ']) || 'รายรับ');
+    }
+  });
+
+  try {
+    const burgerRows = tableValues_(CONFIG.spreadsheets.burgerPos, 'รายรับ', 15);
+    burgerRows.slice(1).forEach(function(row) {
+      if (!rowDateMatches_(row[1], date)) return;
+      const branch = byKey.burger;
+      branch.income += toNumber_(row[4]);
+      branch.cash += toNumber_(row[5]);
+      branch.transfer += toNumber_(row[6]);
+      branch.government += toNumber_(row[7]);
+      branch.order_count += toNumber_(row[12]);
+      branch.details.push({ label: 'ยอดขาย POS', amount: toNumber_(row[4]) });
+    });
+  } catch (err) {
+    byKey.burger.source_status = 'unavailable';
+  }
+
+  const pending = { total: 0, count: 0 };
+  tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.paymentsV2).forEach(function(row) {
+    if (normalizeText_(row['ช่องทางชำระเงิน']) !== 'รอเบิกค่าใช้จ่าย' || normalizeText_(row['สถานะ']) !== 'รอเบิก') return;
+    if (!activeTransactions[normalizeText_(row.transaction_id)]) return;
+    pending.total += toNumber_(row['จำนวนเงิน']);
+    pending.count++;
+  });
+  branches.forEach(function(branch) {
+    branch.income = dashboardRound_(branch.income);
+    branch.cash = dashboardRound_(branch.cash);
+    branch.transfer = dashboardRound_(branch.transfer);
+    branch.government = dashboardRound_(branch.government);
+    branch.other = dashboardRound_(branch.other);
+    branch.expense = dashboardRound_(branch.expense);
+    branch.net = dashboardRound_(branch.income - branch.expense);
+  });
+  const result = {
+    status: 'success', date: date, generatedAt: new Date().toISOString(), cacheHit: false,
+    totals: {
+      income: dashboardRound_(branches.reduce(function(sum, row) { return sum + row.income; }, 0)),
+      expense: dashboardRound_(branches.reduce(function(sum, row) { return sum + row.expense; }, 0)),
+      net: dashboardRound_(branches.reduce(function(sum, row) { return sum + row.net; }, 0)),
+      pending_reimbursement: dashboardRound_(pending.total), pending_count: pending.count
+    },
+    branches: branches
+  };
+  try { cache.put(cacheKey, JSON.stringify(result), 300); } catch (err) {}
+  return result;
+}
+
+function dashboardDailyBranch_(branchId, name, key) {
+  return { branch_id: branchId, name: name, key: key, income: 0, cash: 0, transfer: 0, government: 0, other: 0, expense: 0, net: 0, order_count: 0, expense_count: 0, source_status: 'ready', details: [] };
+}
+
+function dashboardDailyAddIncome_(branch, amount, channel, label) {
+  if (!amount) return;
+  const text = normalizeText_(channel).toLowerCase();
+  branch.income += amount;
+  if (text.indexOf('เงินสด') >= 0 || text === 'cash') branch.cash += amount;
+  else if (text.indexOf('โอน') >= 0 || text.indexOf('qr') >= 0 || text === 'transfer') branch.transfer += amount;
+  else if (text.indexOf('รัฐ') >= 0 || text.indexOf('คนละครึ่ง') >= 0 || text.indexOf('ไทยช่วยไทย') >= 0) branch.government += amount;
+  else branch.other += amount;
+  branch.details.push({ label: label || channel || 'รายรับ', amount: amount });
 }
 
 function handleDashboardGetMonthlySummary_(payload) {
