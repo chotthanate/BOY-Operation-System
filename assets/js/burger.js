@@ -4,19 +4,32 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
+  const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], masterTab: "items", draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterTab: "items", draftTimer: null, syncing: false };
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 0, unit_id: "", line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, line_total: 0, supplier_name: "", note: "", expanded: true });
+
+  async function legacyApi(action, data = {}) {
+    const response = await fetch(LEGACY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, ...data })
+    });
+    if (!response.ok) throw new Error(`ระบบสำรองตอบกลับ ${response.status}`);
+    const result = await response.json();
+    if (result.status !== "success") throw new Error(result.message || "ระบบสำรองทำงานไม่สำเร็จ");
+    return result;
+  }
 
   function toast(message) {
     const element = $("#toast");
@@ -74,7 +87,7 @@
     localStorage.setItem(masterCacheKey(), JSON.stringify({
       branch: state.branch, branchItems: state.branchItems, items: state.items, units: state.units, itemUnits: state.itemUnits,
       categories: state.categories, expenseItems: state.expenseItems, suppliers: state.suppliers,
-      itemSuppliers: state.itemSuppliers, saved_at: new Date().toISOString()
+      itemSuppliers: state.itemSuppliers, catalogSource: state.catalogSource, saved_at: new Date().toISOString()
     }));
   }
 
@@ -90,6 +103,7 @@
     state.expenseItems = cached.expenseItems || [];
     state.suppliers = cached.suppliers || [];
     state.itemSuppliers = cached.itemSuppliers || [];
+    state.catalogSource = cached.catalogSource || "cache";
     renderLines();
     renderMasterList();
     updateSyncStatus();
@@ -101,6 +115,7 @@
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
     if (page === "stock" && state.session) loadStock();
     if (page === "dashboard" && state.session) loadDashboard();
+    if (page === "reimbursement" && state.session) loadReimbursements();
     if (page === "settings" && state.session) renderMasterList();
   }
 
@@ -108,7 +123,7 @@
   const draftKey = () => draftKeyForDate($("#expenseDate").value);
 
   function draftPayload() {
-    return { version: 1, transaction_date: $("#expenseDate").value, lines: state.lines, saved_at: new Date().toISOString() };
+    return { version: 2, transaction_date: $("#expenseDate").value, payment_method: $("#expensePaymentMethod").value, lines: state.lines, saved_at: new Date().toISOString() };
   }
 
   function setDraftStatus(message, type = "") {
@@ -152,6 +167,7 @@
       if (data?.payload && (!payload?.saved_at || new Date(data.updated_at) > new Date(payload.saved_at))) payload = data.payload;
     }
     state.lines = Array.isArray(payload?.lines) && payload.lines.length ? payload.lines.map((line) => ({ ...newLine(), ...line, expanded: false })) : [newLine()];
+    $("#expensePaymentMethod").value = payload?.payment_method || "cash";
     state.lines[0].expanded = true;
     renderLines();
     setDraftStatus(payload ? "เปิดร่างล่าสุดแล้ว" : "พร้อมบันทึกร่าง", payload ? "saved" : "");
@@ -168,18 +184,22 @@
   }
 
   async function sendQueuedOperation(operation) {
-    if (operation.type === "expense") return client.schema("boy_central").rpc("record_expense_v2", { payload: operation.payload });
+    if (operation.type === "expense") return client.schema("boy_central").rpc("record_expense_v3", { payload: operation.payload });
+    if (operation.type === "expense_legacy") {
+      try { return { data: await legacyApi("burgerExpenseSave", { payload: operation.payload, actor: operation.meta?.actor || {} }), error: null }; }
+      catch (error) { return { data: null, error }; }
+    }
     if (operation.type === "master") return client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload: operation.payload });
     return { data: null, error: new Error("ไม่รู้จักประเภทรายการที่รอส่ง") };
   }
 
   async function flushOutbox({ notify = false } = {}) {
-    const sent = { expense: 0, master: 0 };
-    if (state.syncing || !state.session || !centralAvailable()) { updateSyncStatus(); return sent; }
+    const sent = { expense: 0, expense_legacy: 0, master: 0 };
+    if (state.syncing || !state.session || !navigator.onLine) { updateSyncStatus(); return sent; }
     state.syncing = true;
     let rows = readOutbox();
     try {
-      while (rows.length && centralAvailable()) {
+      while (rows.length && navigator.onLine) {
         const operation = rows[0];
         const { error } = await sendQueuedOperation(operation);
         if (error) {
@@ -190,14 +210,14 @@
         }
         rows.shift();
         writeOutbox(rows);
-        if (operation.type === "expense") await clearDraftForDate(operation.meta?.transaction_date, true);
+        if (["expense", "expense_legacy"].includes(operation.type)) await clearDraftForDate(operation.meta?.transaction_date, operation.type === "expense");
         sent[operation.type] += 1;
       }
     } finally {
       state.syncing = false;
       updateSyncStatus();
     }
-    const total = sent.expense + sent.master;
+    const total = sent.expense + sent.expense_legacy + sent.master;
     if (notify && total) toast(`ส่งรายการที่ค้างแล้ว ${total} รายการ`);
     return sent;
   }
@@ -234,7 +254,10 @@
     return line.category_id || mainCategoryId(expense?.category_id);
   }
   function itemUnitChoices(itemId) {
-    return state.itemUnits.filter((row) => row.item_id === itemId && row.active !== false && (row.is_base_unit || row.allow_purchase));
+    const rows = state.itemUnits.filter((row) => row.item_id === itemId && row.active !== false && (row.is_base_unit || row.allow_purchase));
+    const item = itemById(itemId);
+    if (item?.base_unit_id && !rows.some((row) => row.unit_id === item.base_unit_id)) rows.unshift({ item_id: itemId, unit_id: item.base_unit_id, conversion_to_base: 1, is_base_unit: true, allow_purchase: true, active: true });
+    return rows;
   }
   function defaultPurchaseUnit(itemId) {
     const defaultUnitId = branchItemById(itemId)?.default_purchase_unit_id;
@@ -267,10 +290,10 @@
       const perUnit = Number(line.quantity) > 0 ? Number(line.line_total) / Number(line.quantity) : 0;
       const fields = [
         requirements.quantity ? `<label>จำนวน<input data-field="quantity" type="number" min="0" step="0.001" inputmode="decimal" value="${escapeHtml(line.quantity || "")}"></label>` : "",
-        requirements.unit ? `<label>หน่วย<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(unitChoices, line.unit_id)}</select></label>` : "",
+        requirements.unit ? `<label>หน่วยซื้อ<select data-field="unit_id"><option value="">เลือก</option>${optionHtml(unitChoices, line.unit_id)}</select></label>` : "",
         `<label>ยอดรวม<input data-field="line_total" type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(line.line_total)}"></label>`
       ].filter(Boolean);
-      const conversion = Number(unitLink?.conversion_to_base || 1);
+      const conversion = Number(line.conversion_to_base || unitLink?.conversion_to_base || 1);
       const stockEffect = item?.track_stock && unit
         ? `เพิ่มสต็อก ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}`
         : "";
@@ -286,6 +309,7 @@
             <div class="expense-picker-options" role="listbox" hidden></div>
           </div>
           <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
+          ${item?.track_stock && unit ? `<div class="conversion-field"><span>1 ${escapeHtml(unit.name)} เพิ่มสต็อก</span><input data-field="conversion_to_base" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}"><strong>${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}</strong></div>` : ""}
           ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
             <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
@@ -336,12 +360,14 @@
       const purchaseUnit = defaultPurchaseUnit(expense.item_id);
       line.item_id = expense.item_id;
       line.unit_id = purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
+      line.conversion_to_base = Number(purchaseUnit?.conversion_to_base || 1);
       if (linkedItem?.track_stock && !(Number(line.quantity) > 0)) line.quantity = 1;
       if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
       const choices = supplierChoices(linkedItem?.id);
       if (choices.length === 1) line.supplier_name = choices[0].name;
     } else {
       line.item_id = "";
+      line.conversion_to_base = 1;
       if (!expense.requires_quantity) line.quantity = 0;
       if (!expense.requires_unit) line.unit_id = "";
       if (previousItem) line.supplier_name = "";
@@ -369,7 +395,11 @@
   function updateLine(card, field, value) {
     const line = state.lines.find((row) => row.id === card.dataset.lineId);
     if (!line) return;
-    line[field] = ["quantity", "line_total"].includes(field) ? Number(value) : value;
+    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(value) : value;
+    if (field === "unit_id" && line.item_id) {
+      const link = state.itemUnits.find((row) => row.item_id === line.item_id && row.unit_id === value && row.active !== false);
+      line.conversion_to_base = Number(link?.conversion_to_base || 1);
+    }
     if (field === "expense_search") {
       const expense = expenseBySearch(value);
       if (expense) {
@@ -380,6 +410,7 @@
         line.item_id = "";
         line.quantity = 0;
         line.unit_id = "";
+        line.conversion_to_base = 1;
         line.description = String(value).trim();
       }
     }
@@ -403,6 +434,7 @@
       if (!lineCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
       if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
+      if (item?.track_stock && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนหน่วยฐานต่อหน่วยซื้อ`);
       if (expense?.requires_supplier && !line.supplier_name.trim()) errors.push(`รายการ ${index + 1}: ระบุ Supplier`);
     });
     return errors;
@@ -410,7 +442,9 @@
 
   function openReview() {
     const errors = validateExpense();
-    $("#reviewSummary").textContent = `${state.lines.length} รายการ`;
+    const paymentLabel = $("#expensePaymentMethod").selectedOptions[0]?.textContent || "";
+    const total = state.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
+    $("#reviewSummary").textContent = `${state.lines.length} รายการ · ${paymentLabel} · ${money.format(total)}`;
     $("#reviewErrors").innerHTML = errors.map((error) => `<div>• ${escapeHtml(error)}</div>`).join("");
     $("#confirmExpenseButton").disabled = errors.length > 0 || !state.session;
     $("#reviewDialog").showModal();
@@ -420,31 +454,40 @@
     const button = $("#confirmExpenseButton");
     button.disabled = true;
     button.textContent = "กำลังบันทึก";
+    const paymentMethod = $("#expensePaymentMethod").value;
+    const totalAmount = state.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
     const payload = {
       branch_id: state.branch.id,
       transaction_date: $("#expenseDate").value,
       source_system: "boy_burger_web",
       idempotency_key: crypto.randomUUID(),
+      payment_method: paymentMethod,
+      payment: { method: paymentMethod, amount: totalAmount },
       lines: state.lines.map((line) => {
         const supplier = state.suppliers.find((row) => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
         const requirements = lineRequirements(line);
-        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, line_total: line.line_total, note: line.note || null };
+        return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, conversion_to_base: Number(line.conversion_to_base || 1), line_total: line.line_total, note: line.note || null };
       })
     };
-    if (!centralAvailable()) {
+    const actor = { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" };
+    let data;
+    let error;
+    if (state.catalogSource === "google-sheets" || state.localAccess) {
+      const legacyPayload = {
+        ...payload,
+        payment_method: ({ cash: "เงินสด", credit_card: "บัตรเครดิต", reimbursement_pending: "รอเบิกค่าใช้จ่าย" })[paymentMethod],
+        lines: payload.lines.map((line) => ({ ...line, unit_name: unitById(line.unit_id)?.name || "", base_unit_id: itemById(line.item_id)?.base_unit_id || "" }))
+      };
+      try { data = await legacyApi("burgerExpenseSave", { payload: legacyPayload, actor }); }
+      catch (legacyError) { error = legacyError; payload.payment_method = legacyPayload.payment_method; queueOperation("expense_legacy", legacyPayload, { transaction_date: payload.transaction_date, actor }); }
+    } else if (!centralAvailable()) {
+      error = new Error("ออฟไลน์");
       queueOperation("expense", payload, { transaction_date: payload.transaction_date });
-      $("#reviewDialog").close();
-      await clearDraftForDate(payload.transaction_date, false);
-      state.lines = [newLine()];
-      renderLines();
-      button.textContent = "บันทึก";
-      toast("เก็บรายการไว้แล้ว จะส่งอัตโนมัติเมื่อออนไลน์");
-      return;
+    } else {
+      ({ data, error } = await client.schema("boy_central").rpc("record_expense_v3", { payload }));
     }
-    const { data, error } = await client.schema("boy_central").rpc("record_expense_v2", { payload });
     button.textContent = "บันทึก";
     if (error && isNetworkError(error)) {
-      queueOperation("expense", payload, { transaction_date: payload.transaction_date });
       $("#reviewDialog").close();
       await clearDraftForDate(payload.transaction_date, false);
       state.lines = [newLine()];
@@ -458,7 +501,7 @@
     state.lines = [newLine()];
     renderLines();
     loadExpenseHistory();
-    toast(`บันทึก ${data.line_count} รายการแล้ว`);
+    toast(`บันทึก ${data?.line_count || state.lines.length} รายการแล้ว`);
   }
 
   async function loadExpenseHistory() {
@@ -529,10 +572,100 @@
       return left[0] - right[0] || left[1] - right[1];
     });
     state.itemSuppliers = linksResult.error ? [] : (linksResult.data || []);
+    state.catalogSource = "supabase";
     renderLines();
     renderMasterList();
     saveMasterCache();
     updateSyncStatus();
+  }
+
+  function applyLegacyCatalog(data) {
+    if (!data?.branch || !Array.isArray(data.items)) throw new Error("ข้อมูลรายการร้านเบอร์เกอร์ไม่สมบูรณ์");
+    state.branch = data.branch;
+    state.branchItems = data.branchItems || [];
+    state.items = data.items || [];
+    state.units = data.units || [];
+    state.itemUnits = data.itemUnits || [];
+    state.categories = data.categories || [];
+    state.expenseItems = data.expenseItems || [];
+    state.suppliers = data.suppliers || [];
+    state.itemSuppliers = data.itemSuppliers || [];
+    state.catalogSource = "google-sheets";
+    renderLines();
+    renderMasterList();
+    saveMasterCache();
+    updateSyncStatus();
+  }
+
+  async function loadLegacyMaster() {
+    setConnection("กำลังโหลดรายการร้านเบอร์เกอร์", "pending");
+    const result = await legacyApi("burgerCatalog");
+    applyLegacyCatalog(result);
+    setConnection(`พร้อมใช้ · ${state.expenseItems.filter(isExpenseActive).length} รายการ`, "online");
+  }
+
+  function renderReimbursements() {
+    const list = $("#reimbursementList");
+    const rows = state.reimbursements || [];
+    $("#reimbursementTotal").textContent = money.format(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0));
+    if (!rows.length) {
+      list.innerHTML = '<div class="empty-state">ไม่มีรายการรอเบิก</div>';
+      $("#settleReimbursementsButton").disabled = true;
+      return;
+    }
+    list.innerHTML = rows.map((row) => `<label class="reimbursement-row"><input type="checkbox" data-reimbursement-id="${escapeHtml(row.transaction_id || row.id)}" checked><span><strong>${escapeHtml(row.description || row.descriptions?.join(", ") || "ค่าใช้จ่าย")}</strong><small>${escapeHtml(row.transaction_date || "")} · ${escapeHtml(row.created_by || "")}</small></span><b>${money.format(Number(row.amount || 0))}</b></label>`).join("");
+    updateReimbursementSelection();
+  }
+
+  function updateReimbursementSelection() {
+    const selected = $$('#reimbursementList input[data-reimbursement-id]:checked');
+    const total = selected.reduce((sum, input) => {
+      const row = state.reimbursements.find((item) => (item.transaction_id || item.id) === input.dataset.reimbursementId);
+      return sum + Number(row?.amount || 0);
+    }, 0);
+    const button = $("#settleReimbursementsButton");
+    button.disabled = !selected.length;
+    button.textContent = selected.length ? `รับเงินและเคลียร์ ${selected.length} รายการ · ${money.format(total)}` : "เลือกรายการที่รับเงินแล้ว";
+  }
+
+  async function loadReimbursements() {
+    $("#reimbursementList").innerHTML = '<div class="empty-state">กำลังโหลดรายการ…</div>';
+    try {
+      if (state.catalogSource === "supabase" && centralAvailable()) {
+        const { data, error } = await client.schema("boy_central").rpc("get_burger_reimbursements");
+        if (error) throw error;
+        state.reimbursements = data?.items || data || [];
+      } else {
+        const result = await legacyApi("burgerReimbursements");
+        state.reimbursements = (result.items || result.rows || []).map((row) => ({ ...row, amount: row.amount ?? row.total_amount }));
+      }
+      renderReimbursements();
+    } catch (error) {
+      state.reimbursements = [];
+      $("#reimbursementList").innerHTML = `<div class="empty-state">โหลดรายการรอเบิกไม่สำเร็จ<br>${escapeHtml(error.message)}</div>`;
+      $("#settleReimbursementsButton").disabled = true;
+    }
+  }
+
+  async function settleReimbursements() {
+    const ids = $$('#reimbursementList input[data-reimbursement-id]:checked').map((input) => input.dataset.reimbursementId);
+    if (!ids.length || !confirm(`ยืนยันว่าได้รับเงินคืนและเคลียร์ ${ids.length} รายการแล้ว?`)) return;
+    const button = $("#settleReimbursementsButton");
+    button.disabled = true;
+    button.textContent = "กำลังเคลียร์ยอด…";
+    try {
+      if (state.catalogSource === "supabase" && centralAvailable()) {
+        const { error } = await client.schema("boy_central").rpc("settle_burger_reimbursements", { payload: { transaction_ids: ids } });
+        if (error) throw error;
+      } else {
+        await legacyApi("burgerReimbursementsSettle", { transactionIds: ids, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
+      }
+      toast(`เคลียร์ยอดรอเบิกแล้ว ${ids.length} รายการ`);
+      await loadReimbursements();
+    } catch (error) {
+      toast(`เคลียร์ยอดไม่สำเร็จ: ${error.message}`);
+      updateReimbursementSelection();
+    }
   }
 
   async function loadStock() {
@@ -805,7 +938,14 @@
     $("#accountName").textContent = profile.display_name || "ผู้ใช้งาน BOY";
     updateSyncStatus();
     try {
-      if (navigator.onLine) await loadMaster();
+      if (navigator.onLine) {
+        try { await loadMaster(); }
+        catch (error) {
+          if (!isNetworkError(error)) throw error;
+          await loadLegacyMaster();
+          toast("ใช้ข้อมูลร้านเบอร์เกอร์จากระบบสำรอง");
+        }
+      }
       else if (!loadMasterCache()) throw new Error("ยังไม่มีข้อมูลร้านที่เก็บไว้ในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตก่อน");
       const sent = await flushOutbox();
       if (sent.master) await loadMaster();
@@ -828,13 +968,13 @@
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = state.profile.display_name || "ผู้ดูแล BOY";
-    if (loadMasterCache()) {
-      await loadDraftForDate();
-      await loadExpenseHistory();
-    } else {
-      setConnection("BOY Central พักใช้งาน", "pending");
-      toast("เปิดใช้งานได้ แต่ข้อมูลกลางจะกลับมาเมื่อ BOY Central พร้อม");
+    const hadCache = loadMasterCache();
+    try { await loadLegacyMaster(); }
+    catch (error) {
+      if (!hadCache) toast(`โหลดรายการร้านเบอร์เกอร์ไม่สำเร็จ: ${error.message}`);
+      else toast("กำลังใช้รายการที่บันทึกไว้ในเครื่อง");
     }
+    if (state.branch) { await flushOutbox(); await loadDraftForDate(); await loadExpenseHistory(); }
     updateSyncStatus();
     return true;
   }
@@ -895,15 +1035,19 @@
       scheduleDraftSave();
       return;
     }
-    line[field] = ["quantity", "line_total"].includes(field) ? Number(event.target.value) : event.target.value;
+    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(event.target.value) : event.target.value;
     scheduleDraftSave();
   });
   document.addEventListener("pointerdown", (event) => { if (!event.target.closest(".expense-picker")) closeExpensePickers(); });
   $("#expenseDate").addEventListener("change", async () => { await loadDraftForDate(); await loadExpenseHistory(); });
+  $("#expensePaymentMethod").addEventListener("change", scheduleDraftSave);
   $("#reviewExpenseButton").addEventListener("click", openReview);
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
+  $("#refreshReimbursementButton").addEventListener("click", loadReimbursements);
+  $("#reimbursementList").addEventListener("change", updateReimbursementSelection);
+  $("#settleReimbursementsButton").addEventListener("click", settleReimbursements);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#masterSearch").addEventListener("input", renderMasterList);
   $$("[data-master-tab]").forEach((button) => button.addEventListener("click", () => {
@@ -951,7 +1095,7 @@
   window.addEventListener("online", async () => {
     const sent = await flushOutbox({ notify: true });
     if (sent.master) await loadMaster();
-    if (sent.expense) await loadExpenseHistory();
+    if (sent.expense || sent.expense_legacy) await loadExpenseHistory();
   });
   init();
 })();

@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#fff8ed">
   <link rel="manifest" href="manifest.json">
   <title>ร้านเบอร์เกอร์ | BOY Operations</title>
-  <link rel="stylesheet" href="assets/css/burger.css">
+  <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
+  <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260926-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
   <link rel="stylesheet" href="assets/css/burger-central.css?v=20260904-7">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
@@ -42,6 +43,9 @@
           <span class="draft-status" id="draftStatus">พร้อมบันทึกร่าง</span>
         </div>
         <div id="expenseLines" class="expense-list"></div>
+        <section class="payment-card">
+          <label>ชำระเงินด้วย<select id="expensePaymentMethod"><option value="cash">เงินสด</option><option value="credit_card">บัตรเครดิต</option><option value="reimbursement_pending">รอเบิกค่าใช้จ่าย</option></select></label>
+        </section>
         <div class="action-row">
           <button class="secondary-button" id="addExpenseButton" type="button">+ เพิ่มรายการ</button>
           <button class="primary-button" id="reviewExpenseButton" type="button">ตรวจสอบและบันทึก</button>
@@ -59,6 +63,13 @@
         <div class="section-heading compact"><div><small>ผลประกอบการ</small><h1>Dashboard</h1></div><input id="dashboardMonth" class="month-input" type="month"></div>
         <div class="metric-grid" id="metricGrid"></div>
         <section class="panel"><h2>ช่องทางรายรับ</h2><div id="channelBreakdown" class="breakdown-list"></div></section>
+      </section>
+
+      <section class="page" id="reimbursementPage" data-page="reimbursement">
+        <div class="section-heading compact"><div><small>เงินที่สำรองจ่าย</small><h1>รอเบิกค่าใช้จ่าย</h1></div><button class="icon-button" id="refreshReimbursementButton" type="button" aria-label="โหลดใหม่">↻</button></div>
+        <section class="reimbursement-total"><span>ยอดรอเบิกทั้งหมด</span><strong id="reimbursementTotal">฿0.00</strong></section>
+        <div class="reimbursement-list" id="reimbursementList"><div class="empty-state">ยังไม่มีรายการรอเบิก</div></div>
+        <button class="primary-button settle-button" id="settleReimbursementsButton" type="button" disabled>รับเงินและเคลียร์รายการที่เลือก</button>
       </section>
 
       <section class="page" id="accountPage" data-page="account">
@@ -82,6 +93,7 @@
     <button class="active" type="button" data-target="expense"><span>＋</span><strong>รายจ่าย</strong></button>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
     <button type="button" data-target="dashboard"><span>▥</span><strong>Dashboard</strong></button>
+    <button type="button" data-target="reimbursement"><span>฿</span><strong>รอเบิก</strong></button>
     <button type="button" data-target="settings"><span>⚙</span><strong>ตั้งค่า</strong></button>
     <button type="button" data-target="account"><span>○</span><strong>บัญชี</strong></button>
   </nav>
@@ -162,6 +174,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/burger.js?v=20260922-1"></script>
+  <script src="assets/js/burger.js?v=20260926-2"></script>
 </body>
 </html>
