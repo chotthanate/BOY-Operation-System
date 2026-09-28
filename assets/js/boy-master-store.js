@@ -204,6 +204,28 @@
     return save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog);
   }
 
+  async function bulkSave(sheetName, rows, actorName, legacySave, currentCatalog) {
+    const central = client();
+    if (central) {
+      const { data: sessionData } = await central.auth.getSession();
+      if (sessionData?.session) {
+        const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+          target_sheet_name: sheetName,
+          rows,
+          actor_name: actorName || "เจ้าของร้าน"
+        }), 30000, "นำเข้าข้อมูลใช้เวลานานเกินไป");
+        if (error) throw error;
+        const catalog = await remember(sheetName, data, "supabase");
+        Promise.resolve().then(() => legacySave("mirror")).catch(() => {});
+        return catalog;
+      }
+    }
+    const result = await legacySave("fallback");
+    const remembered = await remember(sheetName, result, "google-sheets-fallback");
+    await queueCatalog(sheetName, remembered);
+    return remembered;
+  }
+
   async function prefetch(entries, legacyLoader) {
     for (const entry of entries) {
       const sheetName = entry[2];
@@ -212,5 +234,5 @@
     }
   }
 
-  window.BOY_MASTER_STORE = { load, save, setActive, applyPatch, refresh, prefetch, cached };
+  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached };
 })();

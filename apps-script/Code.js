@@ -708,7 +708,7 @@ function handleSheetSetActive_(sheetName, rowNumber, active, actor, expectedVers
 function handleSheetBulkSave_(sheetName, incomingRows, actor) {
   const sh = safeMasterSheet_(sheetName);
   if (!Array.isArray(incomingRows) || !incomingRows.length) throw new Error('ไม่พบข้อมูลนำเข้า');
-  if (incomingRows.length > 300) throw new Error('นำเข้าได้สูงสุดครั้งละ 300 รายการ');
+  if (incomingRows.length > 500) throw new Error('นำเข้าได้สูงสุดครั้งละ 500 รายการ');
   const headers = genericHeaders_(sh);
   const idHeader = masterIdHeaderForSheet_(sheetName, headers);
   const idIndex = idHeader ? headers.indexOf(idHeader) : -1;
@@ -732,6 +732,7 @@ function handleSheetBulkSave_(sheetName, incomingRows, actor) {
       if (rn > sh.getMaxRows()) sh.insertRowsAfter(sh.getMaxRows(), rn - sh.getMaxRows());
       const isUpdate = !!(suppliedId && existingById[suppliedId]);
       const beforeValues = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0] : new Array(headers.length).fill('');
+      if (isUpdate && incoming.__version) assertMasterVersion_(headers, beforeValues, incoming.__version);
       const currentFormulas = sh.getRange(rn, 1, 1, headers.length).getFormulas()[0];
       headers.forEach(function(header, index) {
         if (!header || readonly[header] || currentFormulas[index] || !Object.prototype.hasOwnProperty.call(incoming, header)) return;
