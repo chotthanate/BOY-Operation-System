@@ -455,7 +455,8 @@ const MASTER_EXTRA_HEADERS = {
   employees: ['รูปแบบค่าแรง', 'ค่าแรงต่อเดือน'],
   branches: ['ที่อยู่', 'ชื่อผู้ติดต่อ', 'เบอร์โทรติดต่อ', 'อีเมล', 'ผู้จัดการสาขา', 'ผู้ประสานงาน', 'เบอร์ผู้ประสานงาน'],
   suppliers: ['จัดหาวัตถุดิบ', 'จัดหาบรรจุภัณฑ์', 'จัดหาอุปกรณ์', 'จัดหาของใช้สิ้นเปลือง', 'ให้บริการ', 'ประเภทอื่นๆ'],
-  itemSuppliers: ['รหัสสินค้าของซัพพลายเออร์', 'ยี่ห้อ', 'ขนาดบรรจุ', 'หน่วยขนาดบรรจุ']
+  itemSuppliers: ['รหัสสินค้าของซัพพลายเออร์', 'ยี่ห้อ', 'ขนาดบรรจุ', 'หน่วยขนาดบรรจุ'],
+  expenseItems: ['กระทบสต็อก', 'purchase_unit_id', 'อัตราเพิ่มสต็อกต่อหน่วยซื้อ', 'ต้องกรอกจำนวน', 'ต้องเลือกหน่วย']
 };
 
 function ensureMasterExtraHeaders_(entity, sheet) {
@@ -867,7 +868,7 @@ function handleMasterCatalog_(entity) {
   });
   const references = {};
   const referenceMap = {
-    employees: ['branches'], items: ['categories', 'units', 'branches', 'branchItems'], expenseItems: ['categories', 'items', 'branches', 'branchItems'],
+    employees: ['branches'], items: ['categories', 'units', 'branches', 'branchItems'], expenseItems: ['categories', 'items', 'units', 'branches', 'branchItems'],
     itemUnits: ['items', 'units'], itemSuppliers: ['items', 'suppliers'], branchItems: ['branches', 'items']
   };
   (referenceMap[entity] || []).forEach(function(referenceEntity) {
@@ -1582,7 +1583,7 @@ function handleBurgerCatalog_() {
     units: rawUnits.map(function(row) { return { id: normalizeText_(row.unit_id), code: normalizeText_(row['รหัสหน่วย']) || normalizeText_(row.unit_id), name: normalizeText_(row['ชื่อหน่วย']) }; }),
     itemUnits: rawItemUnits.map(function(row) { return { item_id: normalizeText_(row.item_id), unit_id: normalizeText_(row.unit_id), conversion_to_base: toNumber_(row['อัตราแปลงเป็นหน่วยฐาน']) || 1, is_base_unit: toBool_(row['เป็นหน่วยฐาน'], false), allow_purchase: toBool_(row['ใช้หน่วยนี้ตอนซื้อ'], true), allow_issue: toBool_(row['ใช้หน่วยนี้ตอนเบิก'], false), active: true }; }),
     categories: categories,
-    expenseItems: rawExpenses.map(function(row, index) { return { id: normalizeText_(row.expense_item_id) || 'AUTO-EXP-' + String(index + 1), code: normalizeText_(row['รหัสรายการค่าใช้จ่าย']) || normalizeText_(row.expense_item_id), name: normalizeText_(row['ชื่อรายการค่าใช้จ่าย']), category_id: normalizeText_(row.category_id), item_id: normalizeText_(row.item_id), affects_stock: toBool_(row['กระทบสต็อก'], false), requires_quantity: toBool_(row['ต้องกรอกจำนวน'], !isBlank_(row.item_id)), requires_unit: toBool_(row['ต้องเลือกหน่วย'], !isBlank_(row.item_id)), requires_supplier: toBool_(row['ต้องระบุผู้ขาย'], false), requires_receipt: toBool_(row['ต้องมีหลักฐาน'], false), active: true, branch_active: true, sort_order: index }; }),
+    expenseItems: rawExpenses.map(function(row, index) { return { id: normalizeText_(row.expense_item_id) || 'AUTO-EXP-' + String(index + 1), code: normalizeText_(row['รหัสรายการค่าใช้จ่าย']) || normalizeText_(row.expense_item_id), name: normalizeText_(row['ชื่อรายการค่าใช้จ่าย']), category_id: normalizeText_(row.category_id), item_id: normalizeText_(row.item_id), affects_stock: toBool_(row['กระทบสต็อก'], false), purchase_unit_id: normalizeText_(row.purchase_unit_id), stock_conversion_to_base: toNumber_(row['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1, requires_quantity: toBool_(row['ต้องกรอกจำนวน'], !isBlank_(row.item_id)), requires_unit: toBool_(row['ต้องเลือกหน่วย'], !isBlank_(row.item_id)), requires_supplier: toBool_(row['ต้องระบุผู้ขาย'], false), requires_receipt: toBool_(row['ต้องมีหลักฐาน'], false), active: true, branch_active: true, sort_order: index }; }),
     suppliers: rawSuppliers.map(function(row) { return { id: normalizeText_(row.supplier_id), code: normalizeText_(row['รหัสผู้ขาย']) || normalizeText_(row.supplier_id), name: normalizeText_(row['ชื่อผู้ขาย']) }; }),
     itemSuppliers: rawItemSuppliers.map(function(row) { return { item_id: normalizeText_(row.item_id), supplier_id: normalizeText_(row.supplier_id), active: true }; })
   };
@@ -1610,21 +1611,27 @@ function handleBurgerExpenseSave_(payload, actor) {
   const batch = { transactions: [], lines: [], payments: [], stockMovements: [], history: [] };
   let total = 0, affectsStock = false;
   lines.forEach(function(line, index) {
-    const itemId = normalizeText_(line.item_id);
-    const item = lookups.itemsById[itemId] || null;
-    const expense = normalizedExpenseInfo_(lookups, normalizeText_(line.description), itemId);
+    const submittedItemId = normalizeText_(line.item_id);
+    const fallbackItem = lookups.itemsById[submittedItemId] || null;
+    const expense = normalizedExpenseInfo_(lookups, normalizeText_(line.description), submittedItemId);
+    const resolved = resolvedExpenseStockInfo_(lookups, expense, fallbackItem ? {
+      item: fallbackItem, itemId: submittedItemId, unitId: normalizeText_(line.unit_id) || normalizeText_(fallbackItem.base_unit_id),
+      baseUnitId: normalizeText_(fallbackItem.base_unit_id), conversion: toNumber_(line.conversion_to_base) || 1,
+      trackStock: toBool_(fallbackItem['ติดตามสต็อก'], false)
+    } : { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, trackStock: false });
+    const itemId = resolved.itemId;
+    const item = resolved.item;
     const expenseItemId = normalizeText_(line.expense_item_id) || (expense ? normalizeText_(expense.expense_item_id) : '');
     const quantity = toNumber_(line.quantity);
     const amount = toNumber_(line.line_total);
-    const unitId = normalizeText_(line.unit_id) || (item ? normalizeText_(item.base_unit_id) : '');
-    const configuredUnit = lookups.itemUnitsByKey[itemId + '|' + lookupKey_(lookups.unitsById[unitId] && lookups.unitsById[unitId]['ชื่อหน่วย'])];
-    const conversion = toNumber_(line.conversion_to_base) || (configuredUnit ? toNumber_(configuredUnit['อัตราแปลงเป็นหน่วยฐาน']) : 1) || 1;
+    const unitId = resolved.unitId;
+    const conversion = resolved.conversion || 1;
     if (conversion <= 0) throw new Error('จำนวนต่อหน่วยซื้อต้องมากกว่า 0');
     const baseQty = quantity ? quantity * conversion : 0;
     total += amount;
     const lineId = makeId_('BURGER-LINE', createdAt, String(index + 1));
     batch.lines.push([lineId, transactionId, index + 1, itemId, expenseItemId, normalizeText_(line.description) || (item && normalizeText_(item['ชื่อสินค้า'])) || 'ไม่ระบุรายการ', quantity || '', unitId, conversion, baseQty || '', quantity ? amount / quantity : '', '', '', amount || '', '', '', '', normalizeText_(line.note), createdAt]);
-    if (item && toBool_(item['ติดตามสต็อก'], false) && baseQty) {
+    if (item && resolved.trackStock && baseQty) {
       affectsStock = true;
       batch.stockMovements.push([makeId_('BURGER-MOV', createdAt, String(index + 1)), transactionId, lineId, createdAt, branchId, itemId, 'รับเข้า', baseQty, normalizeText_(item.base_unit_id), baseQty ? amount / baseQty : '', amount || '', '', '', '', '', actorLabel_(actor), createdAt, 'บันทึกรายจ่ายซื้อสินค้า']);
     }
@@ -1764,6 +1771,28 @@ function normalizedExpenseInfo_(lookups, itemName, itemId) {
     lookups.expenseItemsByItemId[normalizeText_(itemId)] || null;
 }
 
+function resolvedExpenseStockInfo_(lookups, expenseInfo, fallbackItemInfo) {
+  if (!expenseInfo) return fallbackItemInfo;
+  if (!toBool_(expenseInfo['กระทบสต็อก'], false)) {
+    return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
+  }
+  const itemId = normalizeText_(expenseInfo.item_id);
+  const item = lookups.itemsById[itemId] || null;
+  if (!item) throw new Error('ยังไม่ได้ตั้งค่ารายการสต็อกสำหรับ ' + normalizeText_(expenseInfo['ชื่อรายการค่าใช้จ่าย']));
+  const unitId = normalizeText_(expenseInfo.purchase_unit_id) || normalizeText_(item.base_unit_id);
+  const conversion = toNumber_(expenseInfo['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1;
+  if (!unitId || conversion <= 0) throw new Error('ตั้งค่าหน่วยซื้อหรือจำนวนเพิ่มสต็อกไม่ครบสำหรับ ' + normalizeText_(expenseInfo['ชื่อรายการค่าใช้จ่าย']));
+  return {
+    item: item,
+    itemId: itemId,
+    unitId: unitId,
+    baseUnitId: normalizeText_(item.base_unit_id),
+    conversion: conversion,
+    baseQtyFactor: conversion,
+    trackStock: toBool_(item['ติดตามสต็อก'], false)
+  };
+}
+
 function normalizedHistoryRow_(entityType, entityId, oldStatus, newStatus, reason, details, changedAt) {
   const stamp = changedAt || now_();
   return [
@@ -1860,7 +1889,7 @@ function writeExpenseTransactionsV2_(date, data, options) {
   if (!branchId) throw new Error('ไม่พบ branch_id สำหรับ ' + options.branchName + ' ใน BOY_Master');
   const dateObj = parseDate_(date);
   const createdAt = now_();
-  const batch = { transactions: [], lines: [], payments: [], history: [] };
+  const batch = { transactions: [], lines: [], payments: [], stockMovements: [], history: [] };
   batch.history = cancelNormalizedTransactions_(dateObj, branchId, options.sourceName, 'รายจ่าย', 'บันทึกรายจ่ายใหม่ของวันเดียวกัน');
   const expenses = Array.isArray(data && data.exp) ? data.exp : [];
 
@@ -1876,13 +1905,14 @@ function writeExpenseTransactionsV2_(date, data, options) {
     const supplierInfo = normalizedSupplierInfo_(lookups, supplierName);
     if (!name && qty === 0 && !unitName && amount === 0 && !note && !supplierName) return;
 
-    const itemInfo = normalizedItemInfo_(lookups, name, unitName);
-    const expenseInfo = normalizedExpenseInfo_(lookups, name, itemInfo.itemId);
+    const fallbackItemInfo = normalizedItemInfo_(lookups, name, unitName);
+    const expenseInfo = normalizedExpenseInfo_(lookups, name, fallbackItemInfo.itemId);
+    const itemInfo = resolvedExpenseStockInfo_(lookups, expenseInfo, fallbackItemInfo);
     const expenseItemId = expenseInfo ? normalizeText_(expenseInfo.expense_item_id) : '';
     const baseQty = qty ? qty * itemInfo.conversion : '';
     const affectsStock = !!(itemInfo.itemId && itemInfo.trackStock && qty);
     const needsReview = !expenseItemId && !itemInfo.itemId;
-    const status = affectsStock ? 'รอรับสินค้า' : (needsReview ? 'รอตรวจสอบ' : 'ยืนยันแล้ว');
+    const status = needsReview ? 'รอตรวจสอบ' : 'ยืนยันแล้ว';
     const mode = qty || unitName || itemInfo.itemId ? 'รายละเอียด' : 'บันทึกเร็ว';
     const transactionId = makeId_(options.idPrefix + '-TXN', dateObj, String(index + 1));
     const lineId = makeId_('LINE', dateObj, String(index + 1));
@@ -1899,6 +1929,13 @@ function writeExpenseTransactionsV2_(date, data, options) {
       lineId, transactionId, index + 1, itemInfo.itemId, expenseItemId, name || 'ไม่ระบุรายการ', qty || '', itemInfo.unitId,
       itemInfo.conversion || 1, baseQty, unitPrice, '', '', amount || '', '', '', '', note, createdAt
     ]);
+    if (affectsStock) {
+      batch.stockMovements.push([
+        makeId_('MOV', dateObj, String(index + 1)), transactionId, lineId, createdAt, branchId, itemInfo.itemId,
+        'รับเข้า', baseQty, itemInfo.baseUnitId, baseQty ? amount / baseQty : '', amount || '', '', '', '', '',
+        'WEB', createdAt, 'รับเข้าจากการบันทึกรายจ่ายอัตโนมัติ'
+      ]);
+    }
     batch.payments.push([
       makeId_('PAY', dateObj, String(index + 1)), transactionId, paymentMethod, amount || '', '',
       paymentKey === 'reimbursement_pending' ? '' : createdAt,

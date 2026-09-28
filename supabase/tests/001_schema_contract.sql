@@ -67,6 +67,10 @@ begin
     raise exception 'record_expense_v2(jsonb) is missing';
   end if;
 
+  if to_regprocedure('boy_central.record_expense_v3(jsonb)') is null then
+    raise exception 'record_expense_v3(jsonb) is missing';
+  end if;
+
   if to_regprocedure('boy_central.admin_update_burger_master_v2(jsonb)') is null then
     raise exception 'admin_update_burger_master_v2(jsonb) is missing';
   end if;
@@ -108,6 +112,20 @@ begin
       and column_name = 'requires_unit'
   ) then
     raise exception 'expense quantity/unit settings are missing';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central'
+      and table_name = 'expense_items'
+      and column_name = 'purchase_unit_id'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'boy_central'
+      and table_name = 'expense_items'
+      and column_name = 'stock_conversion_to_base'
+  ) then
+    raise exception 'expense stock mapping settings are missing';
   end if;
 
   if (select count(*) from boy_central.branches where code in (

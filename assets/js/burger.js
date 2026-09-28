@@ -404,11 +404,13 @@
     const sourceCategoryId = linkedItem?.category_id || expense.category_id;
     line.category_id = mainCategoryId(sourceCategoryId);
     line.subcategory_id = subcategoryId(sourceCategoryId);
-    if (expense.item_id) {
-      const purchaseUnit = defaultPurchaseUnit(expense.item_id);
+    if (expense.item_id && expense.affects_stock) {
+      const purchaseUnit = expense.purchase_unit_id
+        ? state.itemUnits.find((row) => row.item_id === expense.item_id && row.unit_id === expense.purchase_unit_id && row.active !== false)
+        : defaultPurchaseUnit(expense.item_id);
       line.item_id = expense.item_id;
-      line.unit_id = purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
-      line.conversion_to_base = Number(purchaseUnit?.conversion_to_base || 1);
+      line.unit_id = expense.purchase_unit_id || purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
+      line.conversion_to_base = Number(expense.stock_conversion_to_base || purchaseUnit?.conversion_to_base || 1);
       line.conversion_overridden = false;
       if (linkedItem?.track_stock && !(Number(line.quantity) > 0)) line.quantity = 1;
       if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
@@ -608,7 +610,7 @@
         ? client.schema("boy_central").from("items").select("id,name,code,item_type,base_unit_id,category_id,track_stock,purchaseable,issueable,sellable,brand,package_size,package_unit_id,notes,active").in("id", itemIds).order("name")
         : Promise.resolve({ data: [], error: null }),
       expenseIds.length
-        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active").in("id", expenseIds)
+        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,purchase_unit_id,stock_conversion_to_base,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active").in("id", expenseIds)
         : Promise.resolve({ data: [], error: null }),
       !supplierLinksResult.error && supplierIds.length
         ? client.schema("boy_central").from("suppliers").select("id,name,code").in("id", supplierIds).eq("active", true)
@@ -693,7 +695,7 @@
     state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => ({ id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: mirrorBool(row["ติดตามสต็อก"]), purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }));
     state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
     const relevantExpense = (row) => itemIds.has(String(row.item_id || "")) || String(row.default_branch_id || "") === String(branchId) || String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase().includes(branchApp.branchCode);
-    state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
+    state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), purchase_unit_id: row.purchase_unit_id || "", stock_conversion_to_base: Number(row["อัตราเพิ่มสต็อกต่อหน่วยซื้อ"] || 1), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
     state.suppliers = (supplierCatalog.rows || []).filter((row) => mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ id: row.supplier_id, name: row["ชื่อผู้ขาย"] || row.name || row.supplier_id, code: row["รหัสผู้ขาย"] || row.code || row.supplier_id }));
     state.itemUnits = (itemUnitCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, unit_id: row.unit_id, conversion_to_base: Number(row["อัตราแปลงเป็นหน่วยฐาน"] || 1), is_base_unit: mirrorBool(row["เป็นหน่วยฐาน"]), allow_purchase: mirrorBool(row["ใช้หน่วยนี้ตอนซื้อ"]), allow_issue: mirrorBool(row["ใช้หน่วยนี้ตอนเบิก"]), active: true }));
     state.itemSuppliers = (itemSupplierCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && (!row.branch_id || String(row.branch_id) === String(branchId)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, supplier_id: row.supplier_id, active: true, is_primary: mirrorBool(row["เป็นผู้ขายหลัก"]) }));
