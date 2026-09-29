@@ -4,8 +4,7 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
-  const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", legacyEnabled: true, ...(window.BOY_BRANCH_CONFIG || {}) };
-  const LEGACY_API_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
+  const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", ...(window.BOY_BRANCH_CONFIG || {}) };
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
@@ -45,18 +44,6 @@
   const monthNow = () => today().slice(0, 7);
   const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", subcategory_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, conversion_overridden: false, line_total: 0, supplier_name: "", note: "", expanded: true });
 
-  async function legacyApi(action, data = {}) {
-    const response = await fetch(LEGACY_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action, ...data })
-    });
-    if (!response.ok) throw new Error(`ระบบสำรองตอบกลับ ${response.status}`);
-    const result = await response.json();
-    if (result.status !== "success") throw new Error(result.message || "ระบบสำรองทำงานไม่สำเร็จ");
-    return result;
-  }
-
   function toast(message) {
     const element = $("#toast");
     element.textContent = message;
@@ -92,7 +79,7 @@
   function updateSyncStatus() {
     if (!state.session) return;
     const count = readOutbox().length;
-    if (state.localAccess) { setConnection(count ? `พร้อมใช้ผ่านข้อมูลสำรอง · รอส่ง ${count}` : "พร้อมใช้ผ่านข้อมูลสำรอง", count ? "pending" : "online"); return; }
+    if (state.localAccess) { setConnection("Supabase ยังไม่พร้อม · ดูข้อมูลสำรองได้อย่างเดียว", "pending"); return; }
     if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
     else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
     else setConnection(`เชื่อมต่อแล้ว · ${state.items.filter((row) => row.active !== false && row.branch_active !== false).length} สินค้า`, "online");
@@ -211,16 +198,33 @@
   async function sendQueuedOperation(operation) {
     if (operation.type === "expense") return client.schema("boy_central").rpc("record_expense_v3", { payload: operation.payload });
     if (operation.type === "expense_legacy") {
-      try { return { data: await legacyApi("burgerExpenseSave", { payload: operation.payload, actor: operation.meta?.actor || {} }), error: null }; }
-      catch (error) { return { data: null, error }; }
+      const paymentMethod = ({ "เงินสด": "cash", "บัตรเครดิต": "credit_card", "รอเบิกค่าใช้จ่าย": "reimbursement_pending" })[operation.payload.payment_method] || operation.payload.payment_method;
+      const lines = (operation.payload.lines || []).map((line) => {
+        const item = state.items.find((row) => row.code === line.item_id || row.id === line.item_id);
+        const expense = state.expenseItems.find((row) => row.code === line.expense_item_id || row.id === line.expense_item_id || (item && row.item_id === item.id));
+        const unit = state.units.find((row) => row.code === line.unit_id || row.id === line.unit_id || row.name === line.unit_name);
+        const category = state.categories.find((row) => row.code === line.category_id || row.id === line.category_id);
+        return { ...line, item_id: item?.id || null, expense_item_id: expense?.id || null, unit_id: unit?.id || null, category_id: category?.id || expense?.category_id || null };
+      });
+      return client.schema("boy_central").rpc("record_expense_v3", { payload: { ...operation.payload, payment_method: paymentMethod, payment: { method: paymentMethod, amount: Number(operation.payload.payment?.amount || operation.payload.total_amount || lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0)) }, lines } });
     }
-    if (operation.type === "master") return client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload: operation.payload });
+    if (operation.type === "master") {
+      const result = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload: operation.payload });
+      if (result.error || operation.payload.kind !== "item") return result;
+      return client.schema("boy_central").rpc("admin_save_stock_mapping", { payload: {
+        branch_code: branchApp.branchCode,
+        source_item_id: result.data?.id || operation.payload.id,
+        mode: operation.payload.stock_mode,
+        target_item_id: operation.payload.stock_target_item_id,
+        conversion_to_target: operation.payload.conversion_to_base
+      } });
+    }
     return { data: null, error: new Error("ไม่รู้จักประเภทรายการที่รอส่ง") };
   }
 
   async function flushOutbox({ notify = false } = {}) {
     const sent = { expense: 0, expense_legacy: 0, master: 0 };
-    if (state.syncing || !state.session || !navigator.onLine) { updateSyncStatus(); return sent; }
+    if (state.syncing || !state.session || !centralAvailable()) { updateSyncStatus(); return sent; }
     state.syncing = true;
     let rows = readOutbox();
     try {
@@ -560,18 +564,9 @@
         return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, conversion_to_base: Number(line.conversion_to_base || 1), line_total: line.line_total, note: line.note || null };
       })
     };
-    const actor = { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" };
     let data;
     let error;
-    if (state.catalogSource === "google-sheets" || state.localAccess) {
-      const legacyPayload = {
-        ...payload,
-        payment_method: ({ cash: "เงินสด", credit_card: "บัตรเครดิต", reimbursement_pending: "รอเบิกค่าใช้จ่าย" })[paymentMethod],
-        lines: payload.lines.map((line) => ({ ...line, unit_name: unitById(line.unit_id)?.name || "", base_unit_id: itemById(line.item_id)?.base_unit_id || "" }))
-      };
-      try { data = await legacyApi("burgerExpenseSave", { payload: legacyPayload, actor }); }
-      catch (legacyError) { error = legacyError; payload.payment_method = legacyPayload.payment_method; queueOperation("expense_legacy", legacyPayload, { transaction_date: payload.transaction_date, actor }); }
-    } else if (!centralAvailable()) {
+    if (!centralAvailable()) {
       error = new Error("ออฟไลน์");
       queueOperation("expense", payload, { transaction_date: payload.transaction_date });
     } else {
@@ -583,7 +578,7 @@
       await clearDraftForDate(payload.transaction_date, false);
       state.lines = [newLine()];
       renderLines();
-      toast("การเชื่อมต่อขาดหาย เก็บรายการไว้รอส่งแล้ว");
+      toast("Supabase ยังไม่พร้อม เก็บรายการไว้รอส่งแล้ว");
       return;
     }
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
@@ -674,78 +669,6 @@
     updateSyncStatus();
   }
 
-  function applyLegacyCatalog(data) {
-    if (!data?.branch || !Array.isArray(data.items)) throw new Error(`ข้อมูลรายการ${branchApp.name}ไม่สมบูรณ์`);
-    state.branch = data.branch;
-    state.branchItems = data.branchItems || [];
-    state.items = data.items || [];
-    state.units = data.units || [];
-    state.itemUnits = data.itemUnits || [];
-    state.categories = data.categories || [];
-    state.expenseItems = data.expenseItems || [];
-    state.suppliers = data.suppliers || [];
-    state.itemSuppliers = data.itemSuppliers || [];
-    state.catalogSource = "google-sheets";
-    renderLines();
-    renderMasterList();
-    saveMasterCache();
-    updateSyncStatus();
-  }
-
-  const mirrorBool = (value, fallback = false) => value === undefined || value === null || value === "" ? fallback : ![false, 0, "0", "false", "FALSE", "ปิด", "ไม่ใช้งาน"].includes(value);
-  async function loadMirrorMaster() {
-    setConnection(`กำลังโหลดข้อมูล${branchApp.name}`, "pending");
-    const [itemCatalog, expenseCatalog, supplierCatalog, itemUnitCatalog, itemSupplierCatalog] = await Promise.all([
-      legacyApi("masterCatalog", { entity: "items" }),
-      legacyApi("masterCatalog", { entity: "expenseItems" }),
-      legacyApi("masterCatalog", { entity: "suppliers" }),
-      legacyApi("masterCatalog", { entity: "itemUnits" }),
-      legacyApi("masterCatalog", { entity: "itemSuppliers" })
-    ]);
-    const refs = itemCatalog.references || {};
-    const branchRow = (refs.branches?.rows || []).find((row) => String(row["รหัสสาขา"] || row.code || "").toUpperCase() === branchApp.branchCode);
-    if (!branchRow) throw new Error(`ยังไม่พบสาขา ${branchApp.branchCode} ในข้อมูลกลาง`);
-    const branchId = branchRow.branch_id;
-    const branchLinks = (refs.branchItems?.rows || []).filter((row) => String(row.branch_id) === String(branchId) && mirrorBool(row["เปิดใช้งาน"], true));
-    const itemIds = new Set(branchLinks.map((row) => String(row.item_id)));
-    const unitRows = refs.units?.rows || [];
-    const categoryRows = refs.categories?.rows || [];
-    state.branch = { id: branchId, company_id: branchRow.company_id || "BOY", code: branchApp.branchCode, name: branchRow["ชื่อสาขา"] || branchApp.name, active: mirrorBool(branchRow["เปิดใช้งาน"], true) };
-    state.units = unitRows.map((row) => ({ id: row.unit_id, name: row["ชื่อหน่วย"] || row.name || row.unit_id, code: row["รหัสหน่วย"] || row.code || row.unit_id }));
-    const categoryMap = new Map();
-    categoryRows.forEach((row) => {
-      if (row.category_id && !categoryMap.has(String(row.category_id))) categoryMap.set(String(row.category_id), { id: row.category_id, name: row["ชื่อประเภทหลัก"] || row.category_id, code: row["รหัสประเภทหลัก"] || row.category_id, parent_id: null, category_type: "item" });
-      if (row.subcategory_id) categoryMap.set(String(row.subcategory_id), { id: row.subcategory_id, name: row["ชื่อประเภทย่อย"] || row.subcategory_id, code: row["รหัสประเภทย่อย"] || row.subcategory_id, parent_id: row.category_id || null, category_type: "item" });
-    });
-    state.categories = [...categoryMap.values()];
-    state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => { const stockMode = row["รูปแบบสต็อก"] || (mirrorBool(row["ติดตามสต็อก"]) ? "นับเป็นรายการนี้" : "ไม่เก็บสต็อก"); return { id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: stockMode !== "ไม่เก็บสต็อก", stock_mode: stockMode, stock_target_item_id: row.stock_target_item_id || "", purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }; });
-    state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
-    const relevantExpense = (row) => {
-      const itemId = String(row.item_id || "");
-      const defaultBranchId = String(row.default_branch_id || "");
-      const code = String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase();
-      if (itemId) return itemIds.has(itemId);
-      if (defaultBranchId) return defaultBranchId === String(branchId);
-      const scopedBranch = ["WATER", "TAWANA", "BIGC", "BURGER", "GRILL"].find((branchCode) => code.includes(branchCode));
-      return !scopedBranch || scopedBranch === branchApp.branchCode;
-    };
-    state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), purchase_unit_id: row.purchase_unit_id || "", stock_conversion_to_base: Number(row["อัตราเพิ่มสต็อกต่อหน่วยซื้อ"] || 1), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
-    state.suppliers = (supplierCatalog.rows || []).filter((row) => mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ id: row.supplier_id, name: row["ชื่อผู้ขาย"] || row.name || row.supplier_id, code: row["รหัสผู้ขาย"] || row.code || row.supplier_id }));
-    state.itemUnits = (itemUnitCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, unit_id: row.unit_id, conversion_to_base: Number(row["อัตราแปลงเป็นหน่วยฐาน"] || 1), is_base_unit: mirrorBool(row["เป็นหน่วยฐาน"]), allow_purchase: mirrorBool(row["ใช้หน่วยนี้ตอนซื้อ"]), allow_issue: mirrorBool(row["ใช้หน่วยนี้ตอนเบิก"]), active: true }));
-    state.itemSuppliers = (itemSupplierCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && (!row.branch_id || String(row.branch_id) === String(branchId)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, supplier_id: row.supplier_id, active: true, is_primary: mirrorBool(row["เป็นผู้ขายหลัก"]) }));
-    state.catalogSource = "google-sheets";
-    renderLines(); renderMasterList(); saveMasterCache(); updateSyncStatus();
-    setConnection(`พร้อมใช้ · ${state.expenseItems.filter(isExpenseActive).length} รายการ`, "online");
-  }
-
-  async function loadLegacyMaster() {
-    if (!branchApp.legacyEnabled) return loadMirrorMaster();
-    setConnection(`กำลังโหลดรายการ${branchApp.name}`, "pending");
-    const result = await legacyApi("burgerCatalog");
-    applyLegacyCatalog(result);
-    setConnection(`พร้อมใช้ · ${state.expenseItems.filter(isExpenseActive).length} รายการ`, "online");
-  }
-
   function renderReimbursements() {
     const list = $("#reimbursementList");
     const rows = state.reimbursements || [];
@@ -773,14 +696,10 @@
   async function loadReimbursements() {
     $("#reimbursementList").innerHTML = '<div class="empty-state">กำลังโหลดรายการ…</div>';
     try {
-      if (state.catalogSource === "supabase" && centralAvailable()) {
-        const { data, error } = await client.schema("boy_central").rpc("get_burger_reimbursements");
-        if (error) throw error;
-        state.reimbursements = data?.items || data || [];
-      } else {
-        const result = await legacyApi("burgerReimbursements");
-        state.reimbursements = (result.items || result.rows || []).map((row) => ({ ...row, amount: row.amount ?? row.total_amount }));
-      }
+      if (state.catalogSource !== "supabase" || !centralAvailable()) throw new Error("Supabase ยังไม่พร้อม");
+      const { data, error } = await client.schema("boy_central").rpc("get_burger_reimbursements");
+      if (error) throw error;
+      state.reimbursements = data?.items || data || [];
       renderReimbursements();
     } catch (error) {
       state.reimbursements = [];
@@ -796,12 +715,9 @@
     button.disabled = true;
     button.textContent = "กำลังเคลียร์ยอด…";
     try {
-      if (state.catalogSource === "supabase" && centralAvailable()) {
-        const { error } = await client.schema("boy_central").rpc("settle_burger_reimbursements", { payload: { transaction_ids: ids } });
-        if (error) throw error;
-      } else {
-        await legacyApi("burgerReimbursementsSettle", { transactionIds: ids, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
-      }
+      if (state.catalogSource !== "supabase" || !centralAvailable()) throw new Error("Supabase ยังไม่พร้อม");
+      const { error } = await client.schema("boy_central").rpc("settle_burger_reimbursements", { payload: { transaction_ids: ids } });
+      if (error) throw error;
       toast(`เคลียร์ยอดรอเบิกแล้ว ${ids.length} รายการ`);
       await loadReimbursements();
     } catch (error) {
@@ -813,14 +729,7 @@
   async function loadStock() {
     if (!state.branch) return;
     if (!centralAvailable()) {
-      $("#stockList").innerHTML = '<div class="empty-state">กำลังอ่านยอดสต็อกจากข้อมูลสำรอง…</div>';
-      try {
-        const result = await legacyApi("branchStock", { branchCode: branchApp.branchCode });
-        state.stock = (result.rows || []).map((row) => ({ item_id: row.itemId, item_name: row.name, item_code: itemById(row.itemId)?.code || "", base_unit_name: row.unit || "", quantity_on_hand: Number(row.quantity || 0), average_unit_cost: 0, inventory_value: 0, stock_source: "ข้อมูลกลางสำรอง" }));
-        renderStock();
-      } catch (error) {
-        $("#stockList").innerHTML = `<div class="empty-state">โหลดยอดสต็อกไม่สำเร็จ<br>${escapeHtml(error.message)}</div>`;
-      }
+      $("#stockList").innerHTML = '<div class="empty-state">Supabase ยังไม่พร้อม จึงยังแสดงยอดสต็อกล่าสุดไม่ได้</div>';
       return;
     }
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
@@ -900,18 +809,12 @@
     const button = $("#stockGroupForm button[type=submit]");
     button.disabled = true; button.textContent = "กำลังบันทึก…";
     try {
-      if (state.catalogSource === "supabase" && centralAvailable()) {
-        const { error } = await client.schema("boy_central").rpc("admin_save_stock_group", { payload });
-        if (error) throw error;
-        $("#stockGroupDialog").close();
-        toast("บันทึกกลุ่มสต็อกแล้ว");
-        await loadMaster();
-      } else {
-        await legacyApi("stockGroupSave", { payload, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
-        $("#stockGroupDialog").close();
-        toast("บันทึกกลุ่มสต็อกแล้ว");
-        branchApp.legacyEnabled ? await loadLegacyMaster() : await loadMirrorMaster();
-      }
+      if (!centralAvailable() || state.catalogSource !== "supabase") throw new Error("Supabase ยังไม่พร้อม จึงยังบันทึกการตั้งค่าสต็อกไม่ได้");
+      const { error } = await client.schema("boy_central").rpc("admin_save_stock_group", { payload });
+      if (error) throw error;
+      $("#stockGroupDialog").close();
+      toast("บันทึกกลุ่มสต็อกแล้ว");
+      await loadMaster();
       await loadStock();
     } catch (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); }
     finally { button.disabled = false; button.textContent = "บันทึกสต็อก"; }
@@ -1109,37 +1012,21 @@
       payload.requires_receipt = $("#masterRequiresReceipt").checked;
       payload.sort_order = Number($("#masterSortOrder").value) || 0;
     }
-    if (!centralAvailable()) {
-      if (kind === "item" && payload.id && state.localAccess) {
-        try {
-          await legacyApi("stockItemMappingSave", { payload: { branchCode: branchApp.branchCode, sourceItemId: payload.id, mode: ({ none: "ไม่เก็บสต็อก", self: "นับเป็นรายการนี้", group: "รวมเข้ารายการอื่น" })[payload.stock_mode], targetItemId: payload.stock_target_item_id, purchaseUnitId: payload.purchase_unit_id || payload.base_unit_id, conversionToTarget: payload.conversion_to_base }, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
-          $("#masterDialog").close();
-          await loadLegacyMaster();
-          await loadStock();
-          toast("บันทึกการนับสต็อกแล้ว");
-          return;
-        } catch (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
-      }
-      queueOperation("master", payload);
+    const button = $("#masterForm button[type='submit']");
+    const originalText = button?.textContent || "บันทึก";
+    if (button) { button.disabled = true; button.textContent = "กำลังบันทึก…"; }
+    try {
+      if (!centralAvailable() || state.catalogSource !== "supabase") throw new Error("Supabase ยังไม่พร้อม จึงยังบันทึกการแก้ไขไม่ได้");
+      const result = await sendQueuedOperation({ type: "master", payload });
+      if (result.error) throw result.error;
       $("#masterDialog").close();
-      toast("เก็บการแก้ไขไว้แล้ว จะส่งอัตโนมัติเมื่อออนไลน์");
-      return;
+      await loadMaster();
+      toast("อัปเดตรายการแล้ว");
+    } catch (error) {
+      toast(`บันทึกไม่สำเร็จ: ${error.message}`);
+    } finally {
+      if (button) { button.disabled = false; button.textContent = originalText; }
     }
-    const { data, error } = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload });
-    if (error && isNetworkError(error)) {
-      queueOperation("master", payload);
-      $("#masterDialog").close();
-      toast("การเชื่อมต่อขาดหาย เก็บการแก้ไขไว้รอส่งแล้ว");
-      return;
-    }
-    if (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
-    if (kind === "item") {
-      const mappingResult = await client.schema("boy_central").rpc("admin_save_stock_mapping", { payload: { branch_code: branchApp.branchCode, source_item_id: data?.id || payload.id, mode: payload.stock_mode, target_item_id: payload.stock_target_item_id, conversion_to_target: payload.conversion_to_base } });
-      if (mappingResult.error) { toast(`บันทึกสินค้าแล้ว แต่ตั้งค่าสต็อกไม่สำเร็จ: ${mappingResult.error.message}`); return; }
-    }
-    $("#masterDialog").close();
-    await loadMaster();
-    toast("อัปเดตรายการแล้ว");
   }
 
   async function ensureProfile(session) {
@@ -1199,8 +1086,8 @@
         try { await loadMaster(); }
         catch (error) {
           if (!isNetworkError(error)) throw error;
-          await loadLegacyMaster();
-          toast(`ใช้ข้อมูล${branchApp.name}จากระบบสำรอง`);
+          if (!loadMasterCache()) throw error;
+          toast("Supabase ยังไม่พร้อม แสดงข้อมูลที่เก็บไว้ในเครื่อง");
         }
       }
       else if (!loadMasterCache()) throw new Error("ยังไม่มีข้อมูลร้านที่เก็บไว้ในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตก่อน");
@@ -1226,11 +1113,8 @@
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = state.profile.display_name || "ผู้ดูแล BOY";
     const hadCache = loadMasterCache();
-    try { branchApp.legacyEnabled ? await loadLegacyMaster() : await loadMaster(); }
-    catch (error) {
-      if (!hadCache) toast(`โหลดรายการ${branchApp.name}ไม่สำเร็จ: ${error.message}`);
-      else toast("กำลังใช้รายการที่บันทึกไว้ในเครื่อง");
-    }
+    if (!hadCache) toast("Supabase ยังไม่พร้อม และเครื่องนี้ยังไม่มีข้อมูลที่บันทึกไว้");
+    else toast("Supabase ยังไม่พร้อม แสดงข้อมูลที่เก็บไว้ในเครื่อง");
     if (state.branch) { await flushOutbox(); await loadDraftForDate(); await loadExpenseHistory(); }
     updateSyncStatus();
     return true;
