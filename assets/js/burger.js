@@ -92,7 +92,7 @@
   function updateSyncStatus() {
     if (!state.session) return;
     const count = readOutbox().length;
-    if (state.localAccess) { setConnection(count ? `BOY Central พักใช้งาน · รอส่ง ${count}` : "ใช้งานในเครื่อง", "pending"); return; }
+    if (state.localAccess) { setConnection(count ? `พร้อมใช้ผ่านข้อมูลสำรอง · รอส่ง ${count}` : "พร้อมใช้ผ่านข้อมูลสำรอง", count ? "pending" : "online"); return; }
     if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
     else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
     else setConnection(`เชื่อมต่อแล้ว · ${state.items.filter((row) => row.active !== false && row.branch_active !== false).length} สินค้า`, "online");
@@ -327,7 +327,9 @@
       const unit = unitById(line.unit_id);
       const unitLink = state.itemUnits.find((row) => row.item_id === item?.id && row.unit_id === line.unit_id && row.active !== false);
       const requirements = lineRequirements(line, expense, item);
-      const unitChoices = item ? itemUnitChoices(item.id).map((row) => unitById(row.unit_id)).filter(Boolean) : state.units;
+      const unitChoices = item ? itemUnitChoices(item.id).map((row) => unitById(row.unit_id)).filter(Boolean) : [...state.units];
+      const expensePurchaseUnit = unitById(expense?.purchase_unit_id);
+      if (expensePurchaseUnit && !unitChoices.some((row) => row.id === expensePurchaseUnit.id)) unitChoices.push(expensePurchaseUnit);
       const suppliers = supplierChoices(line.item_id);
       const perUnit = Number(line.quantity) > 0 ? Number(line.line_total) / Number(line.quantity) : 0;
       const fields = [
@@ -692,7 +694,7 @@
       if (row.subcategory_id) categoryMap.set(String(row.subcategory_id), { id: row.subcategory_id, name: row["ชื่อประเภทย่อย"] || row.subcategory_id, code: row["รหัสประเภทย่อย"] || row.subcategory_id, parent_id: row.category_id || null, category_type: "item" });
     });
     state.categories = [...categoryMap.values()];
-    state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => ({ id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: mirrorBool(row["ติดตามสต็อก"]), purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }));
+    state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => { const stockMode = row["รูปแบบสต็อก"] || (mirrorBool(row["ติดตามสต็อก"]) ? "นับเป็นรายการนี้" : "ไม่เก็บสต็อก"); return { id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: stockMode !== "ไม่เก็บสต็อก", stock_mode: stockMode, stock_target_item_id: row.stock_target_item_id || "", purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }; });
     state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
     const relevantExpense = (row) => itemIds.has(String(row.item_id || "")) || String(row.default_branch_id || "") === String(branchId) || String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase().includes(branchApp.branchCode);
     state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), purchase_unit_id: row.purchase_unit_id || "", stock_conversion_to_base: Number(row["อัตราเพิ่มสต็อกต่อหน่วยซื้อ"] || 1), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
@@ -778,7 +780,17 @@
 
   async function loadStock() {
     if (!state.branch) return;
-    if (!centralAvailable()) { $("#stockList").innerHTML = '<div class="empty-state">ยอดสต็อกกลางจะกลับมาเมื่อ BOY Central พร้อม</div>'; return; }
+    if (!centralAvailable()) {
+      $("#stockList").innerHTML = '<div class="empty-state">กำลังอ่านยอดสต็อกจากข้อมูลสำรอง…</div>';
+      try {
+        const result = await legacyApi("branchStock", { branchCode: branchApp.branchCode });
+        state.stock = (result.rows || []).map((row) => ({ item_id: row.itemId, item_name: row.name, item_code: itemById(row.itemId)?.code || "", base_unit_name: row.unit || "", quantity_on_hand: Number(row.quantity || 0), average_unit_cost: 0, inventory_value: 0, stock_source: "ข้อมูลกลางสำรอง" }));
+        renderStock();
+      } catch (error) {
+        $("#stockList").innerHTML = `<div class="empty-state">โหลดยอดสต็อกไม่สำเร็จ<br>${escapeHtml(error.message)}</div>`;
+      }
+      return;
+    }
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
     const centralResult = await client.schema("boy_central").from("v_stock_on_hand")
       .select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value,updated_at")

@@ -197,7 +197,7 @@ function doPost(e) {
         result = handleBranchHistory_(payload.limit);
         break;
       case 'branchStock':
-        result = handleBranchStock_();
+        result = handleBranchStock_(payload.branchCode || payload.branchName || '');
         break;
       case 'syncCloud':
         result = { status: 'success', message: 'ข้อมูล Database ถูกอ่านจาก BOY_Master โดยตรงแล้ว' };
@@ -455,6 +455,7 @@ const MASTER_EXTRA_HEADERS = {
   employees: ['รูปแบบค่าแรง', 'ค่าแรงต่อเดือน'],
   branches: ['ที่อยู่', 'ชื่อผู้ติดต่อ', 'เบอร์โทรติดต่อ', 'อีเมล', 'ผู้จัดการสาขา', 'ผู้ประสานงาน', 'เบอร์ผู้ประสานงาน'],
   suppliers: ['จัดหาวัตถุดิบ', 'จัดหาบรรจุภัณฑ์', 'จัดหาอุปกรณ์', 'จัดหาของใช้สิ้นเปลือง', 'ให้บริการ', 'ประเภทอื่นๆ'],
+  items: ['รูปแบบสต็อก', 'stock_target_item_id'],
   itemSuppliers: ['รหัสสินค้าของซัพพลายเออร์', 'ยี่ห้อ', 'ขนาดบรรจุ', 'หน่วยขนาดบรรจุ'],
   expenseItems: ['กระทบสต็อก', 'purchase_unit_id', 'อัตราเพิ่มสต็อกต่อหน่วยซื้อ', 'ต้องกรอกจำนวน', 'ต้องเลือกหน่วย']
 };
@@ -869,7 +870,7 @@ function handleMasterCatalog_(entity) {
   });
   const references = {};
   const referenceMap = {
-    employees: ['branches'], items: ['categories', 'units', 'branches', 'branchItems'], expenseItems: ['categories', 'items', 'units', 'branches', 'branchItems'],
+    employees: ['branches'], items: ['categories', 'units', 'branches', 'branchItems', 'items'], expenseItems: ['categories', 'items', 'units', 'branches', 'branchItems'],
     itemUnits: ['items', 'units'], itemSuppliers: ['items', 'suppliers'], branchItems: ['branches', 'items']
   };
   (referenceMap[entity] || []).forEach(function(referenceEntity) {
@@ -1447,6 +1448,7 @@ function normalizedMasterLookups_() {
     unitsByName: {},
     unitsById: {},
     itemUnitsByKey: {},
+    itemUnitsByItemId: {},
     expenseItemsByName: {},
     expenseItemsByItemId: {},
     suppliersByName: {},
@@ -1484,6 +1486,8 @@ function normalizedMasterLookups_() {
     const unitId = normalizeText_(row.unit_id);
     const unit = result.unitsById[unitId];
     if (!itemId || !unit) return;
+    if (!result.itemUnitsByItemId[itemId]) result.itemUnitsByItemId[itemId] = [];
+    result.itemUnitsByItemId[itemId].push(row);
     [unit['ชื่อหน่วย'], unit['สัญลักษณ์'], row['หน่วยเดิม']].forEach(function(value) {
       if (!isBlank_(value)) result.itemUnitsByKey[itemId + '|' + lookupKey_(value)] = row;
     });
@@ -1560,11 +1564,13 @@ function handleBurgerCatalog_() {
   rawItems.forEach(function(row) {
     const itemId = normalizeText_(row.item_id);
     if (expenseByItem[itemId]) return;
+    const stockMode = normalizeText_(row['รูปแบบสต็อก']) || (toBool_(row['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก');
+    const affectsStock = stockMode !== 'ไม่เก็บสต็อก';
     rawExpenses.push({
       expense_item_id: 'AUTO-EXP-' + itemId, item_id: itemId,
       'ชื่อรายการค่าใช้จ่าย': normalizeText_(row['ชื่อสินค้า']), category_id: normalizeText_(row.category_id),
-      'กระทบสต็อก': toBool_(row['ติดตามสต็อก'], false), 'ต้องกรอกจำนวน': toBool_(row['ติดตามสต็อก'], false),
-      'ต้องเลือกหน่วย': toBool_(row['ติดตามสต็อก'], false), 'เปิดใช้งาน': true
+      'กระทบสต็อก': affectsStock, 'ต้องกรอกจำนวน': affectsStock,
+      'ต้องเลือกหน่วย': affectsStock, 'เปิดใช้งาน': true
     });
   });
   const categories = [], seenMain = {};
@@ -1580,11 +1586,11 @@ function handleBurgerCatalog_() {
     status: 'success', source: 'google-sheets',
     branch: { id: branchId, company_id: 'BOY', code: normalizeText_(burger['รหัสสาขา']) || 'BURGER', name: normalizeText_(burger['ชื่อสาขา']) || 'ร้านเบอร์เกอร์' },
     branchItems: branchLinks.map(function(row) { return { item_id: normalizeText_(row.item_id), default_purchase_unit_id: normalizeText_(row.default_purchase_unit_id), default_issue_unit_id: normalizeText_(row.default_issue_unit_id), active: true }; }),
-    items: rawItems.map(function(row) { return { id: normalizeText_(row.item_id), code: normalizeText_(row['รหัสสินค้า']) || normalizeText_(row.item_id), name: normalizeText_(row['ชื่อสินค้า']), item_type: normalizeText_(row['ประเภทข้อมูล']), base_unit_id: normalizeText_(row.base_unit_id), category_id: normalizeText_(row.subcategory_id || row.category_id), track_stock: toBool_(row['ติดตามสต็อก'], false), active: true, branch_active: true }; }),
+    items: rawItems.map(function(row) { const mode = normalizeText_(row['รูปแบบสต็อก']) || (toBool_(row['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก'); return { id: normalizeText_(row.item_id), code: normalizeText_(row['รหัสสินค้า']) || normalizeText_(row.item_id), name: normalizeText_(row['ชื่อสินค้า']), item_type: normalizeText_(row['ประเภทข้อมูล']), base_unit_id: normalizeText_(row.base_unit_id), category_id: normalizeText_(row.subcategory_id || row.category_id), track_stock: mode !== 'ไม่เก็บสต็อก', stock_mode: mode, stock_target_item_id: normalizeText_(row.stock_target_item_id), active: true, branch_active: true }; }),
     units: rawUnits.map(function(row) { return { id: normalizeText_(row.unit_id), code: normalizeText_(row['รหัสหน่วย']) || normalizeText_(row.unit_id), name: normalizeText_(row['ชื่อหน่วย']) }; }),
     itemUnits: rawItemUnits.map(function(row) { return { item_id: normalizeText_(row.item_id), unit_id: normalizeText_(row.unit_id), conversion_to_base: toNumber_(row['อัตราแปลงเป็นหน่วยฐาน']) || 1, is_base_unit: toBool_(row['เป็นหน่วยฐาน'], false), allow_purchase: toBool_(row['ใช้หน่วยนี้ตอนซื้อ'], true), allow_issue: toBool_(row['ใช้หน่วยนี้ตอนเบิก'], false), active: true }; }),
     categories: categories,
-    expenseItems: rawExpenses.map(function(row, index) { return { id: normalizeText_(row.expense_item_id) || 'AUTO-EXP-' + String(index + 1), code: normalizeText_(row['รหัสรายการค่าใช้จ่าย']) || normalizeText_(row.expense_item_id), name: normalizeText_(row['ชื่อรายการค่าใช้จ่าย']), category_id: normalizeText_(row.category_id), item_id: normalizeText_(row.item_id), affects_stock: toBool_(row['กระทบสต็อก'], false), purchase_unit_id: normalizeText_(row.purchase_unit_id), stock_conversion_to_base: toNumber_(row['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1, requires_quantity: toBool_(row['ต้องกรอกจำนวน'], !isBlank_(row.item_id)), requires_unit: toBool_(row['ต้องเลือกหน่วย'], !isBlank_(row.item_id)), requires_supplier: toBool_(row['ต้องระบุผู้ขาย'], false), requires_receipt: toBool_(row['ต้องมีหลักฐาน'], false), active: true, branch_active: true, sort_order: index }; }),
+    expenseItems: rawExpenses.map(function(row, index) { const purchasedItemId = normalizeText_(row.item_id); const purchased = rawItems.find(function(item) { return normalizeText_(item.item_id) === purchasedItemId; }); const mode = purchased ? (normalizeText_(purchased['รูปแบบสต็อก']) || (toBool_(purchased['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก')) : 'ไม่เก็บสต็อก'; const targetId = mode === 'รวมเข้ารายการอื่น' ? normalizeText_(purchased.stock_target_item_id) : purchasedItemId; const affects = Boolean(purchased && mode !== 'ไม่เก็บสต็อก'); const purchaseUnits = rawItemUnits.filter(function(unitRow) { return normalizeText_(unitRow.item_id) === purchasedItemId && toBool_(unitRow['ใช้หน่วยนี้ตอนซื้อ'], true); }); const defaultPurchaseUnit = purchaseUnits.find(function(unitRow) { return !toBool_(unitRow['เป็นหน่วยฐาน'], false); }) || purchaseUnits[0] || null; const configuredUnitId = normalizeText_(row.purchase_unit_id); return { id: normalizeText_(row.expense_item_id) || 'AUTO-EXP-' + String(index + 1), code: normalizeText_(row['รหัสรายการค่าใช้จ่าย']) || normalizeText_(row.expense_item_id), name: normalizeText_(row['ชื่อรายการค่าใช้จ่าย']), category_id: normalizeText_(row.category_id), item_id: affects ? targetId : '', purchased_item_id: purchasedItemId, affects_stock: affects, purchase_unit_id: configuredUnitId || normalizeText_(defaultPurchaseUnit && defaultPurchaseUnit.unit_id), stock_conversion_to_base: configuredUnitId ? (toNumber_(row['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1) : (toNumber_(defaultPurchaseUnit && defaultPurchaseUnit['อัตราแปลงเป็นหน่วยฐาน']) || 1), requires_quantity: affects, requires_unit: affects, requires_supplier: toBool_(row['ต้องระบุผู้ขาย'], false), requires_receipt: toBool_(row['ต้องมีหลักฐาน'], false), active: true, branch_active: true, sort_order: index }; }),
     suppliers: rawSuppliers.map(function(row) { return { id: normalizeText_(row.supplier_id), code: normalizeText_(row['รหัสผู้ขาย']) || normalizeText_(row.supplier_id), name: normalizeText_(row['ชื่อผู้ขาย']) }; }),
     itemSuppliers: rawItemSuppliers.map(function(row) { return { item_id: normalizeText_(row.item_id), supplier_id: normalizeText_(row.supplier_id), active: true }; })
   };
@@ -1615,11 +1621,9 @@ function handleBurgerExpenseSave_(payload, actor) {
     const submittedItemId = normalizeText_(line.item_id);
     const fallbackItem = lookups.itemsById[submittedItemId] || null;
     const expense = normalizedExpenseInfo_(lookups, normalizeText_(line.description), submittedItemId);
-    const resolved = resolvedExpenseStockInfo_(lookups, expense, fallbackItem ? {
-      item: fallbackItem, itemId: submittedItemId, unitId: normalizeText_(line.unit_id) || normalizeText_(fallbackItem.base_unit_id),
-      baseUnitId: normalizeText_(fallbackItem.base_unit_id), conversion: toNumber_(line.conversion_to_base) || 1,
-      trackStock: toBool_(fallbackItem['ติดตามสต็อก'], false)
-    } : { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, trackStock: false });
+    const resolved = resolvedExpenseStockInfo_(lookups, expense, fallbackItem
+      ? resolvedItemStockInfo_(lookups, submittedItemId, normalizeText_(line.unit_id) || normalizeText_(fallbackItem.base_unit_id), toNumber_(line.conversion_to_base) || 1)
+      : { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, trackStock: false });
     const itemId = resolved.itemId;
     const item = resolved.item;
     const expenseItemId = normalizeText_(line.expense_item_id) || (expense ? normalizeText_(expense.expense_item_id) : '');
@@ -1740,15 +1744,24 @@ function normalizedBranchId_(lookups, branchName) {
 }
 
 function normalizedItemInfo_(lookups, itemName, unitName) {
-  const item = lookups.itemsByName[lookupKey_(itemName)] || null;
-  if (!item) {
+  const purchasedItem = lookups.itemsByName[lookupKey_(itemName)] || null;
+  if (!purchasedItem) {
+    return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
+  }
+  const purchasedItemId = normalizeText_(purchasedItem.item_id);
+  const stockMode = normalizeText_(purchasedItem['รูปแบบสต็อก']);
+  const sharedTargetId = normalizeText_(purchasedItem.stock_target_item_id);
+  const item = stockMode === 'รวมเข้ารายการอื่น' && sharedTargetId
+    ? lookups.itemsById[sharedTargetId] || null
+    : purchasedItem;
+  if (!item || stockMode === 'ไม่เก็บสต็อก') {
     return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
   }
   const itemId = normalizeText_(item.item_id);
   const baseUnitId = normalizeText_(item.base_unit_id);
   let unitId = '';
   let conversion = 1;
-  const itemUnit = lookups.itemUnitsByKey[itemId + '|' + lookupKey_(unitName)];
+  const itemUnit = lookups.itemUnitsByKey[purchasedItemId + '|' + lookupKey_(unitName)] || lookups.itemUnitsByKey[itemId + '|' + lookupKey_(unitName)];
   if (itemUnit) {
     unitId = normalizeText_(itemUnit.unit_id);
     conversion = toNumber_(itemUnit['อัตราแปลงเป็นหน่วยฐาน']) || 1;
@@ -1763,7 +1776,7 @@ function normalizedItemInfo_(lookups, itemName, unitName) {
     baseUnitId: baseUnitId,
     conversion: conversion,
     baseQtyFactor: conversion,
-    trackStock: toBool_(item['ติดตามสต็อก'], false)
+    trackStock: toBool_(item['ติดตามสต็อก'], false) || stockMode === 'รวมเข้ารายการอื่น'
   };
 }
 
@@ -1772,26 +1785,37 @@ function normalizedExpenseInfo_(lookups, itemName, itemId) {
     lookups.expenseItemsByItemId[normalizeText_(itemId)] || null;
 }
 
+function resolvedItemStockInfo_(lookups, purchasedItemId, unitId, conversion) {
+  const purchasedItem = lookups.itemsById[normalizeText_(purchasedItemId)] || null;
+  if (!purchasedItem) return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
+  const stockMode = normalizeText_(purchasedItem['รูปแบบสต็อก']) || (toBool_(purchasedItem['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก');
+  if (stockMode === 'ไม่เก็บสต็อก') return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
+  const itemId = stockMode === 'รวมเข้ารายการอื่น' ? normalizeText_(purchasedItem.stock_target_item_id) : normalizeText_(purchasedItem.item_id);
+  const item = lookups.itemsById[itemId] || null;
+  if (!item) throw new Error('ยังไม่ได้เลือกรายการสต็อกปลายทางสำหรับ ' + normalizeText_(purchasedItem['ชื่อสินค้า']));
+  const factor = toNumber_(conversion) || 1;
+  return { item: item, itemId: itemId, unitId: normalizeText_(unitId) || normalizeText_(purchasedItem.base_unit_id), baseUnitId: normalizeText_(item.base_unit_id), conversion: factor, baseQtyFactor: factor, trackStock: true };
+}
+
 function resolvedExpenseStockInfo_(lookups, expenseInfo, fallbackItemInfo) {
   if (!expenseInfo) return fallbackItemInfo;
   if (!toBool_(expenseInfo['กระทบสต็อก'], false)) {
     return { item: null, itemId: '', unitId: '', baseUnitId: '', conversion: 1, baseQtyFactor: 1, trackStock: false };
   }
-  const itemId = normalizeText_(expenseInfo.item_id);
-  const item = lookups.itemsById[itemId] || null;
-  if (!item) throw new Error('ยังไม่ได้ตั้งค่ารายการสต็อกสำหรับ ' + normalizeText_(expenseInfo['ชื่อรายการค่าใช้จ่าย']));
-  const unitId = normalizeText_(expenseInfo.purchase_unit_id) || normalizeText_(item.base_unit_id);
-  const conversion = toNumber_(expenseInfo['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1;
+  const purchasedItemId = normalizeText_(expenseInfo.item_id);
+  const purchasedItem = lookups.itemsById[purchasedItemId] || null;
+  if (!purchasedItem) throw new Error('ยังไม่ได้ตั้งค่าสินค้าที่ซื้อสำหรับ ' + normalizeText_(expenseInfo['ชื่อรายการค่าใช้จ่าย']));
+  const purchaseUnits = (lookups.itemUnitsByItemId[purchasedItemId] || []).filter(function(row) {
+    return toBool_(row['เปิดใช้งาน'], true) && toBool_(row['ใช้หน่วยนี้ตอนซื้อ'], true);
+  });
+  const defaultPurchaseUnit = purchaseUnits.find(function(row) { return !toBool_(row['เป็นหน่วยฐาน'], false); }) || purchaseUnits[0] || null;
+  const configuredUnitId = normalizeText_(expenseInfo.purchase_unit_id);
+  const unitId = configuredUnitId || normalizeText_(defaultPurchaseUnit && defaultPurchaseUnit.unit_id) || normalizeText_(purchasedItem.base_unit_id);
+  const conversion = configuredUnitId
+    ? (toNumber_(expenseInfo['อัตราเพิ่มสต็อกต่อหน่วยซื้อ']) || 1)
+    : (toNumber_(defaultPurchaseUnit && defaultPurchaseUnit['อัตราแปลงเป็นหน่วยฐาน']) || 1);
   if (!unitId || conversion <= 0) throw new Error('ตั้งค่าหน่วยซื้อหรือจำนวนเพิ่มสต็อกไม่ครบสำหรับ ' + normalizeText_(expenseInfo['ชื่อรายการค่าใช้จ่าย']));
-  return {
-    item: item,
-    itemId: itemId,
-    unitId: unitId,
-    baseUnitId: normalizeText_(item.base_unit_id),
-    conversion: conversion,
-    baseQtyFactor: conversion,
-    trackStock: toBool_(item['ติดตามสต็อก'], false)
-  };
+  return resolvedItemStockInfo_(lookups, purchasedItemId, unitId, conversion);
 }
 
 function normalizedHistoryRow_(entityType, entityId, oldStatus, newStatus, reason, details, changedAt) {
@@ -3703,10 +3727,19 @@ function handleBranchHistory_(limit) {
   return { status: 'success', branchId: branchId, rows: rows };
 }
 
-function handleBranchStock_() {
+function handleBranchStock_(requestedBranch) {
   const lookups = normalizedMasterLookups_();
-  const branchId = normalizedBranchId_(lookups, CONFIG.branchName) || 'BR-001';
+  const branchId = normalizedBranchId_(lookups, requestedBranch || CONFIG.branchName) || 'BR-001';
   const totals = {};
+  tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems).forEach(function(link) {
+    if (normalizeText_(link.branch_id) !== branchId || !toBool_(link['เปิดใช้งาน'], true)) return;
+    const purchasedItem = lookups.itemsById[normalizeText_(link.item_id)] || null;
+    if (!purchasedItem) return;
+    const mode = normalizeText_(purchasedItem['รูปแบบสต็อก']) || (toBool_(purchasedItem['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก');
+    if (mode === 'ไม่เก็บสต็อก') return;
+    const targetId = mode === 'รวมเข้ารายการอื่น' ? normalizeText_(purchasedItem.stock_target_item_id) : normalizeText_(purchasedItem.item_id);
+    if (targetId && !(targetId in totals)) totals[targetId] = 0;
+  });
   tableObjects_(CONFIG.spreadsheets.transactions, CONFIG.sheets.stockMovementsV2).forEach(function(row) {
     if (normalizeText_(row.branch_id) !== branchId) return;
     const itemId = normalizeText_(row.item_id);
