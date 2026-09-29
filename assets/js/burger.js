@@ -12,7 +12,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterTab: "items", draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterFilter: "all", draftTimer: null, syncing: false };
 
   function applyBranchIdentity() {
     document.documentElement.style.setProperty("--store-accent", branchApp.accent);
@@ -607,13 +607,15 @@
     const itemIds = (itemLinksResult.data || []).map((row) => row.item_id);
     const expenseIds = (expenseLinksResult.data || []).map((row) => row.expense_item_id);
     const supplierIds = (supplierLinksResult.data || []).map((row) => row.supplier_id);
-    const [itemsResult, expenseResult, supplierResult, itemUnitsResult] = await Promise.all([
+    const expenseSelect = "id,name,code,category_id,item_id,affects_stock,purchase_unit_id,stock_conversion_to_base,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active";
+    const [itemsResult, expenseResult, generalExpenseResult, supplierResult, itemUnitsResult] = await Promise.all([
       itemIds.length
         ? client.schema("boy_central").from("items").select("id,name,code,item_type,base_unit_id,category_id,track_stock,purchaseable,issueable,sellable,brand,package_size,package_unit_id,notes,active").in("id", itemIds).order("name")
         : Promise.resolve({ data: [], error: null }),
       expenseIds.length
-        ? client.schema("boy_central").from("expense_items").select("id,name,code,category_id,item_id,affects_stock,purchase_unit_id,stock_conversion_to_base,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active").in("id", expenseIds)
+        ? client.schema("boy_central").from("expense_items").select(expenseSelect).in("id", expenseIds)
         : Promise.resolve({ data: [], error: null }),
+      client.schema("boy_central").from("expense_items").select(expenseSelect).is("item_id", null).eq("active", true).order("name"),
       !supplierLinksResult.error && supplierIds.length
         ? client.schema("boy_central").from("suppliers").select("id,name,code").in("id", supplierIds).eq("active", true)
         : Promise.resolve({ data: [], error: null }),
@@ -623,6 +625,7 @@
     ]);
     if (itemsResult.error) throw itemsResult.error;
     if (expenseResult.error) throw expenseResult.error;
+    if (generalExpenseResult.error) throw generalExpenseResult.error;
     if (itemUnitsResult.error) throw itemUnitsResult.error;
 
     const expenseOrder = new Map((expenseLinksResult.data || []).map((row, index) => [row.expense_item_id, [row.sort_order ?? 0, index]]));
@@ -632,7 +635,8 @@
     state.items = (itemsResult.data || []).map((row) => ({ ...row, branch_active: branchItemMap.get(row.id)?.active !== false })).sort((a, b) => a.name.localeCompare(b.name, "th"));
     state.branchItems = itemLinksResult.data || [];
     state.itemUnits = itemUnitsResult.data || [];
-    state.expenseItems = (expenseResult.data || []).map((row) => ({ ...row, branch_active: branchExpenseMap.get(row.id)?.active !== false, sort_order: expenseOrder.get(row.id)?.[0] || 0 })).sort((a, b) => {
+    const expenseRows = [...new Map([...(expenseResult.data || []), ...(generalExpenseResult.data || [])].map((row) => [row.id, row])).values()];
+    state.expenseItems = expenseRows.map((row) => ({ ...row, branch_active: branchExpenseMap.get(row.id)?.active !== false, sort_order: expenseOrder.get(row.id)?.[0] || 0 })).sort((a, b) => {
       const left = expenseOrder.get(a.id) || [0, 0];
       const right = expenseOrder.get(b.id) || [0, 0];
       return left[0] - right[0] || left[1] - right[1];
@@ -696,7 +700,15 @@
     state.categories = [...categoryMap.values()];
     state.items = (itemCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id))).map((row) => { const stockMode = row["รูปแบบสต็อก"] || (mirrorBool(row["ติดตามสต็อก"]) ? "นับเป็นรายการนี้" : "ไม่เก็บสต็อก"); return { id: row.item_id, name: row["ชื่อสินค้า"] || row.name || row.item_id, code: row["รหัสสินค้า"] || row.code || row.item_id, item_type: row["ประเภทข้อมูล"] || "STOCK_ITEM", base_unit_id: row.base_unit_id || row.unit_id || "", category_id: row.subcategory_id || row.category_id || "", track_stock: stockMode !== "ไม่เก็บสต็อก", stock_mode: stockMode, stock_target_item_id: row.stock_target_item_id || "", purchaseable: mirrorBool(row["ซื้อได้"]), issueable: mirrorBool(row["เบิกได้"]), sellable: mirrorBool(row["ขายได้"]), brand: row["ยี่ห้อ"] || "", package_size: row["ขนาดบรรจุ"] || "", package_unit_id: row.package_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true }; });
     state.branchItems = branchLinks.map((row) => ({ item_id: row.item_id, minimum_stock: Number(row["สต็อกขั้นต่ำ"] || 0), reorder_point: Number(row["จุดสั่งซื้อ"] || 0), target_stock: Number(row["สต็อกเป้าหมาย"] || 0), preferred_supplier_id: row.preferred_supplier_id || "", default_purchase_unit_id: row.default_purchase_unit_id || row.purchase_unit_id || "", default_issue_unit_id: row.default_issue_unit_id || row.issue_unit_id || "", notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"]) }));
-    const relevantExpense = (row) => itemIds.has(String(row.item_id || "")) || String(row.default_branch_id || "") === String(branchId) || String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase().includes(branchApp.branchCode);
+    const relevantExpense = (row) => {
+      const itemId = String(row.item_id || "");
+      const defaultBranchId = String(row.default_branch_id || "");
+      const code = String(row["รหัสรายการค่าใช้จ่าย"] || row.expense_item_id || "").toUpperCase();
+      if (itemId) return itemIds.has(itemId);
+      if (defaultBranchId) return defaultBranchId === String(branchId);
+      const scopedBranch = ["WATER", "TAWANA", "BIGC", "BURGER", "GRILL"].find((branchCode) => code.includes(branchCode));
+      return !scopedBranch || scopedBranch === branchApp.branchCode;
+    };
     state.expenseItems = (expenseCatalog.rows || []).filter(relevantExpense).map((row, index) => ({ id: row.expense_item_id, name: row["ชื่อรายการค่าใช้จ่าย"] || row.name || row.expense_item_id, code: row["รหัสรายการค่าใช้จ่าย"] || row.code || row.expense_item_id, category_id: row.subcategory_id || row.category_id || "", item_id: row.item_id || null, affects_stock: mirrorBool(row["กระทบสต็อก"]), purchase_unit_id: row.purchase_unit_id || "", stock_conversion_to_base: Number(row["อัตราเพิ่มสต็อกต่อหน่วยซื้อ"] || 1), requires_quantity: mirrorBool(row["ต้องกรอกจำนวน"]), requires_unit: mirrorBool(row["ต้องเลือกหน่วย"]), requires_supplier: mirrorBool(row["ต้องระบุผู้ขาย"]), requires_receipt: mirrorBool(row["ต้องมีหลักฐาน"]), notes: row["หมายเหตุ"] || "", active: mirrorBool(row["เปิดใช้งาน"], true), branch_active: true, sort_order: Number(row["ลำดับแสดง"] || index) }));
     state.suppliers = (supplierCatalog.rows || []).filter((row) => mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ id: row.supplier_id, name: row["ชื่อผู้ขาย"] || row.name || row.supplier_id, code: row["รหัสผู้ขาย"] || row.code || row.supplier_id }));
     state.itemUnits = (itemUnitCatalog.rows || []).filter((row) => itemIds.has(String(row.item_id)) && mirrorBool(row["เปิดใช้งาน"], true)).map((row) => ({ item_id: row.item_id, unit_id: row.unit_id, conversion_to_base: Number(row["อัตราแปลงเป็นหน่วยฐาน"] || 1), is_base_unit: mirrorBool(row["เป็นหน่วยฐาน"]), allow_purchase: mirrorBool(row["ใช้หน่วยนี้ตอนซื้อ"]), allow_issue: mirrorBool(row["ใช้หน่วยนี้ตอนเบิก"]), active: true }));
@@ -852,15 +864,26 @@
 
   function categoryName(id) { return state.categories.find((row) => row.id === id)?.name || "ไม่ระบุหมวด"; }
 
+  function unifiedMasterRows() {
+    const itemIds = new Set(state.items.map((row) => String(row.id)));
+    const normalizedExpenseNames = new Set(state.items.filter((row) => row.item_type === "EXPENSE_ITEM").map((row) => String(row.name || "").trim().toLocaleLowerCase("th")));
+    const itemRows = state.items.map((row) => ({ ...row, _masterKind: "item", _masterType: row.item_type === "EXPENSE_ITEM" ? "expense" : "product" }));
+    const generalExpenseRows = state.expenseItems
+      .filter((row) => (!row.item_id || !itemIds.has(String(row.item_id))) && !normalizedExpenseNames.has(String(row.name || "").trim().toLocaleLowerCase("th")))
+      .map((row) => ({ ...row, _masterKind: "expense_item", _masterType: "expense", track_stock: false }));
+    return [...itemRows, ...generalExpenseRows].sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "th"));
+  }
+
   function renderMasterList() {
     const list = $("#masterList");
     if (!list) return;
     const query = $("#masterSearch").value.trim().toLocaleLowerCase("th");
-    const rows = state.items
-      .filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("th").includes(query));
-    list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="item">
+    const rows = unifiedMasterRows()
+      .filter((row) => state.masterFilter === "all" || row._masterType === state.masterFilter)
+      .filter((row) => `${row.code || ""} ${row.name || ""}`.toLocaleLowerCase("th").includes(query));
+    list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="${row._masterKind}">
       <span><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.code)} · ${escapeHtml(categoryName(row.category_id))}</small></span>
-      <span class="master-badges"><small>${row.active === false || row.branch_active === false ? "ปิดใช้งาน" : (row.track_stock ? "ติดตามสต็อก" : "ไม่กระทบสต็อก")}</small><b>แก้ไข</b></span>
+      <span class="master-badges"><small>${row.active === false || row.branch_active === false ? "ปิดใช้งาน" : (row._masterType === "expense" ? "ค่าใช้จ่ายทั่วไป" : (row.track_stock ? "ติดตามสต็อก" : "สินค้าไม่เก็บสต็อก"))}</small><b>แก้ไข</b></span>
     </button>`).join("") : '<div class="empty-state">ไม่พบรายการ</div>';
   }
 
@@ -1168,13 +1191,14 @@
   $("#refreshStockButton").addEventListener("click", loadStock);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#masterSearch").addEventListener("input", renderMasterList);
-  $$("[data-master-tab]").forEach((button) => button.addEventListener("click", () => {
-    state.masterTab = button.dataset.masterTab;
-    $$("[data-master-tab]").forEach((tab) => tab.classList.toggle("active", tab === button));
+  $$("[data-master-filter]").forEach((button) => button.addEventListener("click", () => {
+    state.masterFilter = button.dataset.masterFilter;
+    $$("[data-master-filter]").forEach((filter) => filter.classList.toggle("active", filter === button));
+    $("#addMasterButton").textContent = state.masterFilter === "expense" ? "+ ค่าใช้จ่าย" : "+ เพิ่ม";
     renderMasterList();
   }));
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
-  $("#addMasterButton").addEventListener("click", () => openMaster(null, "item"));
+  $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterFilter === "expense" ? "expense_item" : "item"));
   $("#accountQuickButton").addEventListener("click", () => setPage("account"));
   $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
