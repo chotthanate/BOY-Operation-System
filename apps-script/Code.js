@@ -933,6 +933,52 @@ function setMasterItemBranches_(itemId, incomingBranchIds) {
   });
 }
 
+function syncExpenseMirrorFromItem_(item, incomingBranchIds) {
+  const itemId = normalizeText_(item && item.item_id);
+  if (!itemId) return;
+  const sh = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterExpenseItems);
+  ensureMasterExtraHeaders_('expenseItems', sh);
+  const headers = masterHeaders_(sh);
+  const itemIdIndex = headers.indexOf('item_id');
+  const expenseIdIndex = headers.indexOf('expense_item_id');
+  if (itemIdIndex < 0 || expenseIdIndex < 0) throw new Error('หัวตารางรายการค่าใช้จ่ายไม่ครบ');
+  const lastRow = sh.getLastRow();
+  const rows = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, headers.length).getValues() : [];
+  const existingOffset = rows.findIndex(function(row) { return normalizeText_(row[itemIdIndex]) === itemId; });
+  const existing = existingOffset >= 0 ? rows[existingOffset] : new Array(headers.length).fill('');
+  const targetRow = existingOffset >= 0 ? existingOffset + 2 : realLastDataRow_(sh) + 1;
+  const stockMode = normalizeText_(item['รูปแบบสต็อก']) || (toBool_(item['ติดตามสต็อก'], false) ? 'นับเป็นรายการนี้' : 'ไม่เก็บสต็อก');
+  const affectsStock = stockMode !== 'ไม่เก็บสต็อก';
+  const itemUnits = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemUnits).filter(function(row) {
+    return normalizeText_(row.item_id) === itemId && toBool_(row['เปิดใช้งาน'], true) && toBool_(row['ใช้หน่วยนี้ตอนซื้อ'], true);
+  });
+  const purchaseUnit = itemUnits.find(function(row) { return !toBool_(row['เป็นหน่วยฐาน'], false); }) || itemUnits[0] || null;
+  const firstBranch = Array.isArray(incomingBranchIds) && incomingBranchIds.length === 1 ? normalizeText_(incomingBranchIds[0]) : '';
+  const values = {
+    expense_item_id: existingOffset >= 0 ? existing[expenseIdIndex] : nextMasterId_(sh, expenseIdIndex + 1, 'EXP'),
+    item_id: itemId,
+    'ชื่อรายการค่าใช้จ่าย': normalizeText_(item['ชื่อสินค้า']),
+    category_id: normalizeText_(item.category_id),
+    subcategory_id: normalizeText_(item.subcategory_id),
+    default_branch_id: firstBranch || (headers.indexOf('default_branch_id') >= 0 ? existing[headers.indexOf('default_branch_id')] : ''),
+    'ต้องระบุผู้ขาย': isBlank_(item['ต้องระบุผู้ขาย']) ? (headers.indexOf('ต้องระบุผู้ขาย') >= 0 ? existing[headers.indexOf('ต้องระบุผู้ขาย')] : false) : toBool_(item['ต้องระบุผู้ขาย'], false),
+    'ต้องมีหลักฐาน': isBlank_(item['ต้องมีหลักฐาน']) ? (headers.indexOf('ต้องมีหลักฐาน') >= 0 ? existing[headers.indexOf('ต้องมีหลักฐาน')] : false) : toBool_(item['ต้องมีหลักฐาน'], false),
+    'เปิดใช้งาน': toBool_(item['เปิดใช้งาน'], true),
+    'หมายเหตุ': normalizeText_(item['หมายเหตุ']),
+    'กระทบสต็อก': affectsStock,
+    purchase_unit_id: normalizeText_(purchaseUnit && purchaseUnit.unit_id),
+    'อัตราเพิ่มสต็อกต่อหน่วยซื้อ': toNumber_(purchaseUnit && purchaseUnit['อัตราแปลงเป็นหน่วยฐาน']) || 1,
+    'ต้องกรอกจำนวน': affectsStock,
+    'ต้องเลือกหน่วย': affectsStock,
+    'ลำดับแสดง': toNumber_(item['ลำดับแสดง']) || 0
+  };
+  const next = headers.map(function(header, index) {
+    return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : existing[index];
+  });
+  if (existingOffset >= 0) sh.getRange(targetRow, 1, 1, headers.length).setValues([next]);
+  else appendRows_(sh, [next]);
+}
+
 function handleMasterBulkItemBranches_(assignments, actor) {
   if (!Array.isArray(assignments) || !assignments.length) {
     return { status: 'success', updatedItems: 0, changedLinks: 0, referencePatches: { branchItems: { idHeader: MASTER_ENTITY_SPECS.branchItems.id, matchField: 'item_id', matchValues: [], rows: [] } } };
@@ -1070,6 +1116,7 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expect
     savedRow.__rowNumber = targetRow;
     savedRow.__version = masterRowVersion_(headers, afterValues);
     savedRowNumber = targetRow;
+    if (entity === 'items') syncExpenseMirrorFromItem_(savedRow, branchIds);
     recordMasterAudit_(sh.getName(), targetRow, isUpdate ? 'แก้ไข' : 'เพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   } finally {
     lock.releaseLock();
@@ -1111,6 +1158,7 @@ function handleMasterSetActive_(entity, rowNumber, active, actor, expectedVersio
   assertMasterVersion_(headers, beforeValues, expectedVersion);
   sh.getRange(rn, activeIndex + 1).setValue(toBool_(active, false));
   const afterValues = sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0];
+  if (entity === 'items') syncExpenseMirrorFromItem_(masterRowObject_(headers, afterValues));
   recordMasterAudit_(sh.getName(), rn, toBool_(active, false) ? 'เปิดใช้งาน' : 'ปิดใช้งาน', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   if (toBool_(compact, false)) {
     const row = masterRowObject_(headers, afterValues);

@@ -856,11 +856,11 @@
     const list = $("#masterList");
     if (!list) return;
     const query = $("#masterSearch").value.trim().toLocaleLowerCase("th");
-    const rows = (state.masterTab === "items" ? state.items : state.expenseItems)
+    const rows = state.items
       .filter((row) => `${row.code} ${row.name}`.toLocaleLowerCase("th").includes(query));
-    list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="${state.masterTab === "items" ? "item" : "expense_item"}">
+    list.innerHTML = rows.length ? rows.map((row) => `<button class="master-row" type="button" data-master-id="${row.id}" data-master-kind="item">
       <span><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.code)} · ${escapeHtml(categoryName(row.category_id))}</small></span>
-      <span class="master-badges"><small>${row.active === false || row.branch_active === false ? "ปิดใช้งาน" : (state.masterTab === "items" ? (row.track_stock ? "ติดตามสต็อก" : "ไม่ติดตามสต็อก") : (row.affects_stock ? "เพิ่มสต็อก" : "รายจ่ายทั่วไป"))}</small><b>แก้ไข</b></span>
+      <span class="master-badges"><small>${row.active === false || row.branch_active === false ? "ปิดใช้งาน" : (row.track_stock ? "ติดตามสต็อก" : "ไม่กระทบสต็อก")}</small><b>แก้ไข</b></span>
     </button>`).join("") : '<div class="empty-state">ไม่พบรายการ</div>';
   }
 
@@ -1174,7 +1174,7 @@
     renderMasterList();
   }));
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
-  $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterTab === "items" ? "item" : "expense_item"));
+  $("#addMasterButton").addEventListener("click", () => openMaster(null, "item"));
   $("#accountQuickButton").addEventListener("click", () => setPage("account"));
   $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());

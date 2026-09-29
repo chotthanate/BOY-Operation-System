@@ -70,8 +70,7 @@
       <section class="page" id="settingsPage" data-page="settings">
         <div class="section-heading compact"><div><small id="settingsBranchLabel">ข้อมูลร้านเบอร์เกอร์</small><h1>เพิ่มเติม</h1></div><div><button class="secondary-button compact-button" id="accountQuickButton" type="button">บัญชี</button> <button class="secondary-button compact-button" id="addMasterButton" type="button">+ เพิ่ม</button></div></div>
         <div class="master-tabs" role="tablist">
-          <button class="active" type="button" data-master-tab="items">สินค้าและวัตถุดิบ</button>
-          <button type="button" data-master-tab="expenses">รายการรายจ่าย</button>
+          <button class="active" type="button" data-master-tab="items">รายการสินค้าและค่าใช้จ่าย</button>
         </div>
         <label class="search-field"><span>⌕</span><input id="masterSearch" type="search" placeholder="ค้นหารายการ"></label>
         <div class="master-list" id="masterList"></div>
@@ -114,7 +113,7 @@
         <label>ประเภทย่อย<select id="masterCategory"></select></label>
       </div>
       <div id="masterItemFields" class="form-stack">
-        <label>ประเภทข้อมูล<select id="masterItemType"><option value="STOCK_ITEM">สินค้า / วัตถุดิบ</option><option value="NON_STOCK_ITEM">ไม่ติดตามเป็นสินค้า</option></select></label>
+        <label>ประเภทข้อมูล<select id="masterItemType"><option value="STOCK_ITEM">สินค้า / วัตถุดิบ</option><option value="NON_STOCK_ITEM">สินค้าไม่เก็บสต็อก</option><option value="EXPENSE_ITEM">ค่าใช้จ่ายทั่วไป</option><option value="SERVICE">บริการ</option></select></label>
         <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
       </div>
       <div id="masterPurchaseFields" class="form-subsection">
@@ -164,6 +163,6 @@
   <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7',legacyEnabled:false}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9',legacyEnabled:true};</script>
-  <script src="assets/js/burger.js?v=20260930-2"></script>
+  <script src="assets/js/burger.js?v=20260930-3"></script>
 </body>
 </html>
