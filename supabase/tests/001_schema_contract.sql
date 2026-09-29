@@ -78,6 +78,14 @@ begin
   if to_regprocedure('boy_central.admin_update_burger_master_v2(jsonb)') is null then
     raise exception 'admin_update_burger_master_v2(jsonb) is missing';
   end if;
+  if to_regprocedure('boy_central.admin_save_stock_group(jsonb)') is null
+     or to_regprocedure('boy_central.admin_save_stock_mapping(jsonb)') is null then
+    raise exception 'stock group admin functions are missing';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema='boy_central' and table_name='items' and column_name='stock_target_item_id'
+  ) then raise exception 'items.stock_target_item_id is missing'; end if;
 
   if not exists (
     select 1 from information_schema.columns

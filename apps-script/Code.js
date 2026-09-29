@@ -199,6 +199,12 @@ function doPost(e) {
       case 'branchStock':
         result = handleBranchStock_(payload.branchCode || payload.branchName || '');
         break;
+      case 'stockGroupSave':
+        result = handleStockGroupSave_(payload.payload || {}, payload.actor || {});
+        break;
+      case 'stockItemMappingSave':
+        result = handleStockItemMappingSave_(payload.payload || {}, payload.actor || {});
+        break;
       case 'syncCloud':
         result = { status: 'success', message: 'ข้อมูล Database ถูกอ่านจาก BOY_Master โดยตรงแล้ว' };
         break;
@@ -963,7 +969,7 @@ function syncExpenseMirrorFromItem_(item, incomingBranchIds) {
     default_branch_id: firstBranch || (headers.indexOf('default_branch_id') >= 0 ? existing[headers.indexOf('default_branch_id')] : ''),
     'ต้องระบุผู้ขาย': isBlank_(item['ต้องระบุผู้ขาย']) ? (headers.indexOf('ต้องระบุผู้ขาย') >= 0 ? existing[headers.indexOf('ต้องระบุผู้ขาย')] : false) : toBool_(item['ต้องระบุผู้ขาย'], false),
     'ต้องมีหลักฐาน': isBlank_(item['ต้องมีหลักฐาน']) ? (headers.indexOf('ต้องมีหลักฐาน') >= 0 ? existing[headers.indexOf('ต้องมีหลักฐาน')] : false) : toBool_(item['ต้องมีหลักฐาน'], false),
-    'เปิดใช้งาน': toBool_(item['เปิดใช้งาน'], true),
+    'เปิดใช้งาน': toBool_(item['เปิดใช้งาน'], true) && toBool_(item['ซื้อได้'], true),
     'หมายเหตุ': normalizeText_(item['หมายเหตุ']),
     'กระทบสต็อก': affectsStock,
     purchase_unit_id: normalizeText_(purchaseUnit && purchaseUnit.unit_id),
@@ -3804,6 +3810,155 @@ function handleBranchStock_(requestedBranch) {
     };
   }).sort(function(a, b) { return a.name.localeCompare(b.name, 'th'); });
   return { status: 'success', branchId: branchId, rows: rows };
+}
+
+function stockBranchRow_(requestedBranch) {
+  const text = normalizeText_(requestedBranch).toLowerCase();
+  return tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranches).find(function(row) {
+    const values = [row.branch_id, row['รหัสสาขา'], row['ชื่อสาขา']].map(normalizeText_).join(' ').toLowerCase();
+    return toBool_(row['เปิดใช้งาน'], true) && (values.indexOf(text) >= 0 ||
+      (text === 'burger' && /burger|เบอร์เกอร์/.test(values)) ||
+      (text === 'grill' && /grill|เนื้อย่าง/.test(values)) ||
+      (text === 'water' && /water|ทาวน่า|น้ำ/.test(values)) ||
+      (text === 'bigc' && /bigc|บิ๊กซี/.test(values)));
+  }) || null;
+}
+
+function setItemPurchaseConversion_(itemId, unitId, conversion) {
+  itemId = normalizeText_(itemId);
+  unitId = normalizeText_(unitId);
+  conversion = toNumber_(conversion) || 1;
+  if (!itemId || !unitId || conversion <= 0) return;
+  const sh = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemUnits);
+  const headers = masterHeaders_(sh);
+  const rows = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItemUnits);
+  const existing = rows.find(function(row) {
+    return normalizeText_(row.item_id) === itemId && normalizeText_(row.unit_id) === unitId;
+  });
+  const values = {
+    item_unit_id: existing ? normalizeText_(existing.item_unit_id) : nextMasterId_(sh, headers.indexOf('item_unit_id') + 1, 'IU'),
+    item_id: itemId, unit_id: unitId, 'อัตราแปลงเป็นหน่วยฐาน': conversion,
+    'เป็นหน่วยฐาน': false, 'ใช้หน่วยนี้ตอนซื้อ': true, 'ใช้หน่วยนี้ตอนเบิก': false, 'เปิดใช้งาน': true
+  };
+  const current = existing ? sh.getRange(existing.__rowNumber, 1, 1, headers.length).getValues()[0] : new Array(headers.length).fill('');
+  const next = headers.map(function(header, index) {
+    return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : current[index];
+  });
+  if (existing) sh.getRange(existing.__rowNumber, 1, 1, headers.length).setValues([next]);
+  else appendRows_(sh, [next]);
+}
+
+function ensureBranchItemActive_(branchId, itemId) {
+  const sh = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems);
+  const headers = masterHeaders_(sh);
+  const existing = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterBranchItems).find(function(row) {
+    return normalizeText_(row.branch_id) === normalizeText_(branchId) && normalizeText_(row.item_id) === normalizeText_(itemId);
+  });
+  if (existing) {
+    const activeIndex = headers.indexOf('เปิดใช้งาน');
+    if (activeIndex >= 0) sh.getRange(existing.__rowNumber, activeIndex + 1).setValue(true);
+    return;
+  }
+  const values = {
+    branch_item_id: 'BRI-' + normalizeText_(branchId) + '-' + normalizeText_(itemId).replace(/^ITEM-/, ''),
+    branch_id: normalizeText_(branchId), item_id: normalizeText_(itemId), 'เปิดใช้งาน': true
+  };
+  appendRows_(sh, [headers.map(function(header) { return Object.prototype.hasOwnProperty.call(values, header) ? values[header] : ''; })]);
+}
+
+function applyStockItemMapping_(payload, actor) {
+  const branch = stockBranchRow_(payload.branchCode);
+  if (!branch) throw new Error('ไม่พบสาขาที่เลือก');
+  const branchId = normalizeText_(branch.branch_id);
+  const itemId = normalizeText_(payload.sourceItemId);
+  const mode = normalizeText_(payload.mode) || 'ไม่เก็บสต็อก';
+  const targetId = mode === 'รวมเข้ารายการอื่น' ? normalizeText_(payload.targetItemId) : '';
+  if (['ไม่เก็บสต็อก', 'นับเป็นรายการนี้', 'รวมเข้ารายการอื่น'].indexOf(mode) < 0) throw new Error('รูปแบบสต็อกไม่ถูกต้อง');
+  if (mode === 'รวมเข้ารายการอื่น' && (!targetId || targetId === itemId)) throw new Error('กรุณาเลือกรายการสต็อกกลาง');
+
+  const itemSheet = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+  ensureMasterExtraHeaders_('items', itemSheet);
+  const headers = masterHeaders_(itemSheet);
+  const item = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).find(function(row) { return normalizeText_(row.item_id) === itemId; });
+  if (!item) throw new Error('ไม่พบสินค้า');
+  if (targetId) {
+    const target = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).find(function(row) { return normalizeText_(row.item_id) === targetId; });
+    if (!target || !toBool_(target['เปิดใช้งาน'], true)) throw new Error('ไม่พบรายการสต็อกกลาง');
+    ensureBranchItemActive_(branchId, targetId);
+  }
+  const before = itemSheet.getRange(item.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+  const modeIndex = headers.indexOf('รูปแบบสต็อก'), targetIndex = headers.indexOf('stock_target_item_id'), trackIndex = headers.indexOf('ติดตามสต็อก');
+  if (modeIndex >= 0) itemSheet.getRange(item.__rowNumber, modeIndex + 1).setValue(mode);
+  if (targetIndex >= 0) itemSheet.getRange(item.__rowNumber, targetIndex + 1).setValue(targetId);
+  if (trackIndex >= 0) itemSheet.getRange(item.__rowNumber, trackIndex + 1).setValue(mode === 'นับเป็นรายการนี้');
+  if (mode !== 'ไม่เก็บสต็อก') setItemPurchaseConversion_(itemId, payload.purchaseUnitId || item.base_unit_id, payload.conversionToTarget);
+  const after = itemSheet.getRange(item.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+  const saved = masterRowObject_(headers, after);
+  syncExpenseMirrorFromItem_(saved, [branchId]);
+  recordMasterAudit_(itemSheet.getName(), item.__rowNumber, 'ตั้งค่ารวมสต็อก', masterRowObject_(headers, before), saved, actor);
+  return saved;
+}
+
+function handleStockItemMappingSave_(payload, actor) {
+  const lock = lock_();
+  lock.waitLock(15000);
+  try {
+    const item = applyStockItemMapping_(payload || {}, actor || {});
+    return { status: 'success', itemId: normalizeText_(item.item_id), stockMode: normalizeText_(item['รูปแบบสต็อก']), targetItemId: normalizeText_(item.stock_target_item_id) };
+  } finally { lock.releaseLock(); }
+}
+
+function handleStockGroupSave_(payload, actor) {
+  payload = payload || {};
+  const branch = stockBranchRow_(payload.branchCode);
+  if (!branch) throw new Error('ไม่พบสาขาที่เลือก');
+  const branchId = normalizeText_(branch.branch_id);
+  let targetId = normalizeText_(payload.targetItemId);
+  const members = Array.isArray(payload.members) ? payload.members : [];
+  if (!targetId) {
+    const saved = handleMasterSave_('items', '', {
+      'ชื่อสินค้า': normalizeText_(payload.name), 'ประเภทข้อมูล': 'STOCK_ITEM',
+      category_id: normalizeText_(payload.categoryId), subcategory_id: normalizeText_(payload.subcategoryId),
+      base_unit_id: normalizeText_(payload.baseUnitId), 'รูปแบบสต็อก': 'นับเป็นรายการนี้',
+      stock_target_item_id: '', 'ติดตามสต็อก': true, 'ซื้อได้': false, 'เบิกได้': true,
+      'ขายได้': false, 'เปิดใช้งาน': true
+    }, [branchId], actor || {}, '', true);
+    targetId = normalizeText_(saved.row && saved.row.item_id);
+  } else if (normalizeText_(payload.name)) {
+    const itemSheet = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+    const headers = masterHeaders_(itemSheet);
+    const target = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).find(function(row) {
+      return normalizeText_(row.item_id) === targetId;
+    });
+    if (!target) throw new Error('ไม่พบรายการสต็อกกลาง');
+    const nameIndex = headers.indexOf('ชื่อสินค้า');
+    if (nameIndex >= 0 && normalizeText_(target['ชื่อสินค้า']) !== normalizeText_(payload.name)) {
+      const before = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+      itemSheet.getRange(target.__rowNumber, nameIndex + 1).setValue(normalizeText_(payload.name));
+      const after = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+      recordMasterAudit_(itemSheet.getName(), target.__rowNumber, 'แก้ชื่อสต็อกกลาง', masterRowObject_(headers, before), masterRowObject_(headers, after), actor || {});
+    }
+  }
+  if (!targetId) throw new Error('สร้างรายการสต็อกไม่สำเร็จ');
+
+  const currentMembers = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).filter(function(row) {
+    return normalizeText_(row.stock_target_item_id) === targetId;
+  });
+  const selected = {};
+  members.forEach(function(member) { selected[normalizeText_(member.sourceItemId)] = true; });
+  currentMembers.forEach(function(row) {
+    const id = normalizeText_(row.item_id);
+    if (selected[id]) return;
+    applyStockItemMapping_({ branchCode: payload.branchCode, sourceItemId: id, mode: 'นับเป็นรายการนี้', purchaseUnitId: row.base_unit_id, conversionToTarget: 1 }, actor || {});
+  });
+  members.forEach(function(member) {
+    applyStockItemMapping_({
+      branchCode: payload.branchCode, sourceItemId: member.sourceItemId,
+      mode: 'รวมเข้ารายการอื่น', targetItemId: targetId,
+      purchaseUnitId: member.purchaseUnitId, conversionToTarget: member.conversionToTarget
+    }, actor || {});
+  });
+  return { status: 'success', targetItemId: targetId, memberCount: members.length };
 }
 
 function getLeavesForMonth_(month, year) {

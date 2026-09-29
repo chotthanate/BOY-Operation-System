@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
   <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260930-8">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260930-9">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
@@ -51,7 +51,7 @@
       </section>
 
       <section class="page" id="stockPage" data-page="stock">
-        <div class="section-heading compact"><div><small>คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div>
+        <div class="section-heading compact"><div><small>คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><div class="heading-actions"><button class="secondary-button compact-button" id="addStockGroupButton" type="button">+ เพิ่มสต็อก</button><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div></div>
         <label class="search-field"><span>⌕</span><input id="stockSearch" type="search" placeholder="ค้นหาสินค้า"></label>
         <div class="stock-list" id="stockList"></div>
       </section>
@@ -117,6 +117,8 @@
       <div id="masterItemFields" class="form-stack">
         <label>ประเภทข้อมูล<select id="masterItemType"><option value="STOCK_ITEM">สินค้า / วัตถุดิบ</option><option value="NON_STOCK_ITEM">สินค้าไม่เก็บสต็อก</option><option value="EXPENSE_ITEM">ค่าใช้จ่ายทั่วไป</option><option value="SERVICE">บริการ</option></select></label>
         <label id="masterUnitField">หน่วยฐาน<select id="masterUnit"></select></label>
+        <label>การนับสต็อก<select id="masterStockMode"><option value="none">ไม่เก็บสต็อก</option><option value="self">นับเป็นรายการนี้</option><option value="group">รวมเข้าสต็อกกลาง</option></select></label>
+        <label id="masterStockTargetField" hidden>เพิ่มเข้าในสต็อก<select id="masterStockTarget"></select></label>
       </div>
       <div id="masterPurchaseFields" class="form-subsection">
         <label>หน่วยที่ซื้อ<select id="masterPurchaseUnit"></select></label>
@@ -124,7 +126,7 @@
         <label>หน่วยที่ใช้ตอนเบิก<select id="masterDefaultIssueUnit"></select></label>
         <div id="masterConversionPreview" class="conversion-preview"></div>
       </div>
-      <label class="check-row"><input id="masterStock" type="checkbox"><span id="masterStockLabel">ติดตามสต็อก</span></label>
+      <label class="check-row" hidden><input id="masterStock" type="checkbox"><span id="masterStockLabel">ติดตามสต็อก</span></label>
       <details id="masterItemAdvanced" class="master-advanced">
         <summary>รายละเอียดสินค้าเพิ่มเติม</summary>
         <div class="form-stack">
@@ -160,11 +162,26 @@
     </form>
   </dialog>
 
+  <dialog id="stockGroupDialog" class="review-dialog stock-group-dialog" tabindex="-1">
+    <h2 id="stockGroupTitle">เพิ่มรายการสต็อก</h2>
+    <form id="stockGroupForm" class="form-stack">
+      <input id="stockGroupId" type="hidden">
+      <label>ชื่อที่แสดงในสต็อก<input id="stockGroupName" placeholder="เช่น ขนมปัง" required></label>
+      <div class="field-grid">
+        <label>ประเภท<select id="stockGroupCategory" required></select></label>
+        <label>หน่วยนับ<select id="stockGroupUnit" required></select></label>
+      </div>
+      <label class="search-field stock-member-search"><span>⌕</span><input id="stockGroupSearch" type="search" placeholder="ค้นหาสินค้าที่จะรวม"></label>
+      <div class="stock-member-list" id="stockGroupMembers"></div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="stockGroupDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึกสต็อก</button></div>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7',legacyEnabled:false}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9',legacyEnabled:true};</script>
-  <script src="assets/js/burger.js?v=20260930-4"></script>
+  <script src="assets/js/burger.js?v=20260930-5"></script>
 </body>
 </html>

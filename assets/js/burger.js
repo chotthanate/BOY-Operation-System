@@ -12,7 +12,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterFilter: "all", draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), draftTimer: null, syncing: false };
 
   function applyBranchIdentity() {
     document.documentElement.style.setProperty("--store-accent", branchApp.accent);
@@ -306,10 +306,28 @@
       || itemUnitChoices(itemId).find((row) => !row.is_base_unit && row.allow_purchase)
       || itemUnitChoices(itemId).find((row) => row.is_base_unit);
   }
+  function expenseForPurchasedItem(itemId) {
+    return state.expenseItems.find((row) => String(row.purchased_item_id || row.item_id || "") === String(itemId));
+  }
+  function stockModeForItem(item) {
+    if (!item) return "none";
+    if (item.stock_target_item_id || item.stock_mode === "รวมเข้ารายการอื่น") return "group";
+    if (item.track_stock || item.stock_mode === "นับเป็นรายการนี้") return "self";
+    return "none";
+  }
+  function stockTargetChoices(excludeId = "") {
+    return state.items.filter((item) => item.id !== excludeId && item.active !== false && item.branch_active !== false && stockModeForItem(item) === "self");
+  }
+  function stockItemForPurchasedItem(item) {
+    if (!item) return null;
+    if (item.stock_target_item_id) return itemById(item.stock_target_item_id) || null;
+    return item.track_stock ? item : null;
+  }
   function lineRequirements(line, expense = expenseById(line.expense_item_id), item = itemById(line.item_id)) {
+    const stockItem = stockItemForPurchasedItem(item);
     return {
-      quantity: Boolean(item?.track_stock || expense?.requires_quantity),
-      unit: Boolean(item?.track_stock || expense?.requires_unit)
+      quantity: Boolean(stockItem || expense?.requires_quantity),
+      unit: Boolean(stockItem || expense?.requires_unit)
     };
   }
   function supplierChoices(itemId) {
@@ -321,6 +339,7 @@
     $("#expenseCount").textContent = `${state.lines.length} รายการ`;
     $("#expenseLines").innerHTML = state.lines.map((line, index) => {
       const item = itemById(line.item_id);
+      const stockItem = stockItemForPurchasedItem(item);
       const expense = expenseById(line.expense_item_id);
       const categoryId = lineMainCategoryId(line, expense);
       const selectedSubcategoryId = lineSubcategoryId(line, expense);
@@ -338,14 +357,14 @@
         `<label>ยอดรวม<input data-field="line_total" type="number" min="0" step="0.01" inputmode="decimal" value="${escapeHtml(line.line_total)}"></label>`
       ].filter(Boolean);
       const conversion = Number(line.conversion_to_base || unitLink?.conversion_to_base || 1);
-      const stockEffect = item?.track_stock && unit
-        ? `เพิ่มสต็อก ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}`
+      const stockEffect = stockItem && unit
+        ? `เพิ่มสต็อก ${escapeHtml(stockItem.name)} ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")}`
         : "";
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line">
           <span class="line-number">${index + 1}</span>
           <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
-          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${item?.track_stock ? "" : "off"}">${item?.track_stock ? "เข้าสต็อก" : "ไม่เข้าสต็อก"}</span></span>
+          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `เข้า ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
           <div class="expense-picker">
@@ -357,7 +376,7 @@
             <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}</select></label>
           </div>
           <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
-          ${item?.track_stock && unit ? `<div class="conversion-field ${line.conversion_overridden ? "is-editing" : ""}"><div><span>อัตราจากข้อมูลสินค้า</span><strong>1 ${escapeHtml(unit.name)} = ${escapeHtml(conversion)} ${escapeHtml(unitById(item.base_unit_id)?.name || "หน่วยฐาน")}</strong><small>ใช้กับรายการซื้อครั้งนี้เท่านั้น ไม่แก้ข้อมูลสินค้า</small></div><label class="conversion-toggle"><input data-field="conversion_overridden" type="checkbox" ${line.conversion_overridden ? "checked" : ""}><span>ปรับครั้งนี้</span></label>${line.conversion_overridden ? `<input data-field="conversion_to_base" aria-label="จำนวนที่เพิ่มเข้าสต็อกครั้งนี้" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}">` : ""}</div>` : ""}
+          ${stockItem && unit ? `<div class="conversion-field ${line.conversion_overridden ? "is-editing" : ""}"><div><span>อัตราจากข้อมูลสินค้า</span><strong>1 ${escapeHtml(unit.name)} = ${escapeHtml(conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")} ใน ${escapeHtml(stockItem.name)}</strong><small>ใช้กับรายการซื้อครั้งนี้เท่านั้น ไม่แก้ข้อมูลสินค้า</small></div><label class="conversion-toggle"><input data-field="conversion_overridden" type="checkbox" ${line.conversion_overridden ? "checked" : ""}><span>ปรับครั้งนี้</span></label>${line.conversion_overridden ? `<input data-field="conversion_to_base" aria-label="จำนวนที่เพิ่มเข้าสต็อกครั้งนี้" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}">` : ""}</div>` : ""}
           ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
             <label>ชำระด้วย<select data-field="payment_method"><option value="cash" ${$("#expensePaymentMethod").value === "cash" ? "selected" : ""}>เงินสด</option><option value="credit_card" ${$("#expensePaymentMethod").value === "credit_card" ? "selected" : ""}>บัตรเครดิต</option><option value="reimbursement_pending" ${$("#expensePaymentMethod").value === "reimbursement_pending" ? "selected" : ""}>รอเบิก</option></select></label>
@@ -402,19 +421,20 @@
     line.source_expense_item_id = expense.id;
     line.expense_search = expense.name;
     line.description = expense.name;
-    const linkedItem = expense.item_id ? itemById(expense.item_id) : null;
+    const purchasedItemId = expense.purchased_item_id || expense.item_id;
+    const linkedItem = purchasedItemId ? itemById(purchasedItemId) : null;
     const sourceCategoryId = linkedItem?.category_id || expense.category_id;
     line.category_id = mainCategoryId(sourceCategoryId);
     line.subcategory_id = subcategoryId(sourceCategoryId);
-    if (expense.item_id && expense.affects_stock) {
+    if (purchasedItemId && expense.affects_stock) {
       const purchaseUnit = expense.purchase_unit_id
-        ? state.itemUnits.find((row) => row.item_id === expense.item_id && row.unit_id === expense.purchase_unit_id && row.active !== false)
-        : defaultPurchaseUnit(expense.item_id);
-      line.item_id = expense.item_id;
+        ? state.itemUnits.find((row) => row.item_id === purchasedItemId && row.unit_id === expense.purchase_unit_id && row.active !== false)
+        : defaultPurchaseUnit(purchasedItemId);
+      line.item_id = purchasedItemId;
       line.unit_id = expense.purchase_unit_id || purchaseUnit?.unit_id || linkedItem?.base_unit_id || "";
       line.conversion_to_base = Number(expense.stock_conversion_to_base || purchaseUnit?.conversion_to_base || 1);
       line.conversion_overridden = false;
-      if (linkedItem?.track_stock && !(Number(line.quantity) > 0)) line.quantity = 1;
+      if (stockItemForPurchasedItem(linkedItem) && !(Number(line.quantity) > 0)) line.quantity = 1;
       if (previousItem?.id !== linkedItem?.id) line.supplier_name = "";
       const choices = supplierChoices(linkedItem?.id);
       if (choices.length === 1) line.supplier_name = choices[0].name;
@@ -505,7 +525,7 @@
       if (!lineMainCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
       if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
-      if (item?.track_stock && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนหน่วยฐานต่อหน่วยซื้อ`);
+      if (stockItemForPurchasedItem(item) && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนที่เพิ่มเข้าสต็อกต่อหน่วยซื้อ`);
       if (expense?.requires_supplier && !line.supplier_name.trim()) errors.push(`รายการ ${index + 1}: ระบุ Supplier`);
     });
     return errors;
@@ -610,7 +630,7 @@
     const expenseSelect = "id,name,code,category_id,item_id,affects_stock,purchase_unit_id,stock_conversion_to_base,requires_quantity,requires_unit,requires_supplier,requires_receipt,notes,active";
     const [itemsResult, expenseResult, generalExpenseResult, supplierResult, itemUnitsResult] = await Promise.all([
       itemIds.length
-        ? client.schema("boy_central").from("items").select("id,name,code,item_type,base_unit_id,category_id,track_stock,purchaseable,issueable,sellable,brand,package_size,package_unit_id,notes,active").in("id", itemIds).order("name")
+        ? client.schema("boy_central").from("items").select("id,name,code,item_type,base_unit_id,category_id,track_stock,stock_target_item_id,purchaseable,issueable,sellable,brand,package_size,package_unit_id,notes,active").in("id", itemIds).order("name")
         : Promise.resolve({ data: [], error: null }),
       expenseIds.length
         ? client.schema("boy_central").from("expense_items").select(expenseSelect).in("id", expenseIds)
@@ -826,7 +846,77 @@
   function renderStock() {
     const query = $("#stockSearch").value.trim().toLocaleLowerCase("th");
     const rows = state.stock.filter((row) => `${row.item_code} ${row.item_name}`.toLocaleLowerCase("th").includes(query));
-    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ${row.stock_source ? escapeHtml(row.stock_source) : `ต้นทุน ${money.format(row.average_unit_cost || 0)}`}</small></span><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+    $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ${row.stock_source ? escapeHtml(row.stock_source) : `ต้นทุน ${money.format(row.average_unit_cost || 0)}`}</small></span><span class="stock-row-actions"><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span>${state.profile?.company_role === "admin" ? `<button class="stock-settings" type="button" data-stock-group="${escapeHtml(row.item_id)}" aria-label="ตั้งค่า ${escapeHtml(row.item_name)}">⋯</button>` : ""}</span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+  }
+
+  function stockMemberRows(targetId = "") {
+    return state.items.filter((item) => item.id !== targetId && item.active !== false && item.branch_active !== false && !["EXPENSE_ITEM", "SERVICE"].includes(item.item_type));
+  }
+
+  function stockMemberConversion(item) {
+    const expense = expenseForPurchasedItem(item.id);
+    return Number(expense?.stock_conversion_to_base || defaultPurchaseUnit(item.id)?.conversion_to_base || 1);
+  }
+
+  function renderStockGroupMembers() {
+    const targetId = $("#stockGroupId").value;
+    const query = $("#stockGroupSearch").value.trim().toLocaleLowerCase("th");
+    const targetUnit = unitById($("#stockGroupUnit").value)?.name || "หน่วย";
+    const rows = stockMemberRows(targetId).filter((item) => `${item.code || ""} ${item.name || ""}`.toLocaleLowerCase("th").includes(query));
+    $("#stockGroupMembers").innerHTML = rows.length ? rows.map((item) => {
+      const selected = state.stockGroupMembers.has(item.id);
+      const purchaseUnit = defaultPurchaseUnit(item.id);
+      const conversion = state.stockGroupMembers.get(item.id) || stockMemberConversion(item);
+      return `<label class="stock-member-row ${selected ? "selected" : ""}" data-stock-member-row="${item.id}"><input type="checkbox" data-stock-member="${item.id}" ${selected ? "checked" : ""}><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code || "")} · ซื้อเป็น ${escapeHtml(unitById(purchaseUnit?.unit_id)?.name || unitById(item.base_unit_id)?.name || "หน่วย")}</small></span><span class="stock-member-conversion">เพิ่ม ${escapeHtml(targetUnit)}<input type="number" min="0.000001" step="any" inputmode="decimal" data-stock-conversion="${item.id}" value="${conversion}" ${selected ? "" : "disabled"}></span></label>`;
+    }).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+  }
+
+  function openStockGroup(targetId = "") {
+    if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่ตั้งค่าสต็อกได้"); return; }
+    const target = itemById(targetId);
+    $("#stockGroupId").value = target?.id || "";
+    $("#stockGroupName").value = target?.name || "";
+    $("#stockGroupTitle").textContent = target ? `ตั้งค่าสต็อก ${target.name}` : "เพิ่มรายการสต็อก";
+    const categories = state.categories.filter((row) => row.parent_id);
+    $("#stockGroupCategory").innerHTML = optionHtml(categories.length ? categories : state.categories, target?.category_id || categories[0]?.id || state.categories[0]?.id);
+    $("#stockGroupUnit").innerHTML = optionHtml(state.units, target?.base_unit_id || state.units[0]?.id);
+    $("#stockGroupUnit").disabled = Boolean(target);
+    $("#stockGroupCategory").disabled = Boolean(target);
+    $("#stockGroupSearch").value = "";
+    state.stockGroupMembers = new Map(stockMemberRows(target?.id || "")
+      .filter((item) => item.stock_target_item_id === target?.id)
+      .map((item) => [item.id, stockMemberConversion(item)]));
+    renderStockGroupMembers();
+    $("#stockGroupDialog").showModal();
+    $("#stockGroupName").focus({ preventScroll: true });
+  }
+
+  async function saveStockGroup(event) {
+    event.preventDefault();
+    const members = [...state.stockGroupMembers.entries()].map(([itemId, conversion]) => {
+      const item = itemById(itemId);
+      const purchaseUnit = defaultPurchaseUnit(item.id);
+      return { source_item_id: item.id, sourceItemId: item.id, purchaseUnitId: purchaseUnit?.unit_id || item.base_unit_id, conversion_to_target: Number(conversion) || 1, conversionToTarget: Number(conversion) || 1 };
+    });
+    if (!members.length) { toast("กรุณาเลือกสินค้าอย่างน้อย 1 รายการ"); return; }
+    const targetId = $("#stockGroupId").value;
+    const payload = { branch_code: branchApp.branchCode, branchCode: branchApp.branchCode, target_item_id: targetId || null, targetItemId: targetId || "", name: $("#stockGroupName").value.trim(), base_unit_id: $("#stockGroupUnit").value, baseUnitId: $("#stockGroupUnit").value, category_id: $("#stockGroupCategory").value, categoryId: $("#stockGroupCategory").value, subcategoryId: $("#stockGroupCategory").value, members };
+    const button = $("#stockGroupForm button[type=submit]");
+    button.disabled = true; button.textContent = "กำลังบันทึก…";
+    try {
+      if (state.catalogSource === "supabase" && centralAvailable()) {
+        const { error } = await client.schema("boy_central").rpc("admin_save_stock_group", { payload });
+        if (error) throw error;
+        await loadMaster();
+      } else {
+        await legacyApi("stockGroupSave", { payload, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
+        branchApp.legacyEnabled ? await loadLegacyMaster() : await loadMirrorMaster();
+      }
+      $("#stockGroupDialog").close();
+      await loadStock();
+      toast("บันทึกกลุ่มสต็อกแล้ว");
+    } catch (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); }
+    finally { button.disabled = false; button.textContent = "บันทึกสต็อก"; }
   }
 
   async function loadDashboard() {
@@ -889,16 +979,21 @@
 
   function syncMasterPurchaseFields() {
     const isItem = $("#masterKind").value === "item";
-    const enabled = isItem && $("#masterStock").checked;
+    const mode = $("#masterStockMode").value;
+    const enabled = isItem && mode !== "none";
+    $("#masterStock").checked = mode === "self";
+    $("#masterStockTargetField").hidden = mode !== "group";
     $("#masterPurchaseFields").hidden = !enabled;
     if (!enabled) return;
     const baseUnit = unitById($("#masterUnit").value);
     const purchaseUnit = unitById($("#masterPurchaseUnit").value);
+    const target = itemById($("#masterStockTarget").value);
+    const targetUnit = unitById(target?.base_unit_id);
     $("#masterConversion").disabled = !purchaseUnit;
     if (!purchaseUnit) $("#masterConversion").value = 1;
     $("#masterConversionPreview").textContent = purchaseUnit
-      ? `1 ${purchaseUnit.name} = ${number.format(Number($("#masterConversion").value) || 0)} ${baseUnit?.name || "หน่วยฐาน"}`
-      : `ซื้อและนับสต็อกเป็น ${baseUnit?.name || "หน่วยฐาน"}`;
+      ? `ซื้อ 1 ${purchaseUnit.name} เพิ่ม ${number.format(Number($("#masterConversion").value) || 0)} ${mode === "group" ? targetUnit?.name || "หน่วยสต็อกกลาง" : baseUnit?.name || "หน่วยฐาน"}`
+      : `ซื้อและนับสต็อกเป็น ${mode === "group" ? targetUnit?.name || "หน่วยสต็อกกลาง" : baseUnit?.name || "หน่วยฐาน"}`;
   }
 
   function refreshMasterPurchaseUnits(selected = $("#masterPurchaseUnit").value, issueSelected = $("#masterDefaultIssueUnit").value) {
@@ -938,6 +1033,7 @@
     const row = (kind === "item" ? state.items : state.expenseItems).find((entry) => entry.id === id) || {};
     const branchItem = kind === "item" ? branchItemById(row.id) || {} : {};
     const purchaseUnit = kind === "item" ? defaultPurchaseUnit(row.id) : null;
+    const expenseMapping = kind === "item" ? expenseForPurchasedItem(row.id) : null;
     const mainId = mainCategoryId(row.category_id) || mainCategories()[0]?.id || "";
     const selectedSubcategory = state.categories.find((category) => category.id === row.category_id)?.parent_id ? row.category_id : "";
     $("#masterId").value = row.id || "";
@@ -950,9 +1046,12 @@
     $("#masterItemAdvanced").open = false;
     $("#masterUnit").innerHTML = optionHtml(state.units, row.base_unit_id || state.units[0]?.id);
     refreshMasterPurchaseUnits(purchaseUnit?.is_base_unit ? "" : purchaseUnit?.unit_id || "", branchItem.default_issue_unit_id || row.base_unit_id);
-    $("#masterConversion").value = purchaseUnit?.conversion_to_base || 1;
+    $("#masterConversion").value = expenseMapping?.stock_conversion_to_base || purchaseUnit?.conversion_to_base || 1;
     refreshMasterCategories(mainId, selectedSubcategory);
-    $("#masterStock").checked = kind === "item" ? Boolean(row.track_stock) : Boolean(row.affects_stock);
+    const stockMode = kind === "item" ? stockModeForItem(row) : (row.affects_stock ? "self" : "none");
+    $("#masterStockMode").value = stockMode;
+    $("#masterStockTarget").innerHTML = `<option value="">เลือกรายการสต็อกกลาง</option>${optionHtml(stockTargetChoices(row.id), row.stock_target_item_id)}`;
+    $("#masterStock").checked = kind === "item" ? stockMode === "self" : Boolean(row.affects_stock);
     $("#masterStockLabel").textContent = kind === "item" ? "ติดตามสต็อก" : "รายการนี้เพิ่มสต็อก";
     $("#masterItemType").value = row.item_type || (row.track_stock === false ? "NON_STOCK_ITEM" : "STOCK_ITEM");
     $("#masterBrand").value = row.brand || "";
@@ -985,7 +1084,10 @@
     const payload = { idempotency_key: crypto.randomUUID(), kind, id: $("#masterId").value, name: $("#masterName").value.trim(), category_id: $("#masterCategory").value || $("#masterMainCategory").value, active: $("#masterActive").checked, notes: $("#masterNotes").value.trim() };
     if (kind === "item") {
       payload.base_unit_id = $("#masterUnit").value;
-      payload.track_stock = $("#masterStock").checked;
+      payload.stock_mode = $("#masterStockMode").value;
+      payload.stock_target_item_id = $("#masterStockTarget").value || null;
+      if (payload.stock_mode === "group" && !payload.stock_target_item_id) { toast("กรุณาเลือกรายการสต็อกกลาง"); return; }
+      payload.track_stock = payload.stock_mode === "self";
       payload.item_type = $("#masterItemType").value;
       payload.purchase_unit_id = $("#masterPurchaseUnit").value || null;
       payload.conversion_to_base = Number($("#masterConversion").value) || 1;
@@ -1010,12 +1112,22 @@
       payload.sort_order = Number($("#masterSortOrder").value) || 0;
     }
     if (!centralAvailable()) {
+      if (kind === "item" && payload.id && state.localAccess) {
+        try {
+          await legacyApi("stockItemMappingSave", { payload: { branchCode: branchApp.branchCode, sourceItemId: payload.id, mode: ({ none: "ไม่เก็บสต็อก", self: "นับเป็นรายการนี้", group: "รวมเข้ารายการอื่น" })[payload.stock_mode], targetItemId: payload.stock_target_item_id, purchaseUnitId: payload.purchase_unit_id || payload.base_unit_id, conversionToTarget: payload.conversion_to_base }, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
+          $("#masterDialog").close();
+          await loadLegacyMaster();
+          await loadStock();
+          toast("บันทึกการนับสต็อกแล้ว");
+          return;
+        } catch (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
+      }
       queueOperation("master", payload);
       $("#masterDialog").close();
       toast("เก็บการแก้ไขไว้แล้ว จะส่งอัตโนมัติเมื่อออนไลน์");
       return;
     }
-    const { error } = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload });
+    const { data, error } = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload });
     if (error && isNetworkError(error)) {
       queueOperation("master", payload);
       $("#masterDialog").close();
@@ -1023,6 +1135,10 @@
       return;
     }
     if (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
+    if (kind === "item") {
+      const mappingResult = await client.schema("boy_central").rpc("admin_save_stock_mapping", { payload: { branch_code: branchApp.branchCode, source_item_id: data?.id || payload.id, mode: payload.stock_mode, target_item_id: payload.stock_target_item_id, conversion_to_target: payload.conversion_to_base } });
+      if (mappingResult.error) { toast(`บันทึกสินค้าแล้ว แต่ตั้งค่าสต็อกไม่สำเร็จ: ${mappingResult.error.message}`); return; }
+    }
     $("#masterDialog").close();
     await loadMaster();
     toast("อัปเดตรายการแล้ว");
@@ -1189,6 +1305,28 @@
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
+  $("#addStockGroupButton").addEventListener("click", () => openStockGroup());
+  $("#stockList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-stock-group]");
+    if (button) openStockGroup(button.dataset.stockGroup);
+  });
+  $("#stockGroupSearch").addEventListener("input", renderStockGroupMembers);
+  $("#stockGroupUnit").addEventListener("change", renderStockGroupMembers);
+  $("#stockGroupMembers").addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-stock-member]");
+    if (!checkbox) return;
+    const row = checkbox.closest("[data-stock-member-row]");
+    row?.classList.toggle("selected", checkbox.checked);
+    const conversion = row?.querySelector("[data-stock-conversion]");
+    if (conversion) conversion.disabled = !checkbox.checked;
+    if (checkbox.checked) state.stockGroupMembers.set(checkbox.dataset.stockMember, Number(conversion?.value) || stockMemberConversion(itemById(checkbox.dataset.stockMember)));
+    else state.stockGroupMembers.delete(checkbox.dataset.stockMember);
+  });
+  $("#stockGroupMembers").addEventListener("input", (event) => {
+    const input = event.target.closest("[data-stock-conversion]");
+    if (input && state.stockGroupMembers.has(input.dataset.stockConversion)) state.stockGroupMembers.set(input.dataset.stockConversion, Number(input.value) || 1);
+  });
+  $("#stockGroupForm").addEventListener("submit", saveStockGroup);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#masterSearch").addEventListener("input", renderMasterList);
   $$("[data-master-filter]").forEach((button) => button.addEventListener("click", () => {
@@ -1200,7 +1338,8 @@
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterFilter === "expense" ? "expense_item" : "item"));
   $("#accountQuickButton").addEventListener("click", () => setPage("account"));
-  $("#masterStock").addEventListener("change", syncMasterPurchaseFields);
+  $("#masterStockMode").addEventListener("change", syncMasterPurchaseFields);
+  $("#masterStockTarget").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
   $("#masterPurchaseUnit").addEventListener("change", () => refreshMasterPurchaseUnits($("#masterPurchaseUnit").value));
   $("#masterConversion").addEventListener("input", syncMasterPurchaseFields);
