@@ -3908,6 +3908,85 @@ function handleStockItemMappingSave_(payload, actor) {
   } finally { lock.releaseLock(); }
 }
 
+function saveStockGroupMappingsBatch_(targetId, members) {
+  const itemSheet = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+  ensureMasterExtraHeaders_('items', itemSheet);
+  const itemHeaders = masterHeaders_(itemSheet);
+  const itemRows = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+  const itemIdIndex = itemHeaders.indexOf('item_id');
+  const modeIndex = itemHeaders.indexOf('รูปแบบสต็อก');
+  const targetIndex = itemHeaders.indexOf('stock_target_item_id');
+  const trackIndex = itemHeaders.indexOf('ติดตามสต็อก');
+  if ([itemIdIndex, modeIndex, targetIndex, trackIndex].some(function(index) { return index < 0; })) throw new Error('หัวตารางตั้งค่าสต็อกไม่ครบ');
+
+  const selected = {};
+  (members || []).forEach(function(member) {
+    const id = normalizeText_(member.sourceItemId);
+    if (id && id !== targetId) selected[id] = member;
+  });
+  const touched = {};
+  itemRows.forEach(function(row) {
+    const id = normalizeText_(row.item_id);
+    if (selected[id] || normalizeText_(row.stock_target_item_id) === targetId) touched[id] = true;
+  });
+  const lastRow = itemSheet.getLastRow();
+  const count = Math.max(0, lastRow - 1);
+  if (count) {
+    const modeValues = itemSheet.getRange(2, modeIndex + 1, count, 1).getValues();
+    const targetValues = itemSheet.getRange(2, targetIndex + 1, count, 1).getValues();
+    const trackValues = itemSheet.getRange(2, trackIndex + 1, count, 1).getValues();
+    const ids = itemSheet.getRange(2, itemIdIndex + 1, count, 1).getDisplayValues();
+    ids.forEach(function(row, index) {
+      const id = normalizeText_(row[0]);
+      if (selected[id]) {
+        modeValues[index][0] = 'รวมเข้ารายการอื่น';
+        targetValues[index][0] = targetId;
+        trackValues[index][0] = false;
+      } else if (normalizeText_(targetValues[index][0]) === targetId) {
+        modeValues[index][0] = 'นับเป็นรายการนี้';
+        targetValues[index][0] = '';
+        trackValues[index][0] = true;
+      }
+    });
+    itemSheet.getRange(2, modeIndex + 1, count, 1).setValues(modeValues);
+    itemSheet.getRange(2, targetIndex + 1, count, 1).setValues(targetValues);
+    itemSheet.getRange(2, trackIndex + 1, count, 1).setValues(trackValues);
+  }
+
+  const expenseSheet = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterExpenseItems);
+  ensureMasterExtraHeaders_('expenseItems', expenseSheet);
+  const expenseHeaders = masterHeaders_(expenseSheet);
+  const expenseItemIndex = expenseHeaders.indexOf('item_id');
+  const affectsIndex = expenseHeaders.indexOf('กระทบสต็อก');
+  const quantityIndex = expenseHeaders.indexOf('ต้องกรอกจำนวน');
+  const unitRequiredIndex = expenseHeaders.indexOf('ต้องเลือกหน่วย');
+  const purchaseUnitIndex = expenseHeaders.indexOf('purchase_unit_id');
+  const conversionIndex = expenseHeaders.indexOf('อัตราเพิ่มสต็อกต่อหน่วยซื้อ');
+  const expenseCount = Math.max(0, expenseSheet.getLastRow() - 1);
+  if (expenseCount && [expenseItemIndex, affectsIndex, quantityIndex, unitRequiredIndex].every(function(index) { return index >= 0; })) {
+    const itemIds = expenseSheet.getRange(2, expenseItemIndex + 1, expenseCount, 1).getDisplayValues();
+    const affectsValues = expenseSheet.getRange(2, affectsIndex + 1, expenseCount, 1).getValues();
+    const quantityValues = expenseSheet.getRange(2, quantityIndex + 1, expenseCount, 1).getValues();
+    const unitRequiredValues = expenseSheet.getRange(2, unitRequiredIndex + 1, expenseCount, 1).getValues();
+    const purchaseUnitValues = purchaseUnitIndex >= 0 ? expenseSheet.getRange(2, purchaseUnitIndex + 1, expenseCount, 1).getValues() : null;
+    const conversionValues = conversionIndex >= 0 ? expenseSheet.getRange(2, conversionIndex + 1, expenseCount, 1).getValues() : null;
+    itemIds.forEach(function(row, index) {
+      const id = normalizeText_(row[0]);
+      if (!touched[id]) return;
+      affectsValues[index][0] = true;
+      quantityValues[index][0] = true;
+      unitRequiredValues[index][0] = true;
+      if (selected[id] && purchaseUnitValues) purchaseUnitValues[index][0] = normalizeText_(selected[id].purchaseUnitId) || purchaseUnitValues[index][0];
+      if (selected[id] && conversionValues) conversionValues[index][0] = toNumber_(selected[id].conversionToTarget) || conversionValues[index][0] || 1;
+    });
+    expenseSheet.getRange(2, affectsIndex + 1, expenseCount, 1).setValues(affectsValues);
+    expenseSheet.getRange(2, quantityIndex + 1, expenseCount, 1).setValues(quantityValues);
+    expenseSheet.getRange(2, unitRequiredIndex + 1, expenseCount, 1).setValues(unitRequiredValues);
+    if (purchaseUnitValues) expenseSheet.getRange(2, purchaseUnitIndex + 1, expenseCount, 1).setValues(purchaseUnitValues);
+    if (conversionValues) expenseSheet.getRange(2, conversionIndex + 1, expenseCount, 1).setValues(conversionValues);
+  }
+}
+
 function handleStockGroupSave_(payload, actor) {
   payload = payload || {};
   const branch = stockBranchRow_(payload.branchCode);
@@ -3924,40 +4003,25 @@ function handleStockGroupSave_(payload, actor) {
       'ขายได้': false, 'เปิดใช้งาน': true
     }, [branchId], actor || {}, '', true);
     targetId = normalizeText_(saved.row && saved.row.item_id);
-  } else if (normalizeText_(payload.name)) {
+  } else {
     const itemSheet = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
     const headers = masterHeaders_(itemSheet);
     const target = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).find(function(row) {
       return normalizeText_(row.item_id) === targetId;
     });
     if (!target) throw new Error('ไม่พบรายการสต็อกกลาง');
-    const nameIndex = headers.indexOf('ชื่อสินค้า');
-    if (nameIndex >= 0 && normalizeText_(target['ชื่อสินค้า']) !== normalizeText_(payload.name)) {
-      const before = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
-      itemSheet.getRange(target.__rowNumber, nameIndex + 1).setValue(normalizeText_(payload.name));
-      const after = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
-      recordMasterAudit_(itemSheet.getName(), target.__rowNumber, 'แก้ชื่อสต็อกกลาง', masterRowObject_(headers, before), masterRowObject_(headers, after), actor || {});
-    }
+    const before = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+    const updates = {'ชื่อสินค้า': normalizeText_(payload.name), category_id: normalizeText_(payload.categoryId), subcategory_id: normalizeText_(payload.subcategoryId), base_unit_id: normalizeText_(payload.baseUnitId)};
+    Object.keys(updates).forEach(function(header) {
+      const index = headers.indexOf(header);
+      if (index >= 0 && updates[header]) itemSheet.getRange(target.__rowNumber, index + 1).setValue(updates[header]);
+    });
+    const after = itemSheet.getRange(target.__rowNumber, 1, 1, headers.length).getDisplayValues()[0];
+    recordMasterAudit_(itemSheet.getName(), target.__rowNumber, 'แก้กลุ่มสต็อก', masterRowObject_(headers, before), masterRowObject_(headers, after), actor || {});
   }
   if (!targetId) throw new Error('สร้างรายการสต็อกไม่สำเร็จ');
 
-  const currentMembers = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).filter(function(row) {
-    return normalizeText_(row.stock_target_item_id) === targetId;
-  });
-  const selected = {};
-  members.forEach(function(member) { selected[normalizeText_(member.sourceItemId)] = true; });
-  currentMembers.forEach(function(row) {
-    const id = normalizeText_(row.item_id);
-    if (selected[id]) return;
-    applyStockItemMapping_({ branchCode: payload.branchCode, sourceItemId: id, mode: 'นับเป็นรายการนี้', purchaseUnitId: row.base_unit_id, conversionToTarget: 1 }, actor || {});
-  });
-  members.forEach(function(member) {
-    applyStockItemMapping_({
-      branchCode: payload.branchCode, sourceItemId: member.sourceItemId,
-      mode: 'รวมเข้ารายการอื่น', targetItemId: targetId,
-      purchaseUnitId: member.purchaseUnitId, conversionToTarget: member.conversionToTarget
-    }, actor || {});
-  });
+  saveStockGroupMappingsBatch_(targetId, members);
   return { status: 'success', targetItemId: targetId, memberCount: members.length };
 }
 

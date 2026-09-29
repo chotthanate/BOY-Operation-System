@@ -66,13 +66,10 @@
 .stock-group-dialog { width: min(520px, calc(100% - 28px)); max-height: min(90vh, 820px); overflow-y: auto; text-align: left; }
 .stock-member-search { margin: 0; }
 .stock-member-list { display: grid; gap: 8px; max-height: 330px; overflow-y: auto; overscroll-behavior: contain; }
-.stock-member-row { display: grid; grid-template-columns: 24px minmax(0,1fr) 112px; gap: 9px; align-items: center; padding: 10px; border: 1px solid #dce9e5; border-radius: 13px; background: #fff; }
+.stock-member-row { display: grid; grid-template-columns: 24px minmax(0,1fr); gap: 9px; align-items: center; padding: 10px; border: 1px solid #dce9e5; border-radius: 13px; background: #fff; }
 .stock-member-row input[type="checkbox"] { width: 20px; height: 20px; }
 .stock-member-row strong,.stock-member-row small { display: block; }
 .stock-member-row small { margin-top: 3px; color: var(--muted); font-size: .7rem; }
-.stock-member-conversion { display: grid; gap: 3px; color: var(--muted); font-size: .66rem; }
-.stock-member-conversion input { min-height: 40px; padding: 7px 9px; text-align: right; }
-.stock-member-row:not(.selected) .stock-member-conversion { opacity: .4; }
 .check-row { display: flex !important; align-items: center; gap: 10px; }
 .check-row input { width: 20px !important; height: 20px !important; }
 .bottom-nav { grid-template-columns: repeat(5, 1fr); }
@@ -86,5 +83,5 @@
   .supplier-choices { grid-template-columns: 1fr; }
   .check-grid { grid-template-columns: 1fr 1fr; }
   .field-grid.three.stock-threshold-grid { grid-template-columns: 1fr; }
-  .stock-member-row { grid-template-columns: 22px minmax(0,1fr) 94px; }
+  .stock-member-row { grid-template-columns: 22px minmax(0,1fr); }
 }

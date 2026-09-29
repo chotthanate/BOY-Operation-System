@@ -861,13 +861,11 @@
   function renderStockGroupMembers() {
     const targetId = $("#stockGroupId").value;
     const query = $("#stockGroupSearch").value.trim().toLocaleLowerCase("th");
-    const targetUnit = unitById($("#stockGroupUnit").value)?.name || "หน่วย";
     const rows = stockMemberRows(targetId).filter((item) => `${item.code || ""} ${item.name || ""}`.toLocaleLowerCase("th").includes(query));
     $("#stockGroupMembers").innerHTML = rows.length ? rows.map((item) => {
       const selected = state.stockGroupMembers.has(item.id);
       const purchaseUnit = defaultPurchaseUnit(item.id);
-      const conversion = state.stockGroupMembers.get(item.id) || stockMemberConversion(item);
-      return `<label class="stock-member-row ${selected ? "selected" : ""}" data-stock-member-row="${item.id}"><input type="checkbox" data-stock-member="${item.id}" ${selected ? "checked" : ""}><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code || "")} · ซื้อเป็น ${escapeHtml(unitById(purchaseUnit?.unit_id)?.name || unitById(item.base_unit_id)?.name || "หน่วย")}</small></span><span class="stock-member-conversion">เพิ่ม ${escapeHtml(targetUnit)}<input type="number" min="0.000001" step="any" inputmode="decimal" data-stock-conversion="${item.id}" value="${conversion}" ${selected ? "" : "disabled"}></span></label>`;
+      return `<label class="stock-member-row ${selected ? "selected" : ""}" data-stock-member-row="${item.id}"><input type="checkbox" data-stock-member="${item.id}" ${selected ? "checked" : ""}><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.code || "")} · ${escapeHtml(unitById(purchaseUnit?.unit_id)?.name || unitById(item.base_unit_id)?.name || "หน่วย")}</small></span></label>`;
     }).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
   }
 
@@ -880,8 +878,6 @@
     const categories = state.categories.filter((row) => row.parent_id);
     $("#stockGroupCategory").innerHTML = optionHtml(categories.length ? categories : state.categories, target?.category_id || categories[0]?.id || state.categories[0]?.id);
     $("#stockGroupUnit").innerHTML = optionHtml(state.units, target?.base_unit_id || state.units[0]?.id);
-    $("#stockGroupUnit").disabled = Boolean(target);
-    $("#stockGroupCategory").disabled = Boolean(target);
     $("#stockGroupSearch").value = "";
     state.stockGroupMembers = new Map(stockMemberRows(target?.id || "")
       .filter((item) => item.stock_target_item_id === target?.id)
@@ -907,14 +903,16 @@
       if (state.catalogSource === "supabase" && centralAvailable()) {
         const { error } = await client.schema("boy_central").rpc("admin_save_stock_group", { payload });
         if (error) throw error;
+        $("#stockGroupDialog").close();
+        toast("บันทึกกลุ่มสต็อกแล้ว");
         await loadMaster();
       } else {
         await legacyApi("stockGroupSave", { payload, actor: { id: state.session?.user?.id || "local", name: state.profile?.display_name || "ผู้ใช้งาน BOY" } });
+        $("#stockGroupDialog").close();
+        toast("บันทึกกลุ่มสต็อกแล้ว");
         branchApp.legacyEnabled ? await loadLegacyMaster() : await loadMirrorMaster();
       }
-      $("#stockGroupDialog").close();
       await loadStock();
-      toast("บันทึกกลุ่มสต็อกแล้ว");
     } catch (error) { toast(`บันทึกไม่สำเร็จ: ${error.message}`); }
     finally { button.disabled = false; button.textContent = "บันทึกสต็อก"; }
   }
@@ -1311,20 +1309,13 @@
     if (button) openStockGroup(button.dataset.stockGroup);
   });
   $("#stockGroupSearch").addEventListener("input", renderStockGroupMembers);
-  $("#stockGroupUnit").addEventListener("change", renderStockGroupMembers);
   $("#stockGroupMembers").addEventListener("change", (event) => {
     const checkbox = event.target.closest("[data-stock-member]");
     if (!checkbox) return;
     const row = checkbox.closest("[data-stock-member-row]");
     row?.classList.toggle("selected", checkbox.checked);
-    const conversion = row?.querySelector("[data-stock-conversion]");
-    if (conversion) conversion.disabled = !checkbox.checked;
-    if (checkbox.checked) state.stockGroupMembers.set(checkbox.dataset.stockMember, Number(conversion?.value) || stockMemberConversion(itemById(checkbox.dataset.stockMember)));
+    if (checkbox.checked) state.stockGroupMembers.set(checkbox.dataset.stockMember, stockMemberConversion(itemById(checkbox.dataset.stockMember)));
     else state.stockGroupMembers.delete(checkbox.dataset.stockMember);
-  });
-  $("#stockGroupMembers").addEventListener("input", (event) => {
-    const input = event.target.closest("[data-stock-conversion]");
-    if (input && state.stockGroupMembers.has(input.dataset.stockConversion)) state.stockGroupMembers.set(input.dataset.stockConversion, Number(input.value) || 1);
   });
   $("#stockGroupForm").addEventListener("submit", saveStockGroup);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
