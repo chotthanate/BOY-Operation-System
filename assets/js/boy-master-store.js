@@ -4,6 +4,7 @@
   const STORE_NAME = "master-catalogs";
   const CACHE_VERSION = 1;
   const SOFT_TTL = 5 * 60 * 1000;
+  const OUTBOX_PREFIX = "__outbox-ops__:";
   const pending = new Map();
   let databasePromise;
   let supabaseClient;
@@ -62,6 +63,64 @@
     } catch (_) {}
   }
 
+  async function putEntry(entry) {
+    const db = await database();
+    await new Promise((resolve, reject) => {
+      const request = db.transaction(STORE_NAME, "readwrite").objectStore(STORE_NAME).put(entry);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async function allEntries() {
+    try {
+      const db = await database();
+      return await new Promise((resolve, reject) => {
+        const request = db.transaction(STORE_NAME).objectStore(STORE_NAME).getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => reject(request.error);
+      });
+    } catch (_) { return []; }
+  }
+
+  function operationKey(sheetName) { return `${OUTBOX_PREFIX}${sheetName}`; }
+  function localOperationId() {
+    return globalThis.crypto?.randomUUID?.() || `offline-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+  function isLocalRowNumber(value) { return String(value || "").startsWith("local:"); }
+  function isRetryable(error) {
+    if (!navigator.onLine) return true;
+    const text = `${error?.status || ""} ${error?.code || ""} ${error?.message || error || ""}`.toLowerCase();
+    return /(^|\s)(402|408|429|500|502|503|504)(\s|$)|payment required|quota|restricted|service unavailable|failed to fetch|network|timeout|ใช้เวลาตอบกลับ|supabase ยังไม่พร้อม|supabase ไม่พร้อม|ยังไม่มีเซสชัน/.test(text);
+  }
+
+  async function queueOperation(sheetName, operation) {
+    const key = operationKey(sheetName);
+    const queued = await cached(key);
+    const operations = Array.isArray(queued?.operations) ? queued.operations.slice() : [];
+    const matchIndex = operations.findIndex(item => {
+      if (operation.localRowNumber && item.localRowNumber === operation.localRowNumber) return true;
+      return operation.rowNumber && item.rowNumber && String(item.rowNumber) === String(operation.rowNumber);
+    });
+    if (matchIndex >= 0 && operation.type === "save" && operations[matchIndex].type === "save") {
+      const previous = operations[matchIndex];
+      operations[matchIndex] = {
+        ...previous,
+        ...operation,
+        values: { ...(previous.values || {}), ...(operation.values || {}) },
+        queuedAt: Date.now()
+      };
+    } else operations.push(operation);
+    await putEntry({ sheetName: key, kind: "operation-outbox", targetSheetName: sheetName, operations, queuedAt: Date.now() });
+    window.dispatchEvent(new CustomEvent("boy-master-outbox-updated", { detail: { sheetName, count: operations.length } }));
+    return operations.length;
+  }
+
+  async function pendingCount(sheetName) {
+    const queued = await cached(operationKey(sheetName));
+    return Array.isArray(queued?.operations) ? queued.operations.length : 0;
+  }
+
   async function queueCatalog(sheetName, catalog) {
     try {
       const db = await database();
@@ -92,6 +151,50 @@
     await remove(key);
   }
 
+  async function flushOperationOutbox(central, sheetName) {
+    const key = operationKey(sheetName);
+    const queued = await cached(key);
+    let operations = Array.isArray(queued?.operations) ? queued.operations.slice() : [];
+    if (!operations.length) return null;
+    const { data: initialCatalog, error: loadError } = await withTimeout(
+      central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName }),
+      8000,
+      "Supabase ใช้เวลาตอบกลับนานเกินไป"
+    );
+    if (loadError) throw loadError;
+    let remoteCatalog = initialCatalog;
+    while (operations.length) {
+      const operation = operations[0];
+      let result;
+      if (operation.type === "bulk") {
+        result = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+          target_sheet_name: sheetName,
+          rows: operation.rows || [],
+          actor_name: operation.actorName || "ซิงก์รายการที่บันทึกในเครื่อง"
+        }), 30000, "ส่งข้อมูลที่รอซิงก์ไม่สำเร็จ");
+      } else {
+        let targetRowNumber = operation.rowNumber || null;
+        if (!targetRowNumber && operation.idHeader && operation.idValue) {
+          const existing = (remoteCatalog?.rows || []).find(row => String(row[operation.idHeader] || "") === String(operation.idValue));
+          targetRowNumber = existing?.__rowNumber || null;
+        }
+        result = await withTimeout(central.schema("boy_central").rpc("save_master_catalog_row", {
+          target_sheet_name: sheetName,
+          target_row_number: targetRowNumber ? Number(targetRowNumber) : null,
+          payload: operation.values || {},
+          actor_name: operation.actorName || "ซิงก์รายการที่บันทึกในเครื่อง"
+        }), 15000, "ส่งข้อมูลที่รอซิงก์ไม่สำเร็จ");
+      }
+      if (result.error) throw result.error;
+      remoteCatalog = result.data || remoteCatalog;
+      operations.shift();
+      if (operations.length) await putEntry({ ...queued, operations, queuedAt: Date.now() });
+      else await remove(key);
+      window.dispatchEvent(new CustomEvent("boy-master-outbox-updated", { detail: { sheetName, count: operations.length } }));
+    }
+    return remoteCatalog;
+  }
+
   function client() {
     if (supabaseClient) return supabaseClient;
     const config = window.BOY_CENTRAL_CONFIG || {};
@@ -105,7 +208,7 @@
     if (!central) throw new Error("Supabase ยังไม่พร้อม");
     const { data: sessionData } = await withTimeout(central.auth.getSession(), 2500, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (!sessionData?.session) throw new Error("ยังไม่มีเซสชัน Supabase");
-    await flushCatalogOutbox(central, sheetName);
+    await flushOperationOutbox(central, sheetName);
     const { data, error } = await withTimeout(central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName }), 8000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (error) throw error;
     if (!data?.sheetName) throw new Error("ไม่พบข้อมูลใน Supabase");
@@ -119,10 +222,19 @@
       let source = "supabase";
       try { catalog = await fromSupabase(sheetName); }
       catch (supabaseError) {
-        source = "google-sheets-fallback";
-        catalog = await legacyLoad();
-        catalog._supabaseError = supabaseError?.message || String(supabaseError);
+        const local = await cached(sheetName);
+        if (local?.catalog) {
+          source = "device-cache";
+          catalog = { ...local.catalog, _source: "device-cache", _supabaseError: supabaseError?.message || String(supabaseError) };
+        } else {
+          source = "google-sheets-fallback";
+          catalog = await legacyLoad();
+          catalog._supabaseError = supabaseError?.message || String(supabaseError);
+        }
       }
+      const waiting = await pendingCount(sheetName);
+      if (waiting) catalog = { ...catalog, _pendingSync: true, _pendingSyncCount: waiting };
+      else if (catalog) { delete catalog._pendingSync; delete catalog._pendingSyncCount; }
       catalog = await remember(sheetName, catalog, source);
       if (notify) window.dispatchEvent(new CustomEvent("boy-master-catalog-updated", { detail: { sheetName, catalog } }));
       return catalog;
@@ -167,6 +279,35 @@
     };
   }
 
+  function mergeLocalSave(currentCatalog, rowNumber, values, localRowNumber) {
+    const rows = (currentCatalog?.rows || []).slice();
+    const index = rows.findIndex(row => String(row.__rowNumber) === String(rowNumber || localRowNumber));
+    const previous = index >= 0 ? rows[index] : {};
+    const row = {
+      ...previous,
+      ...values,
+      __rowNumber: rowNumber || localRowNumber,
+      __version: previous.__version || `offline:${Date.now()}`,
+      __pendingSync: true
+    };
+    if (index >= 0) rows[index] = row;
+    else rows.push(row);
+    return { ...currentCatalog, rows, _source: "device-cache", _pendingSync: true };
+  }
+
+  function mergeLocalBulk(currentCatalog, updates) {
+    const rows = (currentCatalog?.rows || []).slice();
+    const idHeader = currentCatalog?.idHeader;
+    (updates || []).forEach(values => {
+      const index = idHeader ? rows.findIndex(row => String(row[idHeader] || "") === String(values[idHeader] || "")) : -1;
+      const localRowNumber = index >= 0 ? rows[index].__rowNumber : `local:${localOperationId()}`;
+      const row = { ...(index >= 0 ? rows[index] : {}), ...values, __rowNumber: localRowNumber, __pendingSync: true };
+      if (index >= 0) rows[index] = row;
+      else rows.push(row);
+    });
+    return { ...currentCatalog, rows, _source: "device-cache", _pendingSync: true };
+  }
+
   async function applyPatch(sheetName, currentCatalog, result) {
     return remember(sheetName, mergeCompactResult(currentCatalog, result), "google-sheets-fallback");
   }
@@ -177,23 +318,39 @@
       try {
         const { data: sessionData } = await central.auth.getSession();
         if (sessionData?.session) {
-          const { data, error } = await central.schema("boy_central").rpc("save_master_catalog_row", {
+          const { data, error } = await withTimeout(central.schema("boy_central").rpc("save_master_catalog_row", {
             target_sheet_name: sheetName,
-            target_row_number: rowNumber ? Number(rowNumber) : null,
+            target_row_number: rowNumber && !isLocalRowNumber(rowNumber) ? Number(rowNumber) : null,
             payload: values,
             actor_name: actorName || "เจ้าของร้าน"
-          });
+          }), 12000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
           if (error) throw error;
           const catalog = await remember(sheetName, data, "supabase");
           Promise.resolve().then(() => legacySave("mirror")).catch(() => {});
           return catalog;
         }
-      } catch (_) {}
+      } catch (error) {
+        if (!isRetryable(error)) throw error;
+      }
     }
-    const result = await legacySave("fallback");
-    const catalog = mergeCompactResult(currentCatalog, result);
-    const remembered = await remember(sheetName, catalog, "google-sheets-fallback");
-    await queueCatalog(sheetName, remembered);
+    const operationId = localOperationId();
+    const previousLocal = isLocalRowNumber(rowNumber) ? String(rowNumber) : "";
+    const localRowNumber = previousLocal || `local:${operationId}`;
+    const idHeader = currentCatalog?.idHeader || "";
+    const count = await queueOperation(sheetName, {
+      id: operationId,
+      type: "save",
+      rowNumber: rowNumber && !isLocalRowNumber(rowNumber) ? rowNumber : null,
+      localRowNumber,
+      idHeader,
+      idValue: idHeader ? values?.[idHeader] : "",
+      values,
+      actorName: actorName || "เจ้าของร้าน",
+      queuedAt: Date.now()
+    });
+    const catalog = mergeLocalSave(currentCatalog, rowNumber, values, localRowNumber);
+    catalog._pendingSyncCount = count;
+    const remembered = await remember(sheetName, catalog, "device-cache");
     return remembered;
   }
 
@@ -207,22 +364,27 @@
   async function bulkSave(sheetName, rows, actorName, legacySave, currentCatalog) {
     const central = client();
     if (central) {
-      const { data: sessionData } = await central.auth.getSession();
-      if (sessionData?.session) {
-        const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
-          target_sheet_name: sheetName,
-          rows,
-          actor_name: actorName || "เจ้าของร้าน"
-        }), 30000, "นำเข้าข้อมูลใช้เวลานานเกินไป");
-        if (error) throw error;
-        const catalog = await remember(sheetName, data, "supabase");
-        Promise.resolve().then(() => legacySave("mirror")).catch(() => {});
-        return catalog;
+      try {
+        const { data: sessionData } = await central.auth.getSession();
+        if (sessionData?.session) {
+          const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+            target_sheet_name: sheetName,
+            rows,
+            actor_name: actorName || "เจ้าของร้าน"
+          }), 30000, "นำเข้าข้อมูลใช้เวลานานเกินไป");
+          if (error) throw error;
+          const catalog = await remember(sheetName, data, "supabase");
+          Promise.resolve().then(() => legacySave("mirror")).catch(() => {});
+          return catalog;
+        }
+      } catch (error) {
+        if (!isRetryable(error)) throw error;
       }
     }
-    const result = await legacySave("fallback");
-    const remembered = await remember(sheetName, result, "google-sheets-fallback");
-    await queueCatalog(sheetName, remembered);
+    const count = await queueOperation(sheetName, { id: localOperationId(), type: "bulk", rows, actorName: actorName || "เจ้าของร้าน", queuedAt: Date.now() });
+    const catalog = mergeLocalBulk(currentCatalog, rows);
+    catalog._pendingSyncCount = count;
+    const remembered = await remember(sheetName, catalog, "device-cache");
     return remembered;
   }
 
@@ -234,5 +396,31 @@
     }
   }
 
-  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached };
+  async function syncPending(sheetName, legacyLoad = () => Promise.reject(new Error("ไม่มีข้อมูลสำรอง"))) {
+    return refresh(sheetName, legacyLoad, true);
+  }
+
+  async function syncAllPending() {
+    if (!navigator.onLine || !client()) return { synced: 0 };
+    const entries = (await allEntries()).filter(entry => entry?.kind === "operation-outbox" && entry.targetSheetName);
+    let synced = 0;
+    for (const entry of entries) {
+      try {
+        const catalog = await fromSupabase(entry.targetSheetName);
+        await remember(entry.targetSheetName, catalog, "supabase");
+        synced += 1;
+        window.dispatchEvent(new CustomEvent("boy-master-catalog-updated", { detail: { sheetName: entry.targetSheetName, catalog, syncedFromOutbox: true } }));
+      } catch (_) {}
+    }
+    return { synced };
+  }
+
+  window.addEventListener("online", () => {
+    window.dispatchEvent(new CustomEvent("boy-master-connectivity-restored"));
+    syncAllPending().catch(() => {});
+  });
+  setTimeout(() => syncAllPending().catch(() => {}), 1500);
+  setInterval(() => syncAllPending().catch(() => {}), 5 * 60 * 1000);
+
+  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached, pendingCount, syncPending, syncAllPending };
 })();
