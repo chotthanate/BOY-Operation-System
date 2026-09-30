@@ -11,7 +11,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], stockCachedAt: "", lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), draftTimer: null, syncing: false };
 
   function applyBranchIdentity() {
     document.documentElement.style.setProperty("--store-accent", branchApp.accent);
@@ -61,6 +61,7 @@
   const outboxKey = () => `boy-${branchApp.slug}-outbox:${state.session?.user?.id || "guest"}`;
   const profileCacheKey = () => `boy-${branchApp.slug}-profile:${state.session?.user?.id || "guest"}`;
   const masterCacheKey = () => `boy-${branchApp.slug}-master:${state.session?.user?.id || "guest"}`;
+  const stockCacheKey = () => `boy-${branchApp.slug}-stock:${state.branch?.id || "unknown"}`;
   function readCache(key) {
     try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { return null; }
   }
@@ -120,6 +121,28 @@
     renderLines();
     renderMasterList();
     updateSyncStatus();
+    return true;
+  }
+
+  function stockCacheLabel(savedAt) {
+    if (!savedAt) return "ยอดล่าสุดในเครื่อง";
+    return `ยอดในเครื่อง · ${new Date(savedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}`;
+  }
+
+  function saveStockCache(rows) {
+    const savedAt = new Date().toISOString();
+    localStorage.setItem(stockCacheKey(), JSON.stringify({ rows, saved_at: savedAt }));
+    state.stockCachedAt = savedAt;
+  }
+
+  function loadStockCache() {
+    const cached = readCache(stockCacheKey());
+    if (!Array.isArray(cached?.rows)) return false;
+    state.stockCachedAt = cached.saved_at || "";
+    const label = stockCacheLabel(state.stockCachedAt);
+    state.stock = cached.rows.map((row) => ({ ...row, stock_source: label }));
+    $("#stockPageSubtitle").textContent = label;
+    renderStock();
     return true;
   }
 
@@ -729,14 +752,24 @@
   async function loadStock() {
     if (!state.branch) return;
     if (!centralAvailable()) {
-      $("#stockList").innerHTML = '<div class="empty-state">Supabase ยังไม่พร้อม จึงยังแสดงยอดสต็อกล่าสุดไม่ได้</div>';
+      if (!loadStockCache()) {
+        $("#stockPageSubtitle").textContent = "ยังไม่มียอดในเครื่อง";
+        $("#stockList").innerHTML = '<div class="empty-state">ยังไม่มียอดสต็อกที่บันทึกไว้ในเครื่อง<br><small>เมื่อระบบกลางกลับมา เว็บจะบันทึกยอดล่าสุดให้อัตโนมัติ</small></div>';
+      }
       return;
     }
+    $("#stockPageSubtitle").textContent = "กำลังอัปเดตยอดล่าสุด";
     $("#stockList").innerHTML = '<div class="empty-state">กำลังโหลด</div>';
     const centralResult = await client.schema("boy_central").from("v_stock_on_hand")
       .select("item_id,item_code,item_name,base_unit_name,quantity_on_hand,average_unit_cost,inventory_value,updated_at")
       .eq("branch_id", state.branch.id).order("item_name");
-    if (centralResult.error) { $("#stockList").innerHTML = `<div class="empty-state">${escapeHtml(centralResult.error.message)}</div>`; return; }
+    if (centralResult.error) {
+      if (!loadStockCache()) {
+        $("#stockPageSubtitle").textContent = "อัปเดตยอดไม่สำเร็จ";
+        $("#stockList").innerHTML = '<div class="empty-state">ยังไม่มียอดสต็อกที่บันทึกไว้ในเครื่อง<br><small>ลองโหลดใหม่เมื่อระบบกลางพร้อม</small></div>';
+      }
+      return;
+    }
     const stockByItem = new Map(state.items.filter((item) => item.track_stock && item.active !== false && item.branch_active !== false).map((item) => [item.id, {
       item_id: item.id,
       item_code: item.code,
@@ -749,6 +782,8 @@
     }]));
     (centralResult.data || []).forEach((row) => stockByItem.set(row.item_id, { ...row, stock_source: "BOY Central" }));
     state.stock = [...stockByItem.values()];
+    saveStockCache(state.stock);
+    $("#stockPageSubtitle").textContent = "คงเหลือปัจจุบัน";
     renderStock();
   }
 
