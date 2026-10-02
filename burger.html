@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
   <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20260930-10">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261002-1">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
@@ -17,7 +17,7 @@
   <div class="app-shell">
     <header class="topbar branch-shell-header">
       <button class="branch-identity" id="storeButton" type="button" aria-haspopup="dialog"><span class="branch-identity-mark store-mark" id="branchMark">BG</span><span class="branch-identity-copy"><strong id="branchName">ร้านเบอร์เกอร์</strong><small id="branchSubtitle">ร้านอาหาร · แตะเพื่อเปลี่ยนสาขา</small></span></button>
-      <div class="branch-header-actions"><span class="connection-badge" id="connectionBadge">กำลังเชื่อมต่อ</span><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
+      <div class="branch-header-actions"><button class="connection-badge" id="connectionBadge" type="button">กำลังเชื่อมต่อ</button><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
     </header>
 
     <main>
@@ -63,7 +63,24 @@
       </section>
 
       <section class="page" id="accountPage" data-page="account">
-        <div class="section-heading compact"><div><small>บัญชีผู้ใช้</small><h1>บัญชี</h1></div></div>
+        <div class="section-heading compact"><div><small>บัญชีและระบบ</small><h1>ระบบและการซิงก์</h1></div></div>
+        <section class="panel sync-panel">
+          <div class="sync-summary">
+            <div><small>สถานะระบบ</small><strong id="syncConnectionValue">กำลังตรวจสอบ</strong></div>
+            <div><small>ข้อมูลรอส่ง</small><strong id="syncPendingValue">0 รายการ</strong></div>
+          </div>
+          <div class="capacity-card">
+            <div class="capacity-heading"><span>พื้นที่ฐานข้อมูล</span><strong id="databaseCapacityValue">กำลังตรวจสอบ</strong></div>
+            <div class="capacity-track" aria-hidden="true"><span id="databaseCapacityBar"></span></div>
+            <small id="databaseCapacityNote">ข้อมูลจาก Supabase</small>
+          </div>
+          <div class="sync-queue" id="syncQueueList"><div class="empty-state compact-empty">ไม่มีรายการค้าง</div></div>
+          <div class="sync-actions">
+            <button class="primary-button" id="syncNowButton" type="button">ส่งข้อมูลที่ค้าง</button>
+            <button class="secondary-button" id="reconnectButton" type="button" hidden>เชื่อมต่อ Supabase ใหม่</button>
+          </div>
+          <div class="sync-meta"><span id="lastSyncValue">ยังไม่มีประวัติการส่ง</span><a id="supabaseUsageLink" href="#" target="_blank" rel="noopener">ดู Egress และ Storage ↗</a></div>
+        </section>
         <section class="panel account-panel"><div class="account-avatar">BOY</div><strong id="accountName">—</strong><span id="accountEmail">—</span><button class="secondary-button" id="logoutButton" type="button">ออกจากระบบ</button></section>
       </section>
 
@@ -179,9 +196,9 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/boy-central-config.js?v=20260915-1"></script>
+  <script src="assets/js/boy-central-config.js?v=20261002-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
-  <script src="assets/js/burger.js?v=20260930-8"></script>
+  <script src="assets/js/burger.js?v=20261002-1"></script>
 </body>
 </html>

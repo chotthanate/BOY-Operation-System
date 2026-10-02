@@ -62,6 +62,7 @@
   const profileCacheKey = () => `boy-${branchApp.slug}-profile:${state.session?.user?.id || "guest"}`;
   const masterCacheKey = () => `boy-${branchApp.slug}-master:${state.session?.user?.id || "guest"}`;
   const stockCacheKey = () => `boy-${branchApp.slug}-stock:${state.branch?.id || "unknown"}`;
+  const lastSyncKey = () => `boy-${branchApp.slug}-last-sync:${state.session?.user?.id || "guest"}`;
   function readCache(key) {
     try { return JSON.parse(localStorage.getItem(key) || "null"); } catch (_) { return null; }
   }
@@ -80,10 +81,66 @@
   function updateSyncStatus() {
     if (!state.session) return;
     const count = readOutbox().length;
-    if (state.localAccess) { setConnection("Supabase ยังไม่พร้อม · ดูข้อมูลสำรองได้อย่างเดียว", "pending"); return; }
+    if (state.localAccess) { setConnection(count ? `โหมดสำรอง · รอส่ง ${count}` : "โหมดสำรองในเครื่อง", "pending"); renderSyncCenter(); return; }
     if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
     else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
     else setConnection(`เชื่อมต่อแล้ว · ${state.items.filter((row) => row.active !== false && row.branch_active !== false).length} สินค้า`, "online");
+    renderSyncCenter();
+  }
+
+  function queueTypeLabel(type) {
+    return ({ expense: "รายจ่าย", expense_legacy: "รายจ่าย", master: "ข้อมูลสินค้า" })[type] || "ข้อมูล";
+  }
+
+  function renderSyncCenter() {
+    const connection = $("#syncConnectionValue");
+    if (!connection) return;
+    const rows = readOutbox();
+    connection.textContent = state.localAccess ? "โหมดสำรองในเครื่อง" : !navigator.onLine ? "ออฟไลน์" : state.session ? "เชื่อมต่อแล้ว" : "รอเข้าสู่ระบบ";
+    $("#syncPendingValue").textContent = `${rows.length} รายการ`;
+    $("#syncQueueList").innerHTML = rows.length ? rows.map((row) => {
+      const time = row.queued_at ? new Date(row.queued_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" }) : "";
+      const error = row.last_error ? `<small>${escapeHtml(row.last_error)}</small>` : `<small>${escapeHtml(time)}</small>`;
+      return `<article class="sync-queue-row"><span><strong>${escapeHtml(queueTypeLabel(row.type))}</strong>${error}</span><span>รอส่ง</span></article>`;
+    }).join("") : '<div class="empty-state compact-empty">ไม่มีรายการค้าง</div>';
+    const syncButton = $("#syncNowButton");
+    syncButton.disabled = state.syncing || !rows.length || !navigator.onLine || state.localAccess || !state.session;
+    syncButton.textContent = state.syncing ? "กำลังส่ง…" : rows.length ? `ส่ง ${rows.length} รายการ` : "ส่งครบแล้ว";
+    $("#reconnectButton").hidden = !state.localAccess;
+    const savedAt = localStorage.getItem(lastSyncKey());
+    $("#lastSyncValue").textContent = savedAt ? `ส่งล่าสุด ${new Date(savedAt).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}` : "ยังไม่มีประวัติการส่ง";
+    const usageLink = $("#supabaseUsageLink");
+    usageLink.href = config.usageUrl || "https://supabase.com/dashboard";
+  }
+
+  async function loadCapacityStatus() {
+    const value = $("#databaseCapacityValue");
+    if (!value) return;
+    const bar = $("#databaseCapacityBar");
+    const note = $("#databaseCapacityNote");
+    bar.className = "";
+    if (!navigator.onLine || state.localAccess || !state.session) {
+      value.textContent = "รอเชื่อมต่อ";
+      note.textContent = state.localAccess ? "เชื่อมต่อ Supabase ใหม่เพื่อดูพื้นที่" : "ยังอ่านข้อมูลไม่ได้";
+      bar.style.width = "0%";
+      return;
+    }
+    value.textContent = "กำลังตรวจสอบ";
+    try {
+      const { data, error } = await client.schema("boy_central").rpc("get_system_capacity_snapshot");
+      if (error) throw error;
+      const usedMb = Number(data.database_bytes || 0) / 1024 / 1024;
+      const limitMb = Number(data.free_limit_bytes || 0) / 1024 / 1024;
+      const percent = Math.max(0, Math.min(100, Number(data.used_percent || 0)));
+      value.textContent = `${percent.toFixed(1)}%`;
+      note.textContent = `${usedMb.toFixed(1)} / ${limitMb.toFixed(0)} MB · ตรวจ ${new Date(data.measured_at || Date.now()).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`;
+      bar.style.width = `${percent}%`;
+      if (percent >= 85) bar.classList.add("danger"); else if (percent >= 75) bar.classList.add("warning");
+    } catch (error) {
+      value.textContent = "ตรวจไม่สำเร็จ";
+      note.textContent = error?.message || "ลองใหม่อีกครั้ง";
+      bar.style.width = "0%";
+    }
   }
   function queueOperation(type, payload, meta = {}) {
     const rows = readOutbox();
@@ -152,6 +209,7 @@
     if (page === "stock" && state.session) loadStock();
     if (page === "dashboard" && state.session) loadDashboard();
     if (page === "settings" && state.session) renderMasterList();
+    if (page === "account" && state.session) { renderSyncCenter(); loadCapacityStatus(); }
   }
 
   const draftKeyForDate = (date) => `boy-${branchApp.slug}-draft:${state.session?.user?.id || "guest"}:${date || today()}`;
@@ -270,7 +328,9 @@
       updateSyncStatus();
     }
     const total = sent.expense + sent.expense_legacy + sent.master;
+    if (total) localStorage.setItem(lastSyncKey(), new Date().toISOString());
     if (notify && total) toast(`ส่งรายการที่ค้างแล้ว ${total} รายการ`);
+    renderSyncCenter();
     return sent;
   }
 
@@ -1248,6 +1308,19 @@
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterFilter === "expense" ? "expense_item" : "item"));
   $("#accountQuickButton").addEventListener("click", () => setPage("account"));
+  $("#connectionBadge").addEventListener("click", () => setPage("account"));
+  $("#syncNowButton").addEventListener("click", async () => {
+    if (state.localAccess) { toast("เชื่อมต่อ Supabase ใหม่ก่อนส่งข้อมูล"); return; }
+    const sent = await flushOutbox({ notify: true });
+    if (sent.master) await loadMaster();
+    if (sent.expense || sent.expense_legacy) await loadExpenseHistory();
+    await loadCapacityStatus();
+  });
+  $("#reconnectButton").addEventListener("click", async () => {
+    window.BOY_LOCAL_ACCESS?.clear();
+    await client.auth.signOut();
+    location.reload();
+  });
   $("#masterStockMode").addEventListener("change", syncMasterPurchaseFields);
   $("#masterStockTarget").addEventListener("change", syncMasterPurchaseFields);
   $("#masterUnit").addEventListener("change", () => refreshMasterPurchaseUnits());
@@ -1288,6 +1361,7 @@
     const sent = await flushOutbox({ notify: true });
     if (sent.master) await loadMaster();
     if (sent.expense || sent.expense_legacy) await loadExpenseHistory();
+    await loadCapacityStatus();
   });
   init();
 })();
