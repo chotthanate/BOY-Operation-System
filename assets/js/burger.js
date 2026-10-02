@@ -152,6 +152,63 @@
     return !navigator.onLine || error?.status === 402 || /failed to fetch|network|load failed|fetch|exceed_egress_quota|service.*restricted/i.test(String(error?.message || error || ""));
   }
 
+  function normalizePaymentMethod(value) {
+    return ({ "เงินสด": "cash", "บัตรเครดิต": "credit_card", "รอเบิกค่าใช้จ่าย": "reimbursement_pending" })[value] || value || "cash";
+  }
+
+  function normalizeQueuedExpensePayload(payload = {}) {
+    const paymentMethod = normalizePaymentMethod(payload.payment_method || payload.payment?.method);
+    const lines = (payload.lines || []).map((line) => {
+      const rawItemId = line.item_id || "";
+      const rawExpenseId = line.expense_item_id || "";
+      const item = state.items.find((row) => row.id === rawItemId || row.code === rawItemId)
+        || state.items.find((row) => row.name === line.description);
+      const expense = state.expenseItems.find((row) => row.id === rawExpenseId || row.code === rawExpenseId)
+        || state.expenseItems.find((row) => row.code === `EXP-${rawExpenseId}`)
+        || state.expenseItems.find((row) => item && row.item_id === item.id)
+        || state.expenseItems.find((row) => row.name === line.description);
+      const linkedItem = item || state.items.find((row) => row.id === expense?.item_id);
+      const unit = state.units.find((row) => row.id === line.unit_id || row.code === line.unit_id || row.name === line.unit_name);
+      const category = state.categories.find((row) => row.id === line.category_id || row.code === line.category_id);
+      const categoryId = mainCategoryId(category?.id || expense?.category_id) || category?.id || expense?.category_id || null;
+      return {
+        ...line,
+        item_id: linkedItem?.id || null,
+        expense_item_id: expense?.id || null,
+        unit_id: unit?.id || null,
+        category_id: categoryId
+      };
+    });
+    const totalAmount = Number(payload.payment?.amount || payload.total_amount || lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0));
+    return { ...payload, payment_method: paymentMethod, payment: { ...(payload.payment || {}), method: paymentMethod, amount: totalAmount }, lines };
+  }
+
+  function normalizeQueuedMasterPayload(payload = {}) {
+    const item = state.items.find((row) => row.id === payload.id || row.code === payload.id);
+    const itemFromExpenseCode = state.items.find((row) => `EXP-${row.code}` === payload.id);
+    const expense = state.expenseItems.find((row) => row.id === payload.id || row.code === payload.id)
+      || state.expenseItems.find((row) => item && row.item_id === item.id);
+    if (payload.id && !item && !itemFromExpenseCode && !expense) {
+      throw new Error(`ไม่พบรายการ ${payload.id} ในข้อมูลล่าสุด กรุณาโหลดข้อมูลใหม่`);
+    }
+    const resolveUnit = (value) => state.units.find((row) => row.id === value || row.code === value || row.name === value)?.id || null;
+    const resolveCategory = (value) => state.categories.find((row) => row.id === value || row.code === value)?.id || null;
+    const resolveItem = (value) => state.items.find((row) => row.id === value || row.code === value)?.id || null;
+    const resolveSupplier = (value) => state.suppliers.find((row) => row.id === value || row.code === value || row.name === value)?.id || null;
+    return {
+      ...payload,
+      id: payload.kind === "item" ? (item || itemFromExpenseCode)?.id || null : expense?.id || null,
+      category_id: resolveCategory(payload.category_id),
+      base_unit_id: resolveUnit(payload.base_unit_id),
+      purchase_unit_id: resolveUnit(payload.purchase_unit_id),
+      default_issue_unit_id: resolveUnit(payload.default_issue_unit_id),
+      package_unit_id: resolveUnit(payload.package_unit_id),
+      stock_target_item_id: resolveItem(payload.stock_target_item_id),
+      preferred_supplier_id: resolveSupplier(payload.preferred_supplier_id),
+      supplier_ids: (payload.supplier_ids || []).map(resolveSupplier).filter(Boolean)
+    };
+  }
+
   const centralAvailable = () => navigator.onLine && !state.localAccess;
 
   function saveMasterCache() {
@@ -277,27 +334,19 @@
   }
 
   async function sendQueuedOperation(operation) {
-    if (operation.type === "expense") return client.schema("boy_central").rpc("record_expense_v3", { payload: operation.payload });
-    if (operation.type === "expense_legacy") {
-      const paymentMethod = ({ "เงินสด": "cash", "บัตรเครดิต": "credit_card", "รอเบิกค่าใช้จ่าย": "reimbursement_pending" })[operation.payload.payment_method] || operation.payload.payment_method;
-      const lines = (operation.payload.lines || []).map((line) => {
-        const item = state.items.find((row) => row.code === line.item_id || row.id === line.item_id);
-        const expense = state.expenseItems.find((row) => row.code === line.expense_item_id || row.id === line.expense_item_id || (item && row.item_id === item.id));
-        const unit = state.units.find((row) => row.code === line.unit_id || row.id === line.unit_id || row.name === line.unit_name);
-        const category = state.categories.find((row) => row.code === line.category_id || row.id === line.category_id);
-        return { ...line, item_id: item?.id || null, expense_item_id: expense?.id || null, unit_id: unit?.id || null, category_id: category?.id || expense?.category_id || null };
-      });
-      return client.schema("boy_central").rpc("record_expense_v3", { payload: { ...operation.payload, payment_method: paymentMethod, payment: { method: paymentMethod, amount: Number(operation.payload.payment?.amount || operation.payload.total_amount || lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0)) }, lines } });
+    if (["expense", "expense_legacy"].includes(operation.type)) {
+      return client.schema("boy_central").rpc("record_expense_v3", { payload: normalizeQueuedExpensePayload(operation.payload) });
     }
     if (operation.type === "master") {
-      const result = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload: operation.payload });
-      if (result.error || operation.payload.kind !== "item") return result;
+      const payload = normalizeQueuedMasterPayload(operation.payload);
+      const result = await client.schema("boy_central").rpc("admin_update_burger_master_v2", { payload });
+      if (result.error || payload.kind !== "item") return result;
       return client.schema("boy_central").rpc("admin_save_stock_mapping", { payload: {
         branch_code: branchApp.branchCode,
-        source_item_id: result.data?.id || operation.payload.id,
-        mode: operation.payload.stock_mode,
-        target_item_id: operation.payload.stock_target_item_id,
-        conversion_to_target: operation.payload.conversion_to_base
+        source_item_id: result.data?.id || payload.id,
+        mode: payload.stock_mode,
+        target_item_id: payload.stock_target_item_id,
+        conversion_to_target: payload.conversion_to_base
       } });
     }
     return { data: null, error: new Error("ไม่รู้จักประเภทรายการที่รอส่ง") };
@@ -634,7 +683,7 @@
     button.textContent = "กำลังบันทึก";
     const paymentMethod = $("#expensePaymentMethod").value;
     const totalAmount = state.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0);
-    const payload = {
+    const payload = normalizeQueuedExpensePayload({
       branch_id: state.branch.id,
       transaction_date: $("#expenseDate").value,
       source_system: branchApp.sourceSystem,
@@ -646,7 +695,7 @@
         const requirements = lineRequirements(line);
         return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, conversion_to_base: Number(line.conversion_to_base || 1), line_total: line.line_total, note: line.note || null };
       })
-    };
+    });
     let data;
     let error;
     if (!centralAvailable()) {
