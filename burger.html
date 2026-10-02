@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
   <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261002-2">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261002-3">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
@@ -51,7 +51,7 @@
       </section>
 
       <section class="page" id="stockPage" data-page="stock">
-        <div class="section-heading compact"><div><small id="stockPageSubtitle">คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><div class="heading-actions"><button class="secondary-button compact-button" id="addStockGroupButton" type="button">+ เพิ่มสต็อก</button><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div></div>
+        <div class="section-heading compact"><div><small id="stockPageSubtitle">คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><div class="heading-actions"><button class="secondary-button compact-button" id="manageStockTrackingButton" type="button">จัดการรายการ</button><button class="secondary-button compact-button" id="addStockGroupButton" type="button">+ เพิ่มสต็อก</button><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div></div>
         <label class="search-field"><span>⌕</span><input id="stockSearch" type="search" placeholder="ค้นหาสินค้า"></label>
         <div class="stock-list" id="stockList"></div>
       </section>
@@ -59,7 +59,8 @@
       <section class="page" id="dashboardPage" data-page="dashboard">
         <div class="section-heading compact"><div><small>ผลประกอบการ</small><h1>Dashboard</h1></div><input id="dashboardMonth" class="month-input" type="month"></div>
         <div class="metric-grid" id="metricGrid"></div>
-        <section class="panel"><h2>ช่องทางรายรับ</h2><div id="channelBreakdown" class="breakdown-list"></div></section>
+        <section class="panel"><h2>ช่องทางชำระเงิน</h2><div id="channelBreakdown" class="breakdown-list"></div></section>
+        <section class="panel"><h2>สินค้าขายดี</h2><div id="topProductBreakdown" class="breakdown-list"></div></section>
       </section>
 
       <section class="page" id="accountPage" data-page="account">
@@ -188,17 +189,33 @@
         <label>ประเภท<select id="stockGroupCategory" required></select></label>
         <label>หน่วยนับ<select id="stockGroupUnit" required></select></label>
       </div>
-      <label class="search-field stock-member-search"><span>⌕</span><input id="stockGroupSearch" type="search" placeholder="ค้นหาสินค้าที่จะรวม"></label>
-      <div class="stock-member-list" id="stockGroupMembers"></div>
+      <fieldset class="stock-mode-fieldset"><legend>รูปแบบสต็อก</legend>
+        <label><input type="radio" name="stockGroupMode" value="self" checked><span><strong>นับรายการนี้โดยตรง</strong><small>ใช้กับสินค้าที่ไม่มีรายการอื่นมารวม</small></span></label>
+        <label><input type="radio" name="stockGroupMode" value="group"><span><strong>รวมสินค้าหลายรายการ</strong><small>เช่น ขนมปังหลายยี่ห้อรวมเป็นสต็อก “ขนมปัง”</small></span></label>
+      </fieldset>
+      <div id="stockGroupMemberSection" class="form-stack" hidden>
+        <label class="search-field stock-member-search"><span>⌕</span><input id="stockGroupSearch" type="search" placeholder="ค้นหาสินค้าที่จะรวม"></label>
+        <div class="stock-member-list" id="stockGroupMembers"></div>
+      </div>
       <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="stockGroupDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึกสต็อก</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="stockTrackingDialog" class="review-dialog stock-tracking-dialog" tabindex="-1">
+    <h2>จัดการรายการที่ติดตามสต็อก</h2>
+    <p class="dialog-hint">เอาเครื่องหมายถูกออกจากหลายรายการ แล้วบันทึกครั้งเดียวได้</p>
+    <form id="stockTrackingForm" class="form-stack">
+      <label class="search-field"><span>⌕</span><input id="stockTrackingSearch" type="search" placeholder="ค้นหาสินค้า / วัตถุดิบ"></label>
+      <div class="stock-tracking-list" id="stockTrackingList"></div>
+      <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="stockTrackingDialog">ยกเลิก</button><button class="primary-button" type="submit">บันทึกทั้งหมด</button></div>
     </form>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/boy-central-config.js?v=20261002-2"></script>
+  <script src="assets/js/boy-central-config.js?v=20261002-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
-  <script src="assets/js/burger.js?v=20261002-2"></script>
+  <script src="assets/js/burger.js?v=20261002-3"></script>
 </body>
 </html>
