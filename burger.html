@@ -100,7 +100,7 @@
 
   <nav class="bottom-nav" aria-label="เมนูหลัก">
     <button class="active" type="button" data-target="expense"><span>＋</span><strong>บันทึก</strong></button>
-    <button type="button" data-target="dashboard"><span>◷</span><strong>ประวัติ</strong></button>
+    <a id="dashboardNavLink" href="branch-dashboard.html?branch=BURGER"><span>▥</span><strong>Dashboard</strong></a>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
     <a id="employeeNavLink" href="master-data.html?entity=employees&store=burger"><span>♙</span><strong>พนักงาน</strong></a>
     <button type="button" data-target="settings"><span>•••</span><strong>เพิ่มเติม</strong></button>
@@ -216,6 +216,6 @@
   <script src="assets/js/boy-central-config.js?v=20261002-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
-  <script src="assets/js/burger.js?v=20261002-3"></script>
+  <script src="assets/js/burger.js?v=20261003-1"></script>
 </body>
 </html>

@@ -35,6 +35,8 @@
     activeChoice?.querySelector("small") && (activeChoice.querySelector("small").textContent = "กำลังใช้");
     const employeeLink = document.getElementById("employeeNavLink");
     if (employeeLink) employeeLink.href = `master-data.html?entity=employees&store=${branchApp.slug}`;
+    const dashboardLink = document.getElementById("dashboardNavLink");
+    if (dashboardLink) dashboardLink.href = `branch-dashboard.html?branch=${encodeURIComponent(branchApp.branchCode)}`;
     if (branchApp.branchCode === "GRILL") document.body.classList.add("grill-branch");
   }
 

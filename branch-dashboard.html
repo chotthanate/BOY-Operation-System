@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f3f8f5">
+  <title>Dashboard สาขา | BOY Operation</title>
+  <link rel="stylesheet" href="assets/css/dashboard.css?v=20261003-1">
+  <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+</head>
+<body data-dashboard-mode="branch">
+  <div class="app">
+    <aside class="side">
+      <a class="brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="mark" id="branchMark">BOY</span><span><strong>BOY Operation</strong><small>Dashboard สาขา</small></span></a>
+      <nav class="nav"><a href="dashboard.html">Dashboard รวม</a><a class="active" href="#">Dashboard สาขา</a><a href="index.html">หน้าหลัก</a></nav>
+    </aside>
+    <main>
+      <header class="top">
+        <div class="top-title"><a class="back" href="dashboard.html" aria-label="กลับ Dashboard รวม">‹</a><div><h1 id="branchTitle">Dashboard สาขา</h1><div class="sub" id="branchUpdated">กำลังเตรียมข้อมูล...</div><div class="capacity" id="availability"></div></div></div>
+        <div class="date-tools"><label class="date-field">จากวันที่<input class="date" id="dateFrom" type="date"></label><label class="date-field">ถึงวันที่<input class="date" id="dateTo" type="date"></label><button class="refresh" id="refreshBtn" aria-label="รีเฟรช">↻</button></div>
+      </header>
+      <div class="quick-range"><button class="preset" data-preset="today">วันนี้</button><button class="preset" data-preset="yesterday">เมื่อวาน</button><button class="preset" data-preset="7d">7 วัน</button><button class="preset" data-preset="30d">30 วัน</button></div>
+      <div class="empty error" id="dashboardError" hidden></div>
+      <section class="kpis" id="metricGrid"></section>
+      <section class="grid-main">
+        <article class="panel"><div class="panel-title"><h2>แนวโน้มยอดขายรายวัน</h2><span>แตะแท่งเพื่อดูยอด</span></div><div class="chart" id="dailyTrend"></div></article>
+        <article class="panel"><div class="panel-title"><h2>ช่องทางชำระเงิน</h2><span>ยอดขายสุทธิ</span></div><div class="breakdown" id="paymentBreakdown"></div></article>
+      </section>
+      <section class="grid-3" style="margin-top:12px">
+        <article class="panel"><div class="panel-title"><h2>ช่วงเวลาขายดี</h2><span>ตามชั่วโมง</span></div><div class="breakdown" id="hourBreakdown"></div></article>
+        <article class="panel"><div class="panel-title"><h2>ช่องทางการขาย</h2><span>หน้าร้านและช่องทางอื่น</span></div><div class="breakdown" id="channelBreakdown"></div></article>
+        <article class="panel"><div class="panel-title"><h2>รายจ่ายตามหมวด</h2><span>รายการยืนยันแล้ว</span></div><div class="breakdown" id="expenseBreakdown"></div></article>
+      </section>
+      <div class="section-head"><h2>สินค้าขายดี</h2><span>เรียงตามจำนวนที่ขาย</span></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th class="rank">#</th><th>สินค้า</th><th class="num">จำนวน</th><th class="num">ออเดอร์</th><th class="num">ยอดขาย</th></tr></thead><tbody id="productRows"></tbody></table></div>
+      <div class="section-head"><h2>รายการขายล่าสุด</h2><span>สูงสุด 30 รายการในช่วงที่เลือก</span></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>เลขที่ออเดอร์</th><th>วันเวลา</th><th>ชำระเงิน</th><th class="num">จำนวน</th><th class="num">ยอดสุทธิ</th></tr></thead><tbody id="orderRows"></tbody></table></div>
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/dashboard.js?v=20261003-1"></script>
+</body>
+</html>
