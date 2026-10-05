@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#e5ab00">
+  <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
+  <link rel="stylesheet" href="assets/css/store-chrome.css">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261005-1">
+  <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+</head>
+<body>
+  <header class="branch-header">
+    <a class="branch-brand" href="index.html" aria-label="กลับหน้าหลัก">
+      <span class="branch-mark">BC</span>
+      <span><strong>BigC พัทยากลาง</strong><small>BOY Operation</small></span>
+    </a>
+    <div class="header-actions">
+      <span id="syncBadge" class="sync-badge pending">กำลังโหลด</span>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="ตั้งค่ารายการ">⚙</button>
+      <a class="icon-button home-link" href="index.html" aria-label="หน้าหลัก">⌂</a>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="date-bar">
+      <label for="businessDate">วันที่ทำรายการ</label>
+      <input id="businessDate" type="date">
+      <button id="refreshButton" class="secondary-button" type="button">อัปเดต</button>
+    </section>
+
+    <nav class="workflow-tabs" aria-label="งานประจำวัน">
+      <button class="active" data-tab="close" type="button"><span>1</span>ปิดร้าน + สั่งของ</button>
+      <button data-tab="receive" type="button"><span>2</span>รับของ</button>
+      <button data-tab="return" type="button"><span>3</span>คืนของ</button>
+    </nav>
+
+    <section id="panel-close" class="workflow-panel active">
+      <article class="card revenue-card">
+        <div class="card-heading"><div><small>รายรับวันนี้</small><h1>สรุปยอดขาย</h1></div><strong id="revenueTotal">0.00</strong></div>
+        <div class="revenue-grid">
+          <label>เงินสด<input id="cashAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label>เงินโอน<input id="transferAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label>ไทยช่วยไทย<input id="thaiAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-heading"><div><small>สำหรับวันพรุ่งนี้</small><h2>รายการสั่งของ</h2></div><button class="text-button" data-clear="order" type="button">ล้าง</button></div>
+        <div class="search-row"><input id="orderSearch" type="search" placeholder="ค้นหารายการ"><span id="orderCount">0 รายการ</span></div>
+        <div id="orderList" class="item-list"></div>
+      </article>
+      <button id="submitClose" class="primary-action" type="button">บันทึกรายรับและส่งรายการสั่งของ</button>
+    </section>
+
+    <section id="panel-receive" class="workflow-panel">
+      <article class="card">
+        <div class="card-heading"><div><small id="receiveSourceLabel">รายการจากเมื่อคืน</small><h1>รับของเข้าร้าน</h1></div><button id="addReceiveButton" class="text-button" type="button">+ เพิ่ม</button></div>
+        <div class="progress-line"><span id="receiveProgress">0 / 0 รายการ</span><div><i id="receiveProgressBar"></i></div></div>
+        <div id="receiveList" class="item-list receive-list"></div>
+      </article>
+      <button id="submitReceive" class="primary-action" type="button">บันทึกรับของ</button>
+    </section>
+
+    <section id="panel-return" class="workflow-panel">
+      <article class="card">
+        <div class="card-heading"><div><small>รายการประจำขึ้นให้อัตโนมัติ</small><h1>คืนของ</h1></div><button id="addReturnButton" class="text-button" type="button">+ เพิ่ม</button></div>
+        <div id="returnList" class="item-list"></div>
+      </article>
+      <button id="submitReturn" class="primary-action" type="button">บันทึกคืนของ</button>
+    </section>
+
+    <p id="pageNotice" class="page-notice" role="status"></p>
+  </main>
+
+  <div id="pickerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="modal-sheet compact-sheet">
+      <header><h2 id="pickerTitle">เพิ่มรายการ</h2><button data-close-modal="pickerModal" type="button">×</button></header>
+      <input id="pickerSearch" type="search" placeholder="ค้นหารายการ">
+      <div id="pickerList" class="picker-list"></div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-sheet settings-sheet">
+      <header><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่ารายการ</h2></div><button data-close-modal="settingsModal" type="button">×</button></header>
+      <div class="setting-add-row">
+        <input id="newItemName" placeholder="ชื่อรายการ">
+        <input id="newItemUnit" placeholder="หน่วย">
+        <button id="addMenuItem" class="secondary-button" type="button">เพิ่ม</button>
+      </div>
+      <input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า">
+      <div class="setting-legend"><span>ชั่งน้ำหนัก</span><span>ขึ้นหน้าคืนอัตโนมัติ</span><span>ใช้งาน</span></div>
+      <div id="settingsList" class="settings-list"></div>
+      <button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button>
+    </div>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden"><div><span></span><strong id="loadingText">กำลังบันทึก</strong></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
+  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/bigc-v2.js?v=20261005-1"></script>
+</body>
+</html>

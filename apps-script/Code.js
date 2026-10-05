@@ -244,6 +244,9 @@ function doPost(e) {
       case 'bigcOrderReturn':
         result = handleBigcOrderReturn_(payload.date, payload.qtyData || {}, payload.cash, payload.transfer);
         break;
+      case 'bigcV2MirrorWorkflow':
+        result = handleBigcV2MirrorWorkflow_(payload.payload || {});
+        break;
       case 'dashboardGetMonthlySummary':
         result = handleDashboardGetMonthlySummary_(payload);
         break;
@@ -3273,6 +3276,63 @@ function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
   }
 }
 
+function handleBigcV2MirrorWorkflow_(payload) {
+  const workflowType = normalizeText_(payload.workflow_type);
+  const date = payload.business_date || dateKey_(now_());
+  const lines = Array.isArray(payload.lines) ? payload.lines : [];
+  const qtyData = {};
+
+  lines.forEach(function(line) {
+    const itemName = normalizeText_(line.item_name);
+    const quantity = toNumber_(line.quantity);
+    if (!itemName || quantity <= 0) return;
+    qtyData[itemName] = toNumber_(qtyData[itemName]) + quantity;
+  });
+
+  if (workflowType === 'close_order') {
+    const orderResult = handleBigcOrderSubmitOrder_(date, qtyData, {});
+    const dateObj = parseDate_(date);
+    const cash = toNumber_(payload.cash_amount);
+    const transfer = toNumber_(payload.transfer_amount);
+    const thai = toNumber_(payload.thai_chuay_thai_amount);
+    const incomeRows = replaceBigcOrderIncomeRows_(dateObj, cash, transfer, thai);
+    writeIncomeTransactionsV2_(dateObj, CONFIG.bigcBranchName, 'BOY Operation System:BigC Order', 'BIGC-INC', [
+      { amount: cash, paymentMethod: 'เงินสด', note: 'รายรับหน้าร้านบิ๊กซีเงินสด' },
+      { amount: transfer, paymentMethod: 'โอนเงิน', note: 'รายรับหน้าร้านบิ๊กซีเงินโอน' },
+      { amount: thai, paymentMethod: 'ไทยช่วยไทย', note: 'รายรับหน้าร้านบิ๊กซีไทยช่วยไทย' }
+    ]);
+    return { status: 'success', saved: orderResult.saved, incomeRows: incomeRows };
+  }
+
+  if (workflowType === 'receive') return handleBigcOrderReceive_(date, qtyData);
+
+  if (workflowType === 'return') {
+    const scriptLock = lock_();
+    scriptLock.waitLock(30000);
+    try {
+      const dateObj = parseDate_(date);
+      const returned = replaceBigcWithdrawalRows_(dateObj, qtyData, {
+        sign: -1,
+        note: 'คืนของให้ทาวน่า',
+        sourceName: 'BOY Operation System:BigC Return',
+        idPrefix: 'BIGC-RETURN'
+      });
+      writeBigcOrderTransactionV2_(dateObj, qtyData, {
+        transactionType: 'โอนสินค้า',
+        sourceName: 'BOY Operation System:BigC Return',
+        idPrefix: 'BIGC-RETURN',
+        note: 'คืนสินค้าจากบิ๊กซีพัทยากลางให้ทาวน่า',
+        stockDirection: 'TO_TAWANA'
+      });
+      return { status: 'success', saved: returned };
+    } finally {
+      scriptLock.releaseLock();
+    }
+  }
+
+  throw new Error('workflow_type ไม่ถูกต้อง');
+}
+
 function readBigcOrderMenu_() {
   const ss = ss_(CONFIG.spreadsheets.master);
   const sh = ss.getSheetByName(CONFIG.sheets.bigcOrderMenu);
@@ -3482,7 +3542,7 @@ function getDefaultUnitForItem_(name) {
   return base ? base.unit : '';
 }
 
-function replaceBigcOrderIncomeRows_(date, cash, transfer) {
+function replaceBigcOrderIncomeRows_(date, cash, transfer, thai) {
   const dateObj = parseDate_(date);
   const sh = sheet_(CONFIG.spreadsheets.transactions, CONFIG.sheets.income);
   const sourceName = 'BOY Operation System:BigC Order';
@@ -3496,6 +3556,7 @@ function replaceBigcOrderIncomeRows_(date, cash, transfer) {
   const rows = [];
   addBigcIncomeRow_(rows, dateObj, 'เงินสด', cash, 'CASH', txId, createdAt, sourceName);
   addBigcIncomeRow_(rows, dateObj, 'เงินโอน', transfer, 'TRANSFER', txId, createdAt, sourceName);
+  addBigcIncomeRow_(rows, dateObj, 'ไทยช่วยไทย', thai, 'THAI-CHUAY-THAI', txId, createdAt, sourceName);
   appendRows_(sh, rows);
   return rows.length;
 }
