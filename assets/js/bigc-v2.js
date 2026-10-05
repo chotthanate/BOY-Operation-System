@@ -15,7 +15,7 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
-    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "",
+    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false
   };
 
@@ -207,6 +207,9 @@
     if (Object.keys(state.returns).length) return;
     state.menu.filter((item) => item.active && item.defaultReturn).forEach((item) => { state.returns[item.key] = lineFromMenu(item, 0); });
   }
+  function addMissingDefaultReturns() {
+    state.menu.filter((item) => item.active && item.defaultReturn && !state.returns[item.key]).forEach((item) => { state.returns[item.key] = lineFromMenu(item, 0); });
+  }
   function lineFromMenu(item, quantity = 0, inputMode = item.inputMode) {
     return { line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit, input_mode: inputMode, quantity, received: true, sort_order: item.sortOrder };
   }
@@ -378,8 +381,10 @@
   function renderSettings() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
-    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งตอนรับหรือคืน"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"></div>`).join("");
+    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>ชั่ง</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("");
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
+    $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
+    $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
   }
   async function persistSettings(successText) {
     loading("กำลังบันทึกการตั้งค่า"); notice("");
@@ -387,7 +392,7 @@
     const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_settings", { payload });
     loading("", false);
     if (error) { notice(error.message, true); return false; }
-    state.returns = {}; seedDefaultReturns(); renderAll(); saveDraft(); notice(successText); return true;
+    addMissingDefaultReturns(); renderAll(); saveDraft(); notice(successText); return true;
   }
   async function saveSettings() {
     if (!await persistSettings("บันทึกการตั้งค่าแล้ว")) return;
@@ -398,6 +403,26 @@
     const key = keyFor(name, unit); if (state.menu.some((item) => item.key === key)) { notice("มีรายการนี้แล้ว", true); return; }
     state.menu.push({ key, displayName: unit ? `${name} (${unit})` : name, name, category: "เพิ่มเอง", unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length });
     $("#newItemName").value = ""; $("#newItemUnit").value = ""; renderSettings();
+  }
+  function openEditItem(key) {
+    const item = state.menu.find((row) => row.key === key); if (!item) return;
+    state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
+    $("#editItemModal").classList.remove("hidden");
+  }
+  async function saveEditedItem() {
+    const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
+    const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim(); const category = $("#editItemCategory").value.trim();
+    if (!name || !category) { notice("กรุณากรอกชื่อรายการและหมวดหมู่", true); return; }
+    const previous = { ...item };
+    item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
+    if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); return; }
+    $("#editItemModal").classList.add("hidden"); renderSettings();
+  }
+  async function deleteMenuItem(key) {
+    const item = state.menu.find((row) => row.key === key); if (!item || !confirm(`ลบ “${item.displayName}” ออกจากรายการทั้งหมด?`)) return;
+    const previousMenu = [...state.menu]; state.menu = state.menu.filter((row) => row.key !== key);
+    if (!await persistSettings("ลบรายการแล้ว")) { state.menu = previousMenu; renderSettings(); return; }
+    delete state.order[key]; delete state.receive[key]; delete state.returns[key]; saveDraft(); renderAll(); renderSettings();
   }
 
   function categoryNames() {
@@ -467,7 +492,7 @@
     $("#openOrderSummary").onclick = openOrderSummary;
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
-    $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder;
+    $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });
     $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
     $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });

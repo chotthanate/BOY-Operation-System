@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261005-3">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261005-4">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -106,6 +106,18 @@
     </div>
   </div>
 
+  <div id="editItemModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
+    <div class="modal-sheet edit-item-sheet">
+      <header><div><small>ตั้งค่ารายการ</small><h2 id="editItemTitle">แก้ไขรายการ</h2></div><button data-close-modal="editItemModal" type="button">×</button></header>
+      <div class="edit-item-fields">
+        <label>ชื่อรายการ<input id="editItemName" type="text"></label>
+        <label>หน่วย<input id="editItemUnit" type="text"></label>
+        <label>หมวดหมู่<input id="editItemCategory" type="text"></label>
+      </div>
+      <button id="saveEditedItem" class="primary-action" type="button">บันทึกการแก้ไข</button>
+    </div>
+  </div>
+
   <div id="orderSummaryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="orderSummaryTitle">
     <div class="modal-sheet summary-sheet">
       <header><div><small>รายการที่เลือก</small><h2 id="orderSummaryTitle">สรุปรายการสั่งของ</h2></div><button data-close-modal="orderSummaryModal" type="button">×</button></header>
@@ -126,6 +138,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/bigc-v2.js?v=20261005-3"></script>
+  <script src="assets/js/bigc-v2.js?v=20261005-4"></script>
 </body>
 </html>
