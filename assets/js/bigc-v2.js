@@ -15,7 +15,7 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
-    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive",
+    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "",
     cloudTimer: 0, saving: false, started: false
   };
 
@@ -381,19 +381,73 @@
     $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งตอนรับหรือคืน"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"></div>`).join("");
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
   }
-  async function saveSettings() {
-    loading("กำลังบันทึกการตั้งค่า");
+  async function persistSettings(successText) {
+    loading("กำลังบันทึกการตั้งค่า"); notice("");
     const payload = { menu_config: state.menu, default_return_keys: state.menu.filter((item) => item.defaultReturn).map((item) => item.key) };
     const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_settings", { payload });
     loading("", false);
-    if (error) { notice(error.message, true); return; }
-    $("#settingsModal").classList.add("hidden"); state.returns = {}; seedDefaultReturns(); renderAll(); saveDraft(); notice("บันทึกการตั้งค่าแล้ว");
+    if (error) { notice(error.message, true); return false; }
+    state.returns = {}; seedDefaultReturns(); renderAll(); saveDraft(); notice(successText); return true;
+  }
+  async function saveSettings() {
+    if (!await persistSettings("บันทึกการตั้งค่าแล้ว")) return;
+    $("#settingsModal").classList.add("hidden");
   }
   function addMenuItem() {
     const name = $("#newItemName").value.trim(); const unit = $("#newItemUnit").value.trim(); if (!name) return;
     const key = keyFor(name, unit); if (state.menu.some((item) => item.key === key)) { notice("มีรายการนี้แล้ว", true); return; }
     state.menu.push({ key, displayName: unit ? `${name} (${unit})` : name, name, category: "เพิ่มเอง", unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length });
     $("#newItemName").value = ""; $("#newItemUnit").value = ""; renderSettings();
+  }
+
+  function categoryNames() {
+    return [...new Set(state.menu.map((item) => item.category || "อื่นๆ"))];
+  }
+  function normalizeMenuOrder() {
+    state.menu.forEach((item, index) => { item.sortOrder = index; });
+  }
+  function moveCategory(category, direction) {
+    const categories = categoryNames(); const index = categories.indexOf(category); const next = index + direction;
+    if (index < 0 || next < 0 || next >= categories.length) return;
+    [categories[index], categories[next]] = [categories[next], categories[index]];
+    const rank = new Map(categories.map((name, position) => [name, position]));
+    state.menu = state.menu.map((item, position) => ({ item, position })).sort((left, right) => rank.get(left.item.category || "อื่นๆ") - rank.get(right.item.category || "อื่นๆ") || left.position - right.position).map((row) => row.item);
+    normalizeMenuOrder(); renderSortList();
+  }
+  function moveItem(key, direction) {
+    const item = state.menu.find((row) => row.key === key); if (!item) return;
+    const indexes = state.menu.map((row, index) => ({ row, index })).filter(({ row }) => (row.category || "อื่นๆ") === (item.category || "อื่นๆ")).map(({ index }) => index);
+    const position = indexes.indexOf(state.menu.indexOf(item)); const nextPosition = position + direction;
+    if (position < 0 || nextPosition < 0 || nextPosition >= indexes.length) return;
+    const nextIndex = indexes[nextPosition]; const currentIndex = indexes[position];
+    [state.menu[currentIndex], state.menu[nextIndex]] = [state.menu[nextIndex], state.menu[currentIndex]];
+    normalizeMenuOrder(); renderSortList();
+  }
+  function sortRow(label, detail, key, index, total) {
+    return `<div class="sort-row"><span class="sort-grip" aria-hidden="true">⋮⋮</span><span class="sort-copy"><strong>${escapeHtml(label)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ""}</span><div class="sort-actions"><button data-sort-key="${escapeHtml(key)}" data-sort-step="-1" type="button" aria-label="เลื่อนขึ้น" ${index === 0 ? "disabled" : ""}>↑</button><button data-sort-key="${escapeHtml(key)}" data-sort-step="1" type="button" aria-label="เลื่อนลง" ${index === total - 1 ? "disabled" : ""}>↓</button></div></div>`;
+  }
+  function renderSortList() {
+    const categories = categoryNames();
+    $("#sortCategoryField").classList.toggle("hidden", state.sortMode !== "items");
+    $("#sortCategorySelect").innerHTML = categories.map((category) => `<option value="${escapeHtml(category)}" ${category === state.sortCategory ? "selected" : ""}>${escapeHtml(category)}</option>`).join("");
+    if (!categories.includes(state.sortCategory)) state.sortCategory = categories[0] || "";
+    if (state.sortMode === "categories") {
+      $("#sortList").innerHTML = categories.length ? categories.map((category, index) => sortRow(category, `${state.menu.filter((item) => (item.category || "อื่นๆ") === category).length} รายการ`, category, index, categories.length)).join("") : `<div class="empty-state">ยังไม่มีหมวดหมู่</div>`;
+    } else {
+      const items = state.menu.filter((item) => (item.category || "อื่นๆ") === state.sortCategory);
+      $("#sortList").innerHTML = items.length ? items.map((item, index) => sortRow(item.displayName, item.unit || "", item.key, index, items.length)).join("") : `<div class="empty-state">ยังไม่มีรายการในหมวดนี้</div>`;
+    }
+    $$('[data-sort-key]').forEach((button) => { button.onclick = () => state.sortMode === "categories" ? moveCategory(button.dataset.sortKey, Number(button.dataset.sortStep)) : moveItem(button.dataset.sortKey, Number(button.dataset.sortStep)); });
+  }
+  function openSortSettings() {
+    state.sortMode = "categories"; state.sortCategory = categoryNames()[0] || "";
+    $$("[data-sort-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sortMode === state.sortMode));
+    $("#sortModal").classList.remove("hidden"); renderSortList();
+  }
+  async function saveSortOrder() {
+    normalizeMenuOrder();
+    if (!await persistSettings("บันทึกลำดับแล้ว")) return;
+    $("#sortModal").classList.add("hidden"); $("#settingsModal").classList.add("hidden");
   }
 
   function bindStaticEvents() {
@@ -413,7 +467,9 @@
     $("#openOrderSummary").onclick = openOrderSummary;
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
-    $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem;
+    $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder;
+    $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });
+    $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
     $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
     $$('[data-clear]').forEach((button) => { button.onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); }; });
     window.addEventListener("online", () => saveCloudDraft());
