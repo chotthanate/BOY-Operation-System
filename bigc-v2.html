@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261005-4">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261005-5">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -31,7 +31,7 @@
     </nav>
 
     <section id="panel-close" class="workflow-panel active">
-      <div class="panel-date"><span>วันที่สั่งของ</span><button class="date-trigger" data-date-target="orderDate" type="button"><strong data-date-display="orderDate">—</strong><b>▾</b></button><input id="orderDate" type="date"></div>
+      <div class="panel-date"><span>วันที่สั่งของ</span><label class="date-trigger"><strong data-date-display="orderDate">—</strong><b>▾</b><input id="orderDate" type="date" aria-label="วันที่สั่งของ"></label></div>
       <article class="card">
         <div class="card-heading"><div><small>สำหรับวันพรุ่งนี้</small><h2>รายการสั่งของ</h2></div><button class="text-button" data-clear="order" type="button">ล้าง</button></div>
         <div class="search-row"><input id="orderSearch" type="search" placeholder="ค้นหารายการ"><span id="orderCount">0 รายการ</span></div>
@@ -41,7 +41,7 @@
     </section>
 
     <section id="panel-receive" class="workflow-panel">
-      <div class="panel-date"><span>วันที่รับของ</span><button class="date-trigger" data-date-target="receiveDate" type="button"><strong data-date-display="receiveDate">—</strong><b>▾</b></button><input id="receiveDate" type="date"></div>
+      <div class="panel-date"><span>วันที่รับของ</span><label class="date-trigger"><strong data-date-display="receiveDate">—</strong><b>▾</b><input id="receiveDate" type="date" aria-label="วันที่รับของ"></label></div>
       <article class="card">
         <div class="card-heading"><div><small id="receiveSourceLabel">รายการจากเมื่อคืน</small><h1>รับของเข้าร้าน</h1></div><button id="addReceiveButton" class="text-button" type="button">+ เพิ่ม</button></div>
         <div class="progress-line"><span id="receiveProgress">0 / 0 รายการ</span><div><i id="receiveProgressBar"></i></div></div>
@@ -51,7 +51,7 @@
     </section>
 
     <section id="panel-return" class="workflow-panel">
-      <div class="panel-date"><span>วันที่สรุปยอด</span><button class="date-trigger" data-date-target="returnDate" type="button"><strong data-date-display="returnDate">—</strong><b>▾</b></button><input id="returnDate" type="date"></div>
+      <div class="panel-date"><span>วันที่สรุปยอด</span><label class="date-trigger"><strong data-date-display="returnDate">—</strong><b>▾</b><input id="returnDate" type="date" aria-label="วันที่สรุปยอด"></label></div>
       <article class="card revenue-card">
         <div class="card-heading"><div><small>รายรับประจำวัน</small><h1>สรุปยอดขาย</h1></div><strong id="revenueTotal">0.00</strong></div>
         <div class="revenue-grid">
@@ -81,15 +81,24 @@
   <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-sheet settings-sheet">
       <header><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่ารายการ</h2></div><div class="modal-header-actions"><button id="openSortSettings" class="sort-open-button" type="button">⇅ จัดลำดับ</button><button data-close-modal="settingsModal" type="button">×</button></div></header>
-      <div class="setting-add-row">
-        <input id="newItemName" placeholder="ชื่อรายการ">
-        <input id="newItemUnit" placeholder="หน่วย">
-        <button id="addMenuItem" class="secondary-button" type="button">เพิ่ม</button>
-      </div>
-      <input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า">
+      <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div>
       <div class="setting-legend"><span>ชั่งตอนรับ/คืน</span><span>ขึ้นหน้าคืนอัตโนมัติ</span></div>
       <div id="settingsList" class="settings-list"></div>
       <button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button>
+    </div>
+  </div>
+
+  <div id="addItemModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="addItemTitle">
+    <div class="modal-sheet edit-item-sheet">
+      <header><div><small>ตั้งค่ารายการ</small><h2 id="addItemTitle">เพิ่มรายการ</h2></div><button data-close-modal="addItemModal" type="button">×</button></header>
+      <div class="edit-item-fields">
+        <label>ชื่อรายการ<input id="newItemName" type="text" autocomplete="off"></label>
+        <label>ประเภท<input id="newItemCategory" type="text" list="categoryOptions" autocomplete="off"></label>
+        <label>หน่วย<input id="newItemUnit" type="text" autocomplete="off"></label>
+        <datalist id="categoryOptions"></datalist>
+      </div>
+      <p id="addItemError" class="modal-error"></p>
+      <button id="addMenuItem" class="primary-action" type="button">เพิ่มรายการ</button>
     </div>
   </div>
 
@@ -114,6 +123,7 @@
         <label>หน่วย<input id="editItemUnit" type="text"></label>
         <label>หมวดหมู่<input id="editItemCategory" type="text"></label>
       </div>
+      <p id="editItemError" class="modal-error"></p>
       <button id="saveEditedItem" class="primary-action" type="button">บันทึกการแก้ไข</button>
     </div>
   </div>
@@ -138,6 +148,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/bigc-v2.js?v=20261005-4"></script>
+  <script src="assets/js/bigc-v2.js?v=20261005-5"></script>
 </body>
 </html>

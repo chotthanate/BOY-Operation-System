@@ -398,24 +398,34 @@
     if (!await persistSettings("บันทึกการตั้งค่าแล้ว")) return;
     $("#settingsModal").classList.add("hidden");
   }
-  function addMenuItem() {
-    const name = $("#newItemName").value.trim(); const unit = $("#newItemUnit").value.trim(); if (!name) return;
-    const key = keyFor(name, unit); if (state.menu.some((item) => item.key === key)) { notice("มีรายการนี้แล้ว", true); return; }
-    state.menu.push({ key, displayName: unit ? `${name} (${unit})` : name, name, category: "เพิ่มเอง", unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length });
-    $("#newItemName").value = ""; $("#newItemUnit").value = ""; renderSettings();
+  function openAddItem() {
+    $("#newItemName").value = ""; $("#newItemCategory").value = categoryNames()[0] || ""; $("#newItemUnit").value = "";
+    $("#addItemError").textContent = "";
+    $("#categoryOptions").innerHTML = categoryNames().map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
+    $("#addItemModal").classList.remove("hidden");
+  }
+  async function addMenuItem() {
+    const name = $("#newItemName").value.trim(); const category = $("#newItemCategory").value.trim(); const unit = $("#newItemUnit").value.trim();
+    if (!name || !category) { $("#addItemError").textContent = "กรุณากรอกชื่อรายการและประเภท"; return; }
+    const key = keyFor(name, unit); if (state.menu.some((item) => item.key === key)) { $("#addItemError").textContent = "มีรายการนี้แล้ว"; return; }
+    const item = { key, displayName: unit ? `${name} (${unit})` : name, name, category, unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length };
+    state.menu.push(item);
+    if (!await persistSettings("เพิ่มรายการแล้ว")) { state.menu = state.menu.filter((row) => row !== item); $("#addItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
+    $("#addItemModal").classList.add("hidden"); renderSettings();
   }
   function openEditItem(key) {
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
+    $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
   }
   async function saveEditedItem() {
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
     const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim(); const category = $("#editItemCategory").value.trim();
-    if (!name || !category) { notice("กรุณากรอกชื่อรายการและหมวดหมู่", true); return; }
+    if (!name || !category) { $("#editItemError").textContent = "กรุณากรอกชื่อรายการและหมวดหมู่"; return; }
     const previous = { ...item };
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
-    if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); return; }
+    if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     $("#editItemModal").classList.add("hidden"); renderSettings();
   }
   async function deleteMenuItem(key) {
@@ -479,7 +489,6 @@
     $$(".workflow-tabs button").forEach((button) => { button.onclick = () => { state.activeTab = button.dataset.tab; $$(".workflow-tabs button").forEach((row) => row.classList.toggle("active", row === button)); $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${state.activeTab}`)); updateCartBar(); }; });
     ["cashAmount", "transferAmount", "thaiAmount"].forEach((id) => { $("#" + id).oninput = () => { renderRevenue(); saveDraft(); }; });
     $("#orderSearch").oninput = renderOrder; $("#pickerSearch").oninput = renderPicker; $("#settingsSearch").oninput = renderSettings;
-    $$('[data-date-target]').forEach((button) => { button.onclick = () => { const input = $("#" + button.dataset.dateTarget); if (input.showPicker) input.showPicker(); else input.click(); }; });
     ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).onchange = () => {
       if (id === "orderDate") state.order = {};
       if (id === "receiveDate") state.receive = {};
@@ -492,7 +501,7 @@
     $("#openOrderSummary").onclick = openOrderSummary;
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
-    $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });
     $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
     $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
