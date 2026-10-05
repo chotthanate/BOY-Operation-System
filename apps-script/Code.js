@@ -3291,17 +3291,7 @@ function handleBigcV2MirrorWorkflow_(payload) {
 
   if (workflowType === 'close_order') {
     const orderResult = handleBigcOrderSubmitOrder_(date, qtyData, {});
-    const dateObj = parseDate_(date);
-    const cash = toNumber_(payload.cash_amount);
-    const transfer = toNumber_(payload.transfer_amount);
-    const thai = toNumber_(payload.thai_chuay_thai_amount);
-    const incomeRows = replaceBigcOrderIncomeRows_(dateObj, cash, transfer, thai);
-    writeIncomeTransactionsV2_(dateObj, CONFIG.bigcBranchName, 'BOY Operation System:BigC Order', 'BIGC-INC', [
-      { amount: cash, paymentMethod: 'เงินสด', note: 'รายรับหน้าร้านบิ๊กซีเงินสด' },
-      { amount: transfer, paymentMethod: 'โอนเงิน', note: 'รายรับหน้าร้านบิ๊กซีเงินโอน' },
-      { amount: thai, paymentMethod: 'ไทยช่วยไทย', note: 'รายรับหน้าร้านบิ๊กซีไทยช่วยไทย' }
-    ]);
-    return { status: 'success', saved: orderResult.saved, incomeRows: incomeRows };
+    return { status: 'success', saved: orderResult.saved };
   }
 
   if (workflowType === 'receive') return handleBigcOrderReceive_(date, qtyData);
@@ -3324,7 +3314,16 @@ function handleBigcV2MirrorWorkflow_(payload) {
         note: 'คืนสินค้าจากบิ๊กซีพัทยากลางให้ทาวน่า',
         stockDirection: 'TO_TAWANA'
       });
-      return { status: 'success', saved: returned };
+      const cash = toNumber_(payload.cash_amount);
+      const transfer = toNumber_(payload.transfer_amount);
+      const thai = toNumber_(payload.thai_chuay_thai_amount);
+      const incomeRows = replaceBigcOrderIncomeRows_(dateObj, cash, transfer, thai);
+      writeIncomeTransactionsV2_(dateObj, CONFIG.bigcBranchName, 'BOY Operation System:BigC Order', 'BIGC-INC', [
+        { amount: cash, paymentMethod: 'เงินสด', note: 'รายรับหน้าร้านบิ๊กซีเงินสด' },
+        { amount: transfer, paymentMethod: 'โอนเงิน', note: 'รายรับหน้าร้านบิ๊กซีเงินโอน' },
+        { amount: thai, paymentMethod: 'ไทยช่วยไทย', note: 'รายรับหน้าร้านบิ๊กซีไทยช่วยไทย' }
+      ]);
+      return { status: 'success', saved: returned, incomeRows: incomeRows };
     } finally {
       scriptLock.releaseLock();
     }

@@ -14,7 +14,7 @@
     return `${byType.year}-${byType.month}-${byType.day}`;
   };
   const state = {
-    client: null, session: null, branch: null, context: null, menu: [],
+    client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive",
     cloudTimer: 0, saving: false, started: false
   };
@@ -26,23 +26,41 @@
     return `item-${(hash >>> 0).toString(16)}`;
   }
 
-  function draftKey() { return `boy-bigc-v2-draft:${$("#businessDate").value}`; }
-  function blankDraft() { return { savedAt: 0, revenue: { cash: "", transfer: "", thai: "" }, order: {}, receive: {}, returns: {} }; }
+  function draftKey(type, date) { return `boy-bigc-v2-draft:${type}:${date}`; }
+  function blankDraft() { return { savedAt: 0, dates: { order: today(), receive: today(), returns: today() }, revenue: { cash: "", transfer: "", thai: "" }, order: {}, receive: {}, returns: {} }; }
   function readLocalDraft() {
-    try { return { ...blankDraft(), ...JSON.parse(localStorage.getItem(draftKey()) || "null") }; }
-    catch (_) { return blankDraft(); }
+    const dates = { order: $("#orderDate").value || today(), receive: $("#receiveDate").value || today(), returns: $("#returnDate").value || today() };
+    try {
+      const order = JSON.parse(localStorage.getItem(draftKey("order", dates.order)) || "{}");
+      const receive = JSON.parse(localStorage.getItem(draftKey("receive", dates.receive)) || "{}");
+      const returned = JSON.parse(localStorage.getItem(draftKey("returns", dates.returns)) || "{}");
+      return { ...blankDraft(), dates, savedAt: Math.max(order.savedAt || 0, receive.savedAt || 0, returned.savedAt || 0), savedAtByType: { order: order.savedAt || 0, receive: receive.savedAt || 0, returns: returned.savedAt || 0 }, order: order.order || {}, receive: receive.receive || {}, returns: returned.returns || {}, revenue: returned.revenue || blankDraft().revenue };
+    } catch (_) { return { ...blankDraft(), dates }; }
   }
-  function currentDraft() {
-    return {
-      business_date: $("#businessDate").value,
+  function currentDraft(type = state.activeTab === "close" ? "order" : state.activeTab === "return" ? "returns" : "receive") {
+    const dates = { order: $("#orderDate").value, receive: $("#receiveDate").value, returns: $("#returnDate").value };
+    const draft = {
+      business_date: dates[type],
       savedAt: Date.now(),
-      revenue: { cash: $("#cashAmount").value, transfer: $("#transferAmount").value, thai: $("#thaiAmount").value },
-      order: state.order, receive: state.receive, returns: state.returns
+      dates
     };
+    if (type === "order") draft.order = state.order;
+    if (type === "receive") draft.receive = state.receive;
+    if (type === "returns") {
+      draft.returns = state.returns;
+      draft.revenue = { cash: $("#cashAmount").value, transfer: $("#transferAmount").value, thai: $("#thaiAmount").value };
+    }
+    return draft;
+  }
+  function activeDate() {
+    return state.activeTab === "receive" ? $("#receiveDate").value : state.activeTab === "return" ? $("#returnDate").value : $("#orderDate").value;
   }
   function saveDraft() {
     const draft = currentDraft();
-    localStorage.setItem(draftKey(), JSON.stringify(draft));
+    const savedAt = Date.now();
+    localStorage.setItem(draftKey("order", draft.dates.order), JSON.stringify({ savedAt, order: state.order }));
+    localStorage.setItem(draftKey("receive", draft.dates.receive), JSON.stringify({ savedAt, receive: state.receive }));
+    localStorage.setItem(draftKey("returns", draft.dates.returns), JSON.stringify({ savedAt, returns: state.returns, revenue: { cash: $("#cashAmount").value, transfer: $("#transferAmount").value, thai: $("#thaiAmount").value } }));
     setSync("บันทึกในเครื่องแล้ว", "pending");
     window.clearTimeout(state.cloudTimer);
     state.cloudTimer = window.setTimeout(() => saveCloudDraft(draft), CLOUD_DRAFT_DELAY);
@@ -119,20 +137,37 @@
     loading("กำลังโหลดข้อมูล"); notice("");
     try {
       const legacyMenuPromise = loadLegacyMenu();
-      const { data, error } = await state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: $("#businessDate").value });
-      if (error) throw error;
-      state.context = data || {};
-      state.branch = data.branch;
-      state.menu = settingsMenu(data.settings, await legacyMenuPromise);
-      const cloudDraft = data.draft || {};
+      const dates = { order: $("#orderDate").value, receive: $("#receiveDate").value, returns: $("#returnDate").value };
+      const requests = {};
+      Object.values(dates).forEach((date) => { if (!requests[date]) requests[date] = state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: date }); });
+      const resolved = Object.fromEntries(await Promise.all(Object.entries(requests).map(async ([date, request]) => {
+        const { data, error } = await request; if (error) throw error; return [date, data || {}];
+      })));
+      state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
+      state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
+      state.branch = state.context.branch;
+      state.menu = settingsMenu(state.context.settings, await legacyMenuPromise);
       const localDraft = readLocalDraft();
-      const draft = Number(localDraft.savedAt || 0) >= Number(cloudDraft.savedAt || 0) ? localDraft : { ...blankDraft(), ...cloudDraft };
+      const orderCloud = state.contexts.order.draft || {};
+      const receiveCloud = state.contexts.receive.draft || {};
+      const returnCloud = state.contexts.returns.draft || {};
+      const draft = {
+        ...blankDraft(), dates,
+        order: Number(orderCloud.savedAt || 0) > Number(localDraft.savedAtByType?.order || 0) ? orderCloud.order || {} : localDraft.order,
+        receive: Number(receiveCloud.savedAt || 0) > Number(localDraft.savedAtByType?.receive || 0) ? receiveCloud.receive || {} : localDraft.receive,
+        returns: Number(returnCloud.savedAt || 0) > Number(localDraft.savedAtByType?.returns || 0) ? returnCloud.returns || {} : localDraft.returns,
+        revenue: Number(returnCloud.savedAt || 0) > Number(localDraft.savedAtByType?.returns || 0) ? returnCloud.revenue || blankDraft().revenue : localDraft.revenue
+      };
       hydrateDraft(draft);
-      hydrateSubmitted(data.workflows || []);
-      seedReceiveFromPrevious(data.previous_order);
+      hydrateSubmitted([
+        ...(state.contexts.order.workflows || []).filter((row) => row.workflow_type === "close_order"),
+        ...(state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"),
+        ...(state.contexts.returns.workflows || []).filter((row) => row.workflow_type === "return")
+      ]);
+      seedReceiveFromPrevious(state.contexts.receive.previous_order);
       seedDefaultReturns();
       renderAll();
-      const pending = (data.pending_sheet_sync || []).length;
+      const pending = (state.context.pending_sheet_sync || []).length;
       setSync(pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", pending ? "pending" : "ok");
     } catch (error) {
       const draft = readLocalDraft(); hydrateDraft(draft);
@@ -143,6 +178,7 @@
 
   function hydrateDraft(draft) {
     state.order = draft.order || {}; state.receive = draft.receive || {}; state.returns = draft.returns || {};
+    renderDateDisplays();
     $("#cashAmount").value = draft.revenue?.cash || "";
     $("#transferAmount").value = draft.revenue?.transfer || "";
     $("#thaiAmount").value = draft.revenue?.thai || "";
@@ -152,26 +188,37 @@
     const receive = workflows.find((row) => row.workflow_type === "receive");
     const returned = workflows.find((row) => row.workflow_type === "return");
     if (close && !Object.keys(state.order).length) {
-      $("#cashAmount").value = close.cash_amount || ""; $("#transferAmount").value = close.transfer_amount || ""; $("#thaiAmount").value = close.thai_chuay_thai_amount || "";
       state.order = Object.fromEntries((close.lines || []).map((line) => [line.line_key, number(line.quantity)]));
     }
     if (receive && !Object.keys(state.receive).length) state.receive = Object.fromEntries((receive.lines || []).map((line) => [line.line_key, { ...line, checked: line.received !== false }]));
-    if (returned && !Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
+    if (returned) {
+      if (!Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
+      if (!$("#cashAmount").value && !$("#transferAmount").value && !$("#thaiAmount").value) {
+        $("#cashAmount").value = returned.cash_amount || ""; $("#transferAmount").value = returned.transfer_amount || ""; $("#thaiAmount").value = returned.thai_chuay_thai_amount || "";
+      }
+    }
   }
   function seedReceiveFromPrevious(previous) {
     if (Object.keys(state.receive).length || !previous?.lines?.length) return;
-    previous.lines.forEach((line) => { state.receive[line.line_key] = { ...line, source_line_key: line.line_key, checked: false }; });
+    previous.lines.forEach((line) => { const item = findMenu(line.line_key, line); state.receive[line.line_key] = { ...line, input_mode: item.inputMode, source_line_key: line.line_key, checked: false }; });
     $("#receiveSourceLabel").textContent = `จากรายการวันที่ ${previous.business_date}`;
   }
   function seedDefaultReturns() {
     if (Object.keys(state.returns).length) return;
     state.menu.filter((item) => item.active && item.defaultReturn).forEach((item) => { state.returns[item.key] = lineFromMenu(item, 0); });
   }
-  function lineFromMenu(item, quantity = 0) {
-    return { line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit, input_mode: item.inputMode, quantity, received: true, sort_order: item.sortOrder };
+  function lineFromMenu(item, quantity = 0, inputMode = item.inputMode) {
+    return { line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit, input_mode: inputMode, quantity, received: true, sort_order: item.sortOrder };
   }
 
-  function renderAll() { renderRevenue(); renderOrder(); renderReceive(); renderReturns(); }
+  function renderDateDisplays() {
+    $$('[data-date-display]').forEach((label) => {
+      const value = $("#" + label.dataset.dateDisplay).value;
+      if (!value) { label.textContent = "เลือกวันที่"; return; }
+      const [year, month, day] = value.split("-"); label.textContent = `${day}/${month}/${Number(year) + 543}`;
+    });
+  }
+  function renderAll() { renderDateDisplays(); renderRevenue(); renderOrder(); renderReceive(); renderReturns(); updateCartBar(); }
   function renderRevenue() {
     $("#revenueTotal").textContent = money(number($("#cashAmount").value) + number($("#transferAmount").value) + number($("#thaiAmount").value));
   }
@@ -184,17 +231,22 @@
     return groups;
   }
   function inputControl(item, value, target) {
-    if (item.inputMode === "weight") return `<div class="weight-control"><input data-qty-target="${target}" data-key="${item.key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(value) || ""}" placeholder="${escapeHtml(item.unit || "น้ำหนัก")}"></div>`;
+    if (!target.startsWith("order") && item.inputMode === "weight") return `<div class="weight-control"><input data-qty-target="${target}" data-key="${item.key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(value) || ""}" placeholder="${escapeHtml(item.unit || "น้ำหนัก")}"></div>`;
     return `<div class="qty-control"><button data-step="-1" data-qty-target="${target}" data-key="${item.key}" type="button">−</button><input data-qty-target="${target}" data-key="${item.key}" inputmode="numeric" type="number" min="0" step="1" value="${number(value)}"><button data-step="1" data-qty-target="${target}" data-key="${item.key}" type="button">+</button></div>`;
   }
   function renderOrder() {
-    let html = ""; let selected = 0;
+    let html = ""; let selected = 0; let groupIndex = 0; const nav = [];
     groupedMenu($("#orderSearch").value).forEach((items, category) => {
-      html += `<div class="category-label">${escapeHtml(category)}</div>`;
-      items.forEach((item) => { const qty = number(state.order[item.key]); if (qty) selected += 1; html += `<div class="item-row"><div class="item-row-inner"><div class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "นับเป็นจำนวน")}</small></div>${inputControl(item, qty, "order")}</div></div>`; });
+      const id = `order-category-${groupIndex++}`;
+      nav.push(`<button data-category-target="${id}" type="button">${escapeHtml(category)}</button>`);
+      html += `<section id="${id}" class="order-category-block"><h3 class="order-category-title">${escapeHtml(category)}</h3><div class="order-grid">`;
+      items.forEach((item) => { const qty = number(state.order[item.key]); if (qty) selected += 1; html += `<div class="order-card"><div class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small></div>${inputControl(item, qty, "order")}</div>`; });
+      html += `</div></section>`;
     });
     $("#orderList").innerHTML = html || `<div class="empty-state">ไม่พบรายการ</div>`;
-    $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents();
+    $("#orderCategoryNav").innerHTML = nav.join("");
+    $$('[data-category-target]').forEach((button) => { button.onclick = () => $("#" + button.dataset.categoryTarget)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
+    $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents(); updateCartBar();
   }
   function findMenu(key, line) { return state.menu.find((item) => item.key === key) || { key, displayName: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", sortOrder: line.sort_order || 0 }; }
   function renderReceive() {
@@ -216,11 +268,40 @@
     bindQuantityEvents(); bindRowEvents();
   }
 
+  function updateCartBar() {
+    const total = Object.values(state.order).reduce((sum, value) => sum + number(value), 0);
+    $("#orderTotalQty").textContent = total.toLocaleString("th-TH");
+    $("#orderCartBar").classList.toggle("hidden", state.activeTab !== "close");
+  }
+  function renderOrderSummary() {
+    const selected = state.menu.filter((item) => number(state.order[item.key]) > 0);
+    $("#orderSummaryList").innerHTML = selected.length ? selected.map((item) => `<div class="summary-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)}</small></span>${inputControl(item, state.order[item.key], "order-summary")}</div>`).join("") : `<div class="empty-state">ยังไม่มีรายการในตะกร้า</div>`;
+    bindQuantityEvents();
+  }
+  function openOrderSummary() { renderOrderSummary(); $("#orderSummaryModal").classList.remove("hidden"); }
+  function clearOrder() { state.order = {}; saveDraft(); renderOrder(); renderOrderSummary(); }
+  async function copyOrderText() {
+    const groups = groupedMenu(); let text = `รายการสั่งของ BigC (${formatThaiDate($("#orderDate").value)})`;
+    groups.forEach((items, category) => {
+      const rows = items.filter((item) => number(state.order[item.key]) > 0).map((item) => `- ${item.displayName} x ${number(state.order[item.key])}`);
+      if (rows.length) text += `\n\n${category}\n${rows.join("\n")}`;
+    });
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const area = document.createElement("textarea"); area.value = text; area.style.position = "fixed"; area.style.opacity = "0"; document.body.appendChild(area); area.select();
+      const copied = document.execCommand("copy"); area.remove(); if (!copied) throw new Error("copy failed");
+    }
+  }
+  function formatThaiDate(value) { const [year, month, day] = value.split("-"); return `${day}/${month}/${Number(year) + 543}`; }
+
   function targetObject(name) { return name === "order" ? state.order : name === "receive" ? state.receive : state.returns; }
   function updateQuantity(target, key, value) {
+    if (target === "order-summary") target = "order";
     if (target === "order") state.order[key] = number(value);
     else { const object = targetObject(target); const item = findMenu(key, object[key] || {}); object[key] = { ...(object[key] || lineFromMenu(item)), quantity: number(value) }; }
-    saveDraft(); renderRevenue();
+    saveDraft(); renderRevenue(); updateCartBar();
   }
   function bindQuantityEvents() {
     $$('input[data-qty-target]').forEach((input) => {
@@ -228,9 +309,10 @@
     });
     $$('[data-step]').forEach((button) => {
       button.onclick = () => {
-        const object = targetObject(button.dataset.qtyTarget); const current = button.dataset.qtyTarget === "order" ? object[button.dataset.key] : object[button.dataset.key]?.quantity;
+        const normalizedTarget = button.dataset.qtyTarget === "order-summary" ? "order" : button.dataset.qtyTarget;
+        const object = targetObject(normalizedTarget); const current = normalizedTarget === "order" ? object[button.dataset.key] : object[button.dataset.key]?.quantity;
         updateQuantity(button.dataset.qtyTarget, button.dataset.key, number(current) + Number(button.dataset.step));
-        if (button.dataset.qtyTarget === "order") renderOrder(); else if (button.dataset.qtyTarget === "receive") renderReceive(); else renderReturns();
+        if (["order", "order-summary"].includes(button.dataset.qtyTarget)) { renderOrder(); if (!$("#orderSummaryModal").classList.contains("hidden")) renderOrderSummary(); } else if (button.dataset.qtyTarget === "receive") renderReceive(); else renderReturns();
       };
     });
   }
@@ -247,28 +329,29 @@
   function removeLine(target, key) { delete targetObject(target)[key]; saveDraft(); target === "receive" ? renderReceive() : renderReturns(); }
 
   function linesFor(type) {
-    if (type === "close_order") return state.menu.filter((item) => number(state.order[item.key]) > 0).map((item) => ({ ...lineFromMenu(item, state.order[item.key]), received: true }));
+    if (type === "close_order") return state.menu.filter((item) => number(state.order[item.key]) > 0).map((item) => ({ ...lineFromMenu(item, state.order[item.key], "quantity"), received: true }));
     const source = type === "receive" ? state.receive : state.returns;
     return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => ({ ...line, line_key: key, received: type === "receive" ? Boolean(line.checked) : true }));
   }
 
   async function submitWorkflow(type) {
-    if (state.saving) return;
+    if (state.saving) return false;
     const lines = linesFor(type);
-    if (type !== "close_order" && !lines.length) { notice("กรุณาระบุรายการอย่างน้อย 1 รายการ", true); return; }
+    if (type === "close_order" && !lines.length) { notice("ยังไม่มีรายการสั่งของ", true); return false; }
+    if (type === "receive" && !lines.length) { notice("กรุณาเช็กรายการที่ได้รับอย่างน้อย 1 รายการ", true); return false; }
     const payload = {
-      workflow_type: type, business_date: $("#businessDate").value,
-      source_workflow_id: type === "receive" ? state.context?.previous_order?.id || null : null,
-      cash_amount: type === "close_order" ? number($("#cashAmount").value) : 0,
-      transfer_amount: type === "close_order" ? number($("#transferAmount").value) : 0,
-      thai_chuay_thai_amount: type === "close_order" ? number($("#thaiAmount").value) : 0,
+      workflow_type: type, business_date: type === "close_order" ? $("#orderDate").value : type === "receive" ? $("#receiveDate").value : $("#returnDate").value,
+      source_workflow_id: type === "receive" ? state.contexts.receive?.previous_order?.id || null : null,
+      cash_amount: type === "return" ? number($("#cashAmount").value) : 0,
+      transfer_amount: type === "return" ? number($("#transferAmount").value) : 0,
+      thai_chuay_thai_amount: type === "return" ? number($("#thaiAmount").value) : 0,
       lines
     };
     state.saving = true; loading("กำลังบันทึกลงฐานข้อมูล"); notice("");
     try {
       const { data, error } = await state.client.schema("boy_central").rpc("save_bigc_v2_workflow", { payload });
       if (error) throw error;
-      localStorage.removeItem(draftKey());
+      saveDraft();
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...payload, workflow_id: data.workflow_id } });
@@ -278,8 +361,8 @@
         await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "error", sync_error: String(sheetError.message || sheetError).slice(0, 400) });
         setSync("รอส่ง Google Sheets", "pending"); notice("ข้อมูลอยู่ในฐานข้อมูลแล้ว แต่สำเนา Google Sheets ยังรอส่ง", false);
       }
-      await loadPage();
-    } catch (error) { setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); }
+      await loadPage(); return true;
+    } catch (error) { setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); return false; }
     finally { state.saving = false; loading("", false); }
   }
 
@@ -288,14 +371,14 @@
     const query = $("#pickerSearch").value.trim().toLowerCase(); const selected = targetObject(state.pickerTarget);
     const items = state.menu.filter((item) => item.active && !selected[item.key] && (!query || `${item.displayName} ${item.category}`.toLowerCase().includes(query)));
     $("#pickerList").innerHTML = items.length ? items.map((item) => `<button class="picker-item" data-pick="${item.key}" type="button"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)}</small></span><b>＋</b></button>`).join("") : `<div class="empty-state">ไม่พบรายการ</div>`;
-    $$('[data-pick]').forEach((button) => { button.onclick = () => { const item = state.menu.find((row) => row.key === button.dataset.pick); selected[item.key] = lineFromMenu(item); saveDraft(); $("#pickerModal").classList.add("hidden"); state.pickerTarget === "receive" ? renderReceive() : renderReturns(); }; });
+    $$('[data-pick]').forEach((button) => { button.onclick = () => { const item = state.menu.find((row) => row.key === button.dataset.pick); selected[item.key] = { ...lineFromMenu(item), checked: state.pickerTarget === "receive" }; saveDraft(); $("#pickerModal").classList.add("hidden"); state.pickerTarget === "receive" ? renderReceive() : renderReturns(); }; });
   }
 
   function openSettings() { $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = ""; renderSettings(); }
   function renderSettings() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
-    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งน้ำหนัก"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><input data-setting="active" data-key="${item.key}" type="checkbox" ${item.active ? "checked" : ""} aria-label="ใช้งาน"></div>`).join("");
+    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งตอนรับหรือคืน"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"></div>`).join("");
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
   }
   async function saveSettings() {
@@ -314,15 +397,25 @@
   }
 
   function bindStaticEvents() {
-    $$(".workflow-tabs button").forEach((button) => { button.onclick = () => { state.activeTab = button.dataset.tab; $$(".workflow-tabs button").forEach((row) => row.classList.toggle("active", row === button)); $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${state.activeTab}`)); }; });
+    $$(".workflow-tabs button").forEach((button) => { button.onclick = () => { state.activeTab = button.dataset.tab; $$(".workflow-tabs button").forEach((row) => row.classList.toggle("active", row === button)); $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${state.activeTab}`)); updateCartBar(); }; });
     ["cashAmount", "transferAmount", "thaiAmount"].forEach((id) => { $("#" + id).oninput = () => { renderRevenue(); saveDraft(); }; });
     $("#orderSearch").oninput = renderOrder; $("#pickerSearch").oninput = renderPicker; $("#settingsSearch").oninput = renderSettings;
-    $("#businessDate").onchange = loadPage; $("#refreshButton").onclick = loadPage;
+    $$('[data-date-target]').forEach((button) => { button.onclick = () => { const input = $("#" + button.dataset.dateTarget); if (input.showPicker) input.showPicker(); else input.click(); }; });
+    ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).onchange = () => {
+      if (id === "orderDate") state.order = {};
+      if (id === "receiveDate") state.receive = {};
+      if (id === "returnDate") { state.returns = {}; $("#cashAmount").value = ""; $("#transferAmount").value = ""; $("#thaiAmount").value = ""; }
+      renderDateDisplays(); const local = readLocalDraft(); hydrateDraft(local); saveDraft(); loadPage();
+    }; });
+    $("#refreshButton").onclick = loadPage;
     $("#settingsButton").onclick = openSettings; $("#addReceiveButton").onclick = () => openPicker("receive"); $("#addReturnButton").onclick = () => openPicker("returns");
-    $("#submitClose").onclick = () => submitWorkflow("close_order"); $("#submitReceive").onclick = () => submitWorkflow("receive"); $("#submitReturn").onclick = () => submitWorkflow("return");
+    $("#submitReceive").onclick = () => submitWorkflow("receive"); $("#submitReturn").onclick = () => submitWorkflow("return");
+    $("#openOrderSummary").onclick = openOrderSummary;
+    $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
+    $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#addMenuItem").onclick = addMenuItem;
-    $$('[data-close-modal]').forEach((button) => { button.onclick = () => $("#" + button.dataset.closeModal).classList.add("hidden"); });
-    $$('[data-clear]').forEach((button) => { button.onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) { state.order = {}; saveDraft(); renderOrder(); } }; });
+    $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
+    $$('[data-clear]').forEach((button) => { button.onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); }; });
     window.addEventListener("online", () => saveCloudDraft());
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCloudDraft(); });
   }
@@ -330,7 +423,7 @@
   async function start(authContext) {
     if (state.started) return;
     state.started = true;
-    $("#businessDate").value = today(); bindStaticEvents();
+    ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).value = today(); }); renderDateDisplays(); bindStaticEvents();
     const config = window.BOY_CENTRAL_CONFIG || {};
     state.client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
     const { data } = await state.client.auth.getSession(); state.session = data.session;
