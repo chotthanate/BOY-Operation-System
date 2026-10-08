@@ -1,4 +1,4 @@
-const CACHE_NAME = "boy-burger-v25";
+const CACHE_NAME = "boy-burger-v26";
 const APP_SHELL = [
   "./burger.html",
   "./assets/css/burger.css?v=20260926-2",
@@ -8,7 +8,7 @@ const APP_SHELL = [
   "./assets/css/boy-pin-login.css?v=20260915-1",
   "./assets/js/boy-central-config.js?v=20261002-3",
   "./assets/js/boy-local-access.js?v=20260922-1",
-  "./assets/js/burger.js?v=20261008-3",
+  "./assets/js/burger.js?v=20261008-4",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
 ];
 

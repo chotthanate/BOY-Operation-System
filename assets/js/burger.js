@@ -776,8 +776,11 @@
     const { data, error } = await client.schema("boy_central").rpc("get_branch_pending_receipts", { branch_code: branchApp.branchCode });
     state.receiptLoading = false;
     if (error) { if (!quiet) toast(`โหลดรายการรอรับไม่สำเร็จ: ${error.message}`); return; }
+    const previousReceipts = state.pendingReceipts;
     state.pendingReceipts = Array.isArray(data) ? data : [];
     renderPendingReceipts();
+    const receivedElsewhere = previousReceipts.some((receipt) => !state.pendingReceipts.some((row) => row.receipt_id === receipt.receipt_id));
+    if (receivedElsewhere) loadStock();
   }
 
   async function receivePendingReceipt(receiptId, button) {
