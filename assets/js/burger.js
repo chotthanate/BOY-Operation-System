@@ -83,7 +83,7 @@
   function updateSyncStatus() {
     if (!state.session) return;
     const count = readOutbox().length;
-    if (state.localAccess) { setConnection(count ? `โหมดสำรอง · รอส่ง ${count}` : "โหมดสำรองในเครื่อง", "pending"); renderSyncCenter(); return; }
+    if (state.localAccess) { setConnection(count ? `เชื่อมออนไลน์ · รอส่ง ${count}` : "แตะเพื่อเชื่อมออนไลน์", "pending"); renderSyncCenter(); return; }
     if (!navigator.onLine) setConnection(count ? `ออฟไลน์ · รอส่ง ${count}` : "ออฟไลน์", "pending");
     else if (count) setConnection(`รอส่ง ${count} รายการ`, "pending");
     else setConnection(`เชื่อมต่อแล้ว · ${state.items.filter((row) => row.active !== false && row.branch_active !== false).length} สินค้า`, "online");
@@ -1556,8 +1556,9 @@
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = state.profile.display_name || "ผู้ดูแล BOY";
     const hadCache = loadMasterCache();
-    if (!hadCache) toast("Supabase ยังไม่พร้อม และเครื่องนี้ยังไม่มีข้อมูลที่บันทึกไว้");
-    else toast("Supabase ยังไม่พร้อม แสดงข้อมูลที่เก็บไว้ในเครื่อง");
+    if (!hadCache) toast("ยังไม่ได้เชื่อมบัญชีออนไลน์ และเครื่องนี้ยังไม่มีข้อมูลสำรอง");
+    else if (navigator.onLine) toast("กำลังใช้ข้อมูลสำรอง · แตะสถานะด้านบนเพื่อเชื่อมออนไลน์");
+    else toast("ออฟไลน์ · กำลังใช้ข้อมูลที่เก็บไว้ในเครื่อง");
     if (state.branch) { await flushOutbox(); await loadDraftForDate(); await loadExpenseHistory(); }
     updateSyncStatus();
     return true;
@@ -1687,7 +1688,10 @@
   $("#masterList").addEventListener("click", (event) => { const row = event.target.closest("[data-master-id]"); if (row) openMaster(row.dataset.masterId, row.dataset.masterKind); });
   $("#addMasterButton").addEventListener("click", () => openMaster(null, state.masterFilter === "expense" ? "expense_item" : "item"));
   $("#accountQuickButton").addEventListener("click", () => setPage("account"));
-  $("#connectionBadge").addEventListener("click", () => setPage("account"));
+  $("#connectionBadge").addEventListener("click", () => {
+    setPage("account");
+    if (state.localAccess) window.setTimeout(() => $("#reconnectButton")?.focus(), 0);
+  });
   $("#syncNowButton").addEventListener("click", async () => {
     if (state.localAccess) { toast("เชื่อมต่อ Supabase ใหม่ก่อนส่งข้อมูล"); return; }
     const sent = await flushOutbox({ notify: true });
