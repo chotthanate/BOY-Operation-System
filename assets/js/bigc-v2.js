@@ -3,6 +3,8 @@
   const BRANCH_CODE = "BIGC-CENTRAL-PATTAYA";
   const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
   const CLOUD_DRAFT_DELAY = 8000;
+  const SETTINGS_CACHE_KEY = "boy-bigc-v2-settings-cache";
+  const SETTINGS_PENDING_KEY = "boy-bigc-v2-settings-pending";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const number = (value) => Math.max(0, Number(value) || 0);
@@ -133,10 +135,59 @@
     })).sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
+  function readStoredJson(key) {
+    try { return JSON.parse(localStorage.getItem(key) || "null"); }
+    catch (_) { return null; }
+  }
+  function settingsPayload(menu = state.menu) {
+    return {
+      menu_config: menu.map((item) => ({ ...item })),
+      default_return_keys: menu.filter((item) => item.defaultReturn).map((item) => item.key),
+      savedAt: Date.now()
+    };
+  }
+  function settingsFingerprint(payload) {
+    const menu = Array.isArray(payload?.menu_config) ? payload.menu_config : [];
+    const normalized = menu.map((item, index) => ({
+      key: item.key || "", displayName: item.displayName || item.item_name || "", name: item.name || item.item_name || "",
+      category: item.category || "อื่นๆ", unit: item.unit || "", inputMode: item.inputMode === "weight" ? "weight" : "quantity",
+      active: item.active !== false, sortOrder: Number(item.sortOrder ?? index)
+    })).sort((left, right) => left.sortOrder - right.sortOrder || left.key.localeCompare(right.key));
+    return JSON.stringify({ menu: normalized, returns: [...(payload?.default_return_keys || [])].sort() });
+  }
+  function cacheSettings(payload, pending = false) {
+    localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(payload));
+    if (pending) localStorage.setItem(SETTINGS_PENDING_KEY, JSON.stringify(payload));
+  }
+  async function uploadSettingsPayload(payload) {
+    const cleanPayload = { menu_config: payload.menu_config || [], default_return_keys: payload.default_return_keys || [] };
+    const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_settings", { payload: cleanPayload });
+    if (error) throw error;
+    const { data, error: verifyError } = await state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
+    if (verifyError) throw verifyError;
+    if (settingsFingerprint(data?.settings || {}) !== settingsFingerprint(cleanPayload)) throw new Error("ตรวจสอบการตั้งค่าที่บันทึกแล้วไม่ตรงกัน");
+    localStorage.removeItem(SETTINGS_PENDING_KEY);
+    cacheSettings(payload, false);
+    if (state.context) state.context.settings = data.settings;
+    return data.settings;
+  }
+  async function flushPendingSettings(quiet = false) {
+    const pending = readStoredJson(SETTINGS_PENDING_KEY);
+    if (!pending || !state.session || !navigator.onLine) return false;
+    try {
+      await uploadSettingsPayload(pending);
+      if (!quiet) { setSync("ส่งการตั้งค่าแล้ว", "ok"); notice("ส่งการตั้งค่าที่ค้างไว้เรียบร้อย"); }
+      return true;
+    } catch (error) {
+      if (!quiet) { setSync("การตั้งค่ารอส่ง", "pending"); notice(`เก็บการตั้งค่าไว้ในเครื่องแล้ว รอส่งใหม่: ${error.message}`, true); }
+      return false;
+    }
+  }
+
   async function loadPage() {
     loading("กำลังโหลดข้อมูล"); notice("");
     try {
-      const legacyMenuPromise = loadLegacyMenu();
+      await flushPendingSettings(true);
       const dates = { order: $("#orderDate").value, receive: $("#receiveDate").value, returns: $("#returnDate").value };
       const requests = {};
       Object.values(dates).forEach((date) => { if (!requests[date]) requests[date] = state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: date }); });
@@ -146,7 +197,11 @@
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
-      state.menu = settingsMenu(state.context.settings, await legacyMenuPromise);
+      const localSettings = readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY);
+      const cloudHasMenu = Array.isArray(state.context.settings?.menu_config) && state.context.settings.menu_config.length > 0;
+      const localHasMenu = Array.isArray(localSettings?.menu_config) && localSettings.menu_config.length > 0;
+      const legacyMenu = cloudHasMenu || localHasMenu ? [] : await loadLegacyMenu();
+      state.menu = settingsMenu(state.context.settings, settingsMenu(localSettings, legacyMenu));
       const localDraft = readLocalDraft();
       const orderCloud = state.contexts.order.draft || {};
       const receiveCloud = state.contexts.receive.draft || {};
@@ -168,10 +223,11 @@
       seedDefaultReturns();
       renderAll();
       const pending = (state.context.pending_sheet_sync || []).length;
-      setSync(pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", pending ? "pending" : "ok");
+      const settingsPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
+      setSync(settingsPending ? "การตั้งค่ารอส่ง" : pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", settingsPending || pending ? "pending" : "ok");
     } catch (error) {
       const draft = readLocalDraft(); hydrateDraft(draft);
-      if (!state.menu.length) state.menu = await loadLegacyMenu();
+      if (!state.menu.length) state.menu = settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu());
       renderAll(); setSync("ใช้งานในเครื่อง", "error"); notice(`โหลดฐานข้อมูลกลางไม่สำเร็จ: ${error.message}`, true);
     } finally { loading("", false); }
   }
@@ -235,7 +291,7 @@
   }
   function inputControl(item, value, target) {
     if (!target.startsWith("order") && item.inputMode === "weight") return `<div class="weight-control"><input data-qty-target="${target}" data-key="${item.key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(value) || ""}" placeholder="${escapeHtml(item.unit || "น้ำหนัก")}"></div>`;
-    return `<div class="qty-control"><button data-step="-1" data-qty-target="${target}" data-key="${item.key}" type="button">−</button><input data-qty-target="${target}" data-key="${item.key}" inputmode="numeric" type="number" min="0" step="1" value="${number(value)}"><button data-step="1" data-qty-target="${target}" data-key="${item.key}" type="button">+</button></div>`;
+    return `<div class="qty-control"><button data-step="-1" data-qty-target="${target}" data-key="${item.key}" type="button" aria-label="ลดจำนวน">−</button><input data-qty-target="${target}" data-key="${item.key}" inputmode="numeric" type="number" min="0" step="1" value="${number(value)}" aria-label="จำนวน"><button data-step="1" data-qty-target="${target}" data-key="${item.key}" type="button" aria-label="เพิ่มจำนวน">+</button></div>`;
   }
   function renderOrder() {
     let html = ""; let selected = 0; let groupIndex = 0; const nav = [];
@@ -243,13 +299,13 @@
       const id = `order-category-${groupIndex++}`;
       nav.push(`<button data-category-target="${id}" type="button">${escapeHtml(category)}</button>`);
       html += `<section id="${id}" class="order-category-block"><h3 class="order-category-title">${escapeHtml(category)}</h3><div class="order-grid">`;
-      items.forEach((item) => { const qty = number(state.order[item.key]); if (qty) selected += 1; html += `<div class="order-card"><div class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small></div>${inputControl(item, qty, "order")}</div>`; });
+      items.forEach((item) => { const qty = number(state.order[item.key]); if (qty) selected += 1; html += `<div class="order-card ${qty ? "selected" : ""}" data-order-key="${escapeHtml(item.key)}"><div class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small></div>${inputControl(item, qty, "order")}</div>`; });
       html += `</div></section>`;
     });
     $("#orderList").innerHTML = html || `<div class="empty-state">ไม่พบรายการ</div>`;
     $("#orderCategoryNav").innerHTML = nav.join("");
     $$('[data-category-target]').forEach((button) => { button.onclick = () => $("#" + button.dataset.categoryTarget)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
-    $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents(); updateCartBar();
+    $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents(); bindOrderCards(); updateCartBar();
   }
   function findMenu(key, line) { return state.menu.find((item) => item.key === key) || { key, displayName: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", sortOrder: line.sort_order || 0 }; }
   function renderReceive() {
@@ -306,28 +362,55 @@
     else { const object = targetObject(target); const item = findMenu(key, object[key] || {}); object[key] = { ...(object[key] || lineFromMenu(item)), quantity: number(value) }; }
     saveDraft(); renderRevenue(); updateCartBar();
   }
+  function syncQuantityViews(target, key, value) {
+    const normalizedTarget = target === "order-summary" ? "order" : target;
+    $$('input[data-qty-target]').filter((input) => (input.dataset.qtyTarget === "order-summary" ? "order" : input.dataset.qtyTarget) === normalizedTarget && input.dataset.key === key).forEach((input) => { input.value = number(value); });
+    if (normalizedTarget !== "order") return;
+    $$('[data-order-key]').filter((card) => card.dataset.orderKey === key).forEach((card) => card.classList.toggle("selected", number(value) > 0));
+    $("#orderCount").textContent = `${Object.values(state.order).filter((quantity) => number(quantity) > 0).length} รายการ`;
+  }
   function bindQuantityEvents() {
     $$('input[data-qty-target]').forEach((input) => {
-      input.oninput = () => updateQuantity(input.dataset.qtyTarget, input.dataset.key, input.value);
+      input.onclick = (event) => event.stopPropagation();
+      input.onpointerdown = (event) => event.stopPropagation();
+      input.oninput = () => { updateQuantity(input.dataset.qtyTarget, input.dataset.key, input.value); syncQuantityViews(input.dataset.qtyTarget, input.dataset.key, input.value); };
     });
     $$('[data-step]').forEach((button) => {
-      button.onclick = () => {
+      button.onclick = (event) => {
+        event.stopPropagation();
         const normalizedTarget = button.dataset.qtyTarget === "order-summary" ? "order" : button.dataset.qtyTarget;
         const object = targetObject(normalizedTarget); const current = normalizedTarget === "order" ? object[button.dataset.key] : object[button.dataset.key]?.quantity;
-        updateQuantity(button.dataset.qtyTarget, button.dataset.key, number(current) + Number(button.dataset.step));
-        if (["order", "order-summary"].includes(button.dataset.qtyTarget)) { renderOrder(); if (!$("#orderSummaryModal").classList.contains("hidden")) renderOrderSummary(); } else if (button.dataset.qtyTarget === "receive") renderReceive(); else renderReturns();
+        const next = number(current) + Number(button.dataset.step);
+        updateQuantity(button.dataset.qtyTarget, button.dataset.key, next);
+        if (["order", "order-summary"].includes(button.dataset.qtyTarget)) syncQuantityViews(button.dataset.qtyTarget, button.dataset.key, next);
+        else if (button.dataset.qtyTarget === "receive") renderReceive(); else renderReturns();
       };
+    });
+  }
+  function bindOrderCards() {
+    $$('[data-order-key]').forEach((card) => {
+      const increment = () => {
+        const next = number(state.order[card.dataset.orderKey]) + 1;
+        updateQuantity("order", card.dataset.orderKey, next);
+        syncQuantityViews("order", card.dataset.orderKey, next);
+      };
+      card.onclick = (event) => { if (!event.target.closest("button,input")) increment(); };
     });
   }
   function bindRowEvents() {
     $$('[data-receive-check]').forEach((checkbox) => { checkbox.onchange = () => { state.receive[checkbox.dataset.receiveCheck].checked = checkbox.checked; saveDraft(); renderReceive(); }; });
-    $$('[data-remove-target]').forEach((button) => { button.onclick = () => removeLine(button.dataset.removeTarget, button.dataset.key); });
+    $$('[data-remove-target]').forEach((button) => { button.onclick = () => confirmRemoveLine(button.dataset.removeTarget, button.dataset.key); });
     $$('[data-swipe-key]').forEach((row) => {
       let start = 0;
-      row.ontouchstart = (event) => { start = event.touches[0].clientX; };
+      row.ontouchstart = (event) => { start = event.touches[0].clientX; row.classList.remove("swiped"); };
       row.ontouchmove = (event) => { const distance = Math.max(0, start - event.touches[0].clientX); row.querySelector(".item-row-inner").style.transform = `translateX(-${Math.min(90, distance)}px)`; };
-      row.ontouchend = (event) => { const distance = start - event.changedTouches[0].clientX; if (distance > 70) removeLine(row.dataset.swipeTarget, row.dataset.swipeKey); else row.querySelector(".item-row-inner").style.transform = ""; };
+      row.ontouchend = (event) => { const distance = start - event.changedTouches[0].clientX; row.querySelector(".item-row-inner").style.transform = ""; row.classList.toggle("swiped", distance > 50); };
     });
+  }
+  function confirmRemoveLine(target, key) {
+    const line = targetObject(target)[key]; const item = findMenu(key, line || {});
+    const action = target === "receive" ? "นำออกจากรายการรับของ" : "ลบออกจากรายการคืนของ";
+    if (confirm(`${action}\n“${item.displayName}”\n\nยืนยันการลบรายการนี้หรือไม่?`)) removeLine(target, key);
   }
   function removeLine(target, key) { delete targetObject(target)[key]; saveDraft(); target === "receive" ? renderReceive() : renderReturns(); }
 
@@ -388,11 +471,20 @@
   }
   async function persistSettings(successText) {
     loading("กำลังบันทึกการตั้งค่า"); notice("");
-    const payload = { menu_config: state.menu, default_return_keys: state.menu.filter((item) => item.defaultReturn).map((item) => item.key) };
-    const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_settings", { payload });
-    loading("", false);
-    if (error) { notice(error.message, true); return false; }
-    addMissingDefaultReturns(); renderAll(); saveDraft(); notice(successText); return true;
+    const payload = settingsPayload();
+    cacheSettings(payload, true);
+    try {
+      if (!state.session || !navigator.onLine) {
+        setSync("การตั้งค่ารอส่ง", "pending"); notice(`${successText}ในเครื่องแล้ว ระบบจะส่งเมื่อออนไลน์`);
+      } else {
+        await uploadSettingsPayload(payload);
+        setSync("บันทึกการตั้งค่าแล้ว", "ok"); notice(successText);
+      }
+      addMissingDefaultReturns(); renderAll(); saveDraft(); return true;
+    } catch (error) {
+      setSync("การตั้งค่ารอส่ง", "pending"); notice(`${successText}ในเครื่องแล้ว รอส่ง Supabase: ${error.message}`, true);
+      addMissingDefaultReturns(); renderAll(); saveDraft(); return true;
+    } finally { loading("", false); }
   }
   async function saveSettings() {
     if (!await persistSettings("บันทึกการตั้งค่าแล้ว")) return;
@@ -506,7 +598,7 @@
     $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
     $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
     $$('[data-clear]').forEach((button) => { button.onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); }; });
-    window.addEventListener("online", () => saveCloudDraft());
+    window.addEventListener("online", async () => { await flushPendingSettings(); saveCloudDraft(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCloudDraft(); });
   }
 

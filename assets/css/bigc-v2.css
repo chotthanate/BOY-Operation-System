@@ -27,3 +27,32 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .setting-legend,.setting-row{grid-template-columns:minmax(0,1fr) 24px 24px 82px}.setting-check{display:grid;place-items:center}.setting-check small{display:none;color:var(--muted);font-size:8px}.setting-actions{display:grid;grid-template-columns:38px 38px;gap:5px}.setting-actions button{width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:#f7f6ef;color:var(--green);font-size:16px;font-weight:900}.setting-actions button:last-child{background:#fff1ee;color:var(--danger);font-size:10px}.edit-item-sheet{max-width:480px}.edit-item-fields{display:grid;gap:10px;margin-bottom:12px}.edit-item-fields label{display:grid;gap:5px;color:var(--muted);font-size:11px;font-weight:850}.edit-item-fields input{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;color:var(--ink)}
 .modal-error{min-height:18px;margin:0 0 8px;color:var(--danger);font-size:11px;text-align:center}
 @media(max-width:600px){.app-shell{padding-top:73px}.branch-brand strong{font-size:13px}.branch-brand small{font-size:10px}.branch-mark{width:38px;height:38px;border-radius:11px}.header-actions{min-width:0}.setting-legend{display:none}.setting-row{grid-template-columns:minmax(0,1fr) 38px 38px 76px;gap:4px;padding:8px}.setting-check{gap:1px}.setting-check small{display:block}.setting-actions{grid-template-columns:35px 35px}.setting-actions button{width:35px;height:38px}}
+
+/* BigC compact touch-first ordering */
+.qty-control button{border-color:#dde7e3;background:#f0f3f2;color:#68746f}
+.qty-control button:last-child{border-color:#cfe9dd;background:#e8f7ef;color:#159354}
+.qty-control input{border-color:#dde7e3}
+.order-card{gap:0;padding:0;overflow:hidden;cursor:pointer;border-color:#dce9e5;border-radius:16px;box-shadow:0 7px 20px rgba(8,115,94,.07);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.order-card:active{transform:scale(.985)}
+.order-card.selected{border-color:#9fd7c9;box-shadow:0 7px 20px rgba(8,115,94,.13)}
+.order-card .item-copy{display:grid;place-items:center;min-height:72px;padding:12px 8px}
+.order-card .item-copy strong{min-height:0;font-size:14px;line-height:1.3}
+.order-card .qty-control{display:flex;justify-content:center;gap:9px;width:100%;min-height:52px;margin:0;padding:7px 8px;border-top:1px solid #e8efec}
+.order-card .qty-control button{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;background:#e8f7ef;color:#16a05f;font-size:24px;line-height:1;touch-action:manipulation}
+.order-card .qty-control button:first-child{border-radius:50%;background:#f0f1f0;color:#6f7975}
+.order-card:not(.selected) .qty-control button:first-child{visibility:hidden}
+.order-card .qty-control button:last-child{border-radius:50%}
+.order-card .qty-control input{width:42px;height:38px;border:0;background:transparent;color:#159354;font-size:20px;font-weight:900;pointer-events:auto}
+.item-row.swiped .item-row-inner{transform:translateX(-90px)!important}
+.swipe-delete{touch-action:manipulation}
+
+@media(max-width:600px){
+  .revenue-card{padding:11px}
+  .revenue-card .card-heading{margin-bottom:8px}
+  .revenue-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .revenue-grid label{display:block;min-width:0;text-align:center;font-size:10px}
+  .revenue-grid input{height:43px;margin-top:4px;padding:0 5px;text-align:center;font-size:14px}
+  .order-grid{gap:9px}
+  .order-card .item-copy{min-height:68px;padding:10px 6px}
+  .order-card .qty-control{min-height:50px;padding:6px}
+}
