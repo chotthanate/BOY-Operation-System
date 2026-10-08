@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
   <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261008-1">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261008-2">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
@@ -212,7 +212,8 @@
   </dialog>
 
   <dialog id="recipeDialog" class="review-dialog recipe-dialog" tabindex="-1">
-    <div class="recipe-dialog-heading"><div><small>ใช้ร่วมกับ Burger POS</small><h2>สูตรเมนู</h2></div><button class="icon-button" type="button" data-close-dialog="recipeDialog" aria-label="ปิด">×</button></div>
+    <div class="recipe-dialog-heading"><div><small>ใช้ร่วมกับ Burger POS</small><h2>สูตรตัดสต็อก</h2></div><button class="icon-button" type="button" data-close-dialog="recipeDialog" aria-label="ปิด">×</button></div>
+    <div class="recipe-mode-tabs"><button class="active" type="button" data-recipe-mode="menu">เมนูที่ขาย</button><button type="button" data-recipe-mode="modifier">ตัวเลือกเสริม</button></div>
     <div class="recipe-layout">
       <div class="recipe-menu-pane">
         <label class="search-field"><span>⌕</span><input id="recipeMenuSearch" type="search" placeholder="ค้นหาเมนู"></label>
@@ -220,7 +221,7 @@
       </div>
       <form id="recipeForm" class="recipe-editor-pane">
         <input id="recipeMenuId" type="hidden">
-        <div><small>เมนูที่เลือก</small><h3 id="recipeMenuName">เลือกเมนูก่อน</h3></div>
+        <div><small id="recipeSelectionLabel">เมนูที่เลือก</small><h3 id="recipeMenuName">เลือกเมนูก่อน</h3></div>
         <div id="recipeLines" class="recipe-lines"><div class="empty-state compact-empty">เลือกเมนูเพื่อแก้สูตร</div></div>
         <button class="secondary-button" id="addRecipeLineButton" type="button" disabled>+ เพิ่มวัตถุดิบ</button>
         <button class="primary-button" id="saveRecipeButton" type="submit" disabled>บันทึกสูตร</button>
@@ -233,6 +234,6 @@
   <script src="assets/js/boy-central-config.js?v=20261002-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
-  <script src="assets/js/burger.js?v=20261008-1"></script>
+  <script src="assets/js/burger.js?v=20261008-2"></script>
 </body>
 </html>

@@ -124,6 +124,9 @@
 .recipe-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .recipe-dialog-heading small,.recipe-editor-pane small { color: var(--muted); font-size: .72rem; font-weight: 800; }
 .recipe-dialog-heading h2,.recipe-editor-pane h3 { margin: 2px 0 0; }
+.recipe-mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: -2px 0 14px; padding: 5px; border-radius: 13px; background: #edf5f2; }
+.recipe-mode-tabs button { min-height: 42px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-weight: 900; }
+.recipe-mode-tabs button.active { background: #fff; color: var(--green); box-shadow: 0 4px 12px #173a3020; }
 .recipe-layout { display: grid; grid-template-columns: minmax(220px,.8fr) minmax(320px,1.2fr); gap: 14px; }
 .recipe-menu-pane,.recipe-editor-pane { min-width: 0; }
 .recipe-menu-list { display: grid; gap: 7px; max-height: 520px; margin-top: 9px; overflow-y: auto; }
