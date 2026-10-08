@@ -11,7 +11,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], stockCachedAt: "", lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), stockTrackingDraft: new Map(), draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], stockCachedAt: "", menus: [], menuMappings: [], recipes: [], recipeDraft: [], lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), stockTrackingDraft: new Map(), draftTimer: null, syncing: false };
 
   function applyBranchIdentity() {
     document.documentElement.style.setProperty("--store-accent", branchApp.accent);
@@ -814,6 +814,21 @@
       return left[0] - right[0] || left[1] - right[1];
     });
     state.itemSuppliers = linksResult.error ? [] : (linksResult.data || []);
+    const mappingResult = await client.schema("boy_central").from("pos_master_mappings")
+      .select("legacy_key,source_name,menu_id").eq("branch_id", state.branch.id).eq("entity_type", "product").not("menu_id", "is", null).order("source_name");
+    if (mappingResult.error) throw mappingResult.error;
+    state.menuMappings = mappingResult.data || [];
+    const menuIds = [...new Set(state.menuMappings.map((row) => row.menu_id).filter(Boolean))];
+    if (menuIds.length) {
+      const [menusResult, recipesResult] = await Promise.all([
+        client.schema("boy_central").from("menus").select("id,code,name,active").in("id", menuIds).eq("active", true).order("name"),
+        client.schema("boy_central").from("recipes").select("menu_id,item_id,quantity_base,active").in("menu_id", menuIds).eq("active", true)
+      ]);
+      if (menusResult.error) throw menusResult.error;
+      if (recipesResult.error) throw recipesResult.error;
+      state.menus = menusResult.data || [];
+      state.recipes = recipesResult.data || [];
+    } else { state.menus = []; state.recipes = []; }
     state.catalogSource = "supabase";
     renderLines();
     renderMasterList();
@@ -922,6 +937,80 @@
     const query = $("#stockSearch").value.trim().toLocaleLowerCase("th");
     const rows = state.stock.filter((row) => `${row.item_code} ${row.item_name}`.toLocaleLowerCase("th").includes(query));
     $("#stockList").innerHTML = rows.length ? rows.map((row) => `<article class="stock-row"><span><strong>${escapeHtml(row.item_name)}</strong><small>${escapeHtml(row.item_code || "")} · ${row.stock_source ? escapeHtml(row.stock_source) : `ต้นทุน ${money.format(row.average_unit_cost || 0)}`}</small></span><span class="stock-row-actions"><span class="stock-qty"><strong>${number.format(row.quantity_on_hand || 0)} ${escapeHtml(row.base_unit_name || "")}</strong><span class="stock-value">${money.format(row.inventory_value || 0)}</span></span>${state.profile?.company_role === "admin" ? `<button class="stock-settings" type="button" data-stock-group="${escapeHtml(row.item_id)}" aria-label="ตั้งค่า ${escapeHtml(row.item_name)}">⋯</button>` : ""}</span></article>`).join("") : '<div class="empty-state">ไม่พบสินค้า</div>';
+  }
+
+  function canonicalRecipeItems() {
+    return state.items.filter((item) => item.track_stock && !item.stock_target_item_id && item.active !== false && item.branch_active !== false);
+  }
+
+  function renderRecipeMenuList() {
+    const query = $("#recipeMenuSearch").value.trim().toLocaleLowerCase("th");
+    const selectedId = $("#recipeMenuId").value;
+    const rows = state.menus.filter((menu) => `${menu.code || ""} ${menu.name || ""}`.toLocaleLowerCase("th").includes(query));
+    $("#recipeMenuList").innerHTML = rows.length ? rows.map((menu) => {
+      const count = state.recipes.filter((row) => row.menu_id === menu.id && row.active !== false).length;
+      return `<button class="recipe-menu-row ${menu.id === selectedId ? "active" : ""}" type="button" data-recipe-menu="${menu.id}"><span><strong>${escapeHtml(menu.name)}</strong><small>${count ? `${count} วัตถุดิบ` : "ยังไม่มีสูตร"}</small></span><b>›</b></button>`;
+    }).join("") : '<div class="empty-state compact-empty">ไม่พบเมนู</div>';
+  }
+
+  function renderRecipeLines() {
+    const ingredients = canonicalRecipeItems();
+    const usedIds = new Set(state.recipeDraft.map((line) => line.item_id));
+    $("#recipeLines").innerHTML = state.recipeDraft.length ? state.recipeDraft.map((line, index) => {
+      const item = itemById(line.item_id);
+      const options = ingredients.map((row) => `<option value="${row.id}" ${row.id === line.item_id ? "selected" : ""} ${usedIds.has(row.id) && row.id !== line.item_id ? "disabled" : ""}>${escapeHtml(row.name)}</option>`).join("");
+      return `<div class="recipe-line" data-recipe-line="${index}"><select data-recipe-field="item_id">${options}</select><label><input data-recipe-field="quantity" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(line.quantity)}"><span>${escapeHtml(unitById(item?.base_unit_id)?.name || "หน่วย")}</span></label><button type="button" data-remove-recipe-line="${index}" aria-label="ลบวัตถุดิบ">×</button></div>`;
+    }).join("") : '<div class="empty-state compact-empty">เมนูนี้ยังไม่มีวัตถุดิบ</div>';
+    $("#addRecipeLineButton").disabled = !$("#recipeMenuId").value || !ingredients.some((item) => !usedIds.has(item.id));
+  }
+
+  function selectRecipeMenu(menuId) {
+    const menu = state.menus.find((row) => row.id === menuId);
+    if (!menu) return;
+    $("#recipeMenuId").value = menu.id;
+    $("#recipeMenuName").textContent = menu.name;
+    state.recipeDraft = state.recipes.filter((row) => row.menu_id === menu.id && row.active !== false)
+      .map((row) => ({ item_id: row.item_id, quantity: Number(row.quantity_base || 0) }));
+    $("#saveRecipeButton").disabled = false;
+    renderRecipeMenuList();
+    renderRecipeLines();
+  }
+
+  function openRecipeManager() {
+    if (state.profile?.company_role !== "admin") { toast("เฉพาะ Admin เท่านั้นที่แก้สูตรได้"); return; }
+    $("#recipeMenuSearch").value = "";
+    $("#recipeMenuId").value = "";
+    $("#recipeMenuName").textContent = "เลือกเมนูก่อน";
+    state.recipeDraft = [];
+    $("#saveRecipeButton").disabled = true;
+    renderRecipeMenuList();
+    renderRecipeLines();
+    $("#recipeDialog").showModal();
+  }
+
+  function addRecipeLine() {
+    const usedIds = new Set(state.recipeDraft.map((line) => line.item_id));
+    const next = canonicalRecipeItems().find((item) => !usedIds.has(item.id));
+    if (!next) return;
+    state.recipeDraft.push({ item_id: next.id, quantity: 1 });
+    renderRecipeLines();
+  }
+
+  async function saveRecipe(event) {
+    event.preventDefault();
+    const menuId = $("#recipeMenuId").value;
+    if (!menuId) return;
+    if (state.recipeDraft.some((line) => !line.item_id || Number(line.quantity || 0) <= 0)) { toast("กรุณากรอกจำนวนวัตถุดิบให้ถูกต้อง"); return; }
+    const button = $("#saveRecipeButton");
+    button.disabled = true; button.textContent = "กำลังบันทึก…";
+    try {
+      const { error } = await client.schema("boy_central").rpc("admin_save_branch_recipe", { payload: { branch_code: branchApp.branchCode, menu_id: menuId, lines: state.recipeDraft } });
+      if (error) throw error;
+      state.recipes = state.recipes.filter((row) => row.menu_id !== menuId).concat(state.recipeDraft.map((line) => ({ menu_id: menuId, item_id: line.item_id, quantity_base: Number(line.quantity), active: true })));
+      renderRecipeMenuList();
+      toast("บันทึกสูตรและส่งให้ POS แล้ว");
+    } catch (error) { toast(`บันทึกสูตรไม่สำเร็จ: ${error.message}`); }
+    finally { button.disabled = false; button.textContent = "บันทึกสูตร"; }
   }
 
   function stockMemberRows(targetId = "") {
@@ -1440,6 +1529,7 @@
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
+  $("#manageRecipesButton").addEventListener("click", openRecipeManager);
   $("#addStockGroupButton").addEventListener("click", () => openStockGroup());
   $("#manageStockTrackingButton").addEventListener("click", openStockTracking);
   $("#stockList").addEventListener("click", (event) => {
@@ -1466,6 +1556,19 @@
     renderStockTrackingList();
   });
   $("#stockTrackingForm").addEventListener("submit", saveStockTracking);
+  $("#recipeMenuSearch").addEventListener("input", renderRecipeMenuList);
+  $("#recipeMenuList").addEventListener("click", (event) => { const button = event.target.closest("[data-recipe-menu]"); if (button) selectRecipeMenu(button.dataset.recipeMenu); });
+  $("#addRecipeLineButton").addEventListener("click", addRecipeLine);
+  $("#recipeLines").addEventListener("change", (event) => {
+    const row = event.target.closest("[data-recipe-line]");
+    if (!row || !event.target.dataset.recipeField) return;
+    const line = state.recipeDraft[Number(row.dataset.recipeLine)];
+    if (event.target.dataset.recipeField === "item_id") line.item_id = event.target.value;
+    else line.quantity = Number(event.target.value);
+    renderRecipeLines();
+  });
+  $("#recipeLines").addEventListener("click", (event) => { const button = event.target.closest("[data-remove-recipe-line]"); if (!button) return; state.recipeDraft.splice(Number(button.dataset.removeRecipeLine), 1); renderRecipeLines(); });
+  $("#recipeForm").addEventListener("submit", saveRecipe);
   $("#dashboardMonth").addEventListener("change", loadDashboard);
   $("#masterSearch").addEventListener("input", renderMasterList);
   $$("[data-master-filter]").forEach((button) => button.addEventListener("click", () => {
