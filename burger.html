@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="assets/css/burger.css?v=20260926-2">
   <link rel="stylesheet" href="assets/css/burger-expense.css?v=20260927-1">
   <link rel="stylesheet" href="assets/css/burger-history.css">
-  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261008-2">
+  <link rel="stylesheet" href="assets/css/burger-central.css?v=20261008-3">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20260927-1">
 </head>
@@ -54,6 +54,15 @@
         <div class="section-heading compact"><div><small id="stockPageSubtitle">คงเหลือปัจจุบัน</small><h1>สต็อก</h1></div><div class="heading-actions"><button class="secondary-button compact-button" id="manageRecipesButton" type="button">สูตรเมนู</button><button class="secondary-button compact-button" id="manageStockTrackingButton" type="button">จัดการรายการ</button><button class="secondary-button compact-button" id="addStockGroupButton" type="button">+ เพิ่มสต็อก</button><button class="icon-button" id="refreshStockButton" type="button" aria-label="โหลดใหม่">↻</button></div></div>
         <label class="search-field"><span>⌕</span><input id="stockSearch" type="search" placeholder="ค้นหาสินค้า"></label>
         <div class="stock-list" id="stockList"></div>
+      </section>
+
+      <section class="page" id="receiptsPage" data-page="receipts">
+        <div class="section-heading compact">
+          <div><small>สินค้าที่บันทึกซื้อแล้ว</small><h1>รอรับสินค้า</h1></div>
+          <div class="heading-actions"><span class="count-pill" id="pendingReceiptCount">0 รายการ</span><button class="icon-button" id="refreshReceiptsButton" type="button" aria-label="โหลดรายการรอรับใหม่">↻</button></div>
+        </div>
+        <p class="page-intro">กดรับเมื่อของมาถึงจริง ระบบจะเพิ่มสต็อกและนำรายการนี้ออกจากทั้งเว็บไซต์และ POS</p>
+        <div class="pending-receipt-list" id="pendingReceiptList"><div class="empty-state">กำลังโหลดรายการรอรับ</div></div>
       </section>
 
       <section class="page" id="dashboardPage" data-page="dashboard">
@@ -102,6 +111,7 @@
     <button class="active" type="button" data-target="expense"><span>＋</span><strong>บันทึก</strong></button>
     <a id="dashboardNavLink" href="branch-dashboard.html?branch=BURGER"><span>▥</span><strong>Dashboard</strong></a>
     <button type="button" data-target="stock"><span>▦</span><strong>สต็อก</strong></button>
+    <button type="button" data-target="receipts"><span>▣</span><strong>รอรับ</strong></button>
     <a id="employeeNavLink" href="master-data.html?entity=employees&store=burger"><span>♙</span><strong>พนักงาน</strong></a>
     <button type="button" data-target="settings"><span>•••</span><strong>เพิ่มเติม</strong></button>
   </nav>
@@ -234,6 +244,6 @@
   <script src="assets/js/boy-central-config.js?v=20261002-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
-  <script src="assets/js/burger.js?v=20261008-2"></script>
+  <script src="assets/js/burger.js?v=20261008-3"></script>
 </body>
 </html>

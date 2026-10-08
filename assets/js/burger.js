@@ -11,7 +11,7 @@
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });
-  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], stockCachedAt: "", menus: [], menuMappings: [], recipes: [], modifierMappings: [], modifierRecipes: [], recipeMode: "menu", recipeDraft: [], lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), stockTrackingDraft: new Map(), draftTimer: null, syncing: false };
+  const state = { session: null, profile: null, localAccess: false, catalogSource: "", branch: null, branchItems: [], items: [], units: [], itemUnits: [], categories: [], expenseItems: [], suppliers: [], itemSuppliers: [], stock: [], stockCachedAt: "", pendingReceipts: [], receiptLoading: false, menus: [], menuMappings: [], recipes: [], modifierMappings: [], modifierRecipes: [], recipeMode: "menu", recipeDraft: [], lines: [], reimbursements: [], masterFilter: "all", stockGroupMembers: new Map(), stockTrackingDraft: new Map(), draftTimer: null, syncing: false };
 
   function applyBranchIdentity() {
     document.documentElement.style.setProperty("--store-accent", branchApp.accent);
@@ -291,6 +291,7 @@
     $$(".page").forEach((section) => section.classList.toggle("active", section.dataset.page === page));
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
     if (page === "stock" && state.session) loadStock();
+    if (page === "receipts" && state.session) loadPendingReceipts();
     if (page === "dashboard" && state.session) loadDashboard();
     if (page === "settings" && state.session) renderMasterList();
     if (page === "account" && state.session) { renderSyncCenter(); loadCapacityStatus(); }
@@ -514,13 +515,13 @@
       ].filter(Boolean);
       const conversion = Number(line.conversion_to_base || unitLink?.conversion_to_base || 1);
       const stockEffect = stockItem && unit
-        ? `เพิ่มสต็อก ${escapeHtml(stockItem.name)} ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")}`
+        ? `รอรับ ${escapeHtml(stockItem.name)} ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")}`
         : "";
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line">
           <span class="line-number">${index + 1}</span>
           <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
-          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `เข้า ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
+          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `รอรับ ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
           <div class="expense-picker">
@@ -736,10 +737,59 @@
     if (error) { button.disabled = false; toast(`บันทึกไม่สำเร็จ: ${error.message}`); return; }
     $("#reviewDialog").close();
     await clearDraft();
+    const savedLineCount = state.lines.length;
     state.lines = [newLine()];
     renderLines();
     loadExpenseHistory();
-    toast(`บันทึก ${data?.line_count || state.lines.length} รายการแล้ว`);
+    loadPendingReceipts({ quiet: true });
+    const pendingText = Number(data?.pending_item_count || 0) ? ` · รอรับ ${data.pending_item_count} รายการ` : "";
+    toast(`บันทึก ${data?.line_count || savedLineCount} รายการแล้ว${pendingText}`);
+  }
+
+  function renderPendingReceipts() {
+    const list = $("#pendingReceiptList");
+    $("#pendingReceiptCount").textContent = `${state.pendingReceipts.length} รายการ`;
+    if (!state.pendingReceipts.length) {
+      list.innerHTML = '<div class="empty-state">ไม่มีสินค้ารอรับ</div>';
+      return;
+    }
+    list.innerHTML = state.pendingReceipts.map((receipt) => {
+      const lines = Array.isArray(receipt.lines) ? receipt.lines : [];
+      const date = new Date(receipt.created_at || receipt.transaction_date);
+      const dateLabel = Number.isNaN(date.getTime()) ? receipt.transaction_date : date.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+      return `<article class="pending-receipt-card" data-receipt-id="${escapeHtml(receipt.receipt_id)}">
+        <div class="pending-receipt-head"><span><strong>${escapeHtml(receipt.transaction_no || "รายการซื้อ")}</strong><small>${escapeHtml(dateLabel)} · ${lines.length} รายการ</small></span><span class="pending-receipt-total">${money.format(Number(receipt.total_amount || 0))}</span></div>
+        <div class="pending-receipt-lines">${lines.map((line) => `<div class="pending-receipt-line"><span>${escapeHtml(line.item_name || "สินค้า")}</span><b>${number.format(Number(line.quantity || 0))} ${escapeHtml(line.unit || "")}</b></div>`).join("")}</div>
+        <button class="receive-button" type="button" data-receive-receipt="${escapeHtml(receipt.receipt_id)}">รับสินค้าเข้าสต็อก</button>
+      </article>`;
+    }).join("");
+  }
+
+  async function loadPendingReceipts({ quiet = false } = {}) {
+    if (!state.branch || state.receiptLoading) return;
+    if (!centralAvailable()) {
+      if (!quiet) $("#pendingReceiptList").innerHTML = '<div class="empty-state">ต้องเชื่อมต่อ Supabase เพื่อดูรายการรอรับล่าสุด</div>';
+      return;
+    }
+    state.receiptLoading = true;
+    if (!quiet && !state.pendingReceipts.length) $("#pendingReceiptList").innerHTML = '<div class="empty-state">กำลังโหลดรายการรอรับ</div>';
+    const { data, error } = await client.schema("boy_central").rpc("get_branch_pending_receipts", { branch_code: branchApp.branchCode });
+    state.receiptLoading = false;
+    if (error) { if (!quiet) toast(`โหลดรายการรอรับไม่สำเร็จ: ${error.message}`); return; }
+    state.pendingReceipts = Array.isArray(data) ? data : [];
+    renderPendingReceipts();
+  }
+
+  async function receivePendingReceipt(receiptId, button) {
+    if (!confirm("ยืนยันว่ารับสินค้าครบแล้วและเพิ่มเข้าสต็อกใช่ไหม")) return;
+    button.disabled = true;
+    button.textContent = "กำลังรับสินค้า…";
+    const { data, error } = await client.schema("boy_central").rpc("receive_purchase_receipt", { receipt_id: receiptId });
+    if (error) { button.disabled = false; button.textContent = "รับสินค้าเข้าสต็อก"; toast(`รับสินค้าไม่สำเร็จ: ${error.message}`); return; }
+    state.pendingReceipts = state.pendingReceipts.filter((receipt) => receipt.receipt_id !== receiptId);
+    renderPendingReceipts();
+    await loadStock();
+    toast(data?.status === "duplicate" ? "รายการนี้ถูกรับจากอีกเครื่องแล้ว" : `รับสินค้าเข้าสต็อก ${data?.line_count || 0} รายการแล้ว`);
   }
 
   async function loadExpenseHistory() {
@@ -1484,6 +1534,7 @@
       if (sent.master) await loadMaster();
       await loadDraftForDate();
       await loadExpenseHistory();
+      await loadPendingReceipts({ quiet: true });
       updateSyncStatus();
     } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
   }
@@ -1576,6 +1627,11 @@
   $("#confirmExpenseButton").addEventListener("click", submitExpense);
   $("#stockSearch").addEventListener("input", renderStock);
   $("#refreshStockButton").addEventListener("click", loadStock);
+  $("#refreshReceiptsButton").addEventListener("click", () => loadPendingReceipts());
+  $("#pendingReceiptList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-receive-receipt]");
+    if (button) receivePendingReceipt(button.dataset.receiveReceipt, button);
+  });
   $("#manageRecipesButton").addEventListener("click", openRecipeManager);
   $("#addStockGroupButton").addEventListener("click", () => openStockGroup());
   $("#manageStockTrackingButton").addEventListener("click", openStockTracking);
@@ -1681,7 +1737,14 @@
     const sent = await flushOutbox({ notify: true });
     if (sent.master) await loadMaster();
     if (sent.expense || sent.expense_legacy) await loadExpenseHistory();
+    await loadPendingReceipts({ quiet: true });
     await loadCapacityStatus();
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.session) loadPendingReceipts({ quiet: true });
+  });
+  window.setInterval(() => {
+    if (document.visibilityState === "visible" && state.session) loadPendingReceipts({ quiet: true });
+  }, 15000);
   init();
 })();
