@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261008-1">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261010-1">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -81,6 +81,10 @@
   <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-sheet settings-sheet">
       <header><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่ารายการ</h2></div><div class="modal-header-actions"><button id="openSortSettings" class="sort-open-button" type="button">⇅ จัดลำดับ</button><button data-close-modal="settingsModal" type="button">×</button></div></header>
+      <div id="settingsSyncWarning" class="settings-sync-warning" hidden>
+        <span><strong>ยังไม่ได้ส่งขึ้น Supabase</strong><small id="settingsSyncMessage">เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง</small></span>
+        <a id="settingsReconnect" href="burger.html?next=bigc-v2.html&amp;online=1">เชื่อมต่อและส่งข้อมูล</a>
+      </div>
       <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div>
       <div class="setting-legend"><span>ชั่งตอนรับ/คืน</span><span>ขึ้นหน้าคืนอัตโนมัติ</span></div>
       <div id="settingsList" class="settings-list"></div>
@@ -148,6 +152,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/bigc-v2.js?v=20261008-1"></script>
+  <script src="assets/js/bigc-v2.js?v=20261010-1"></script>
 </body>
 </html>

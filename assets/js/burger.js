@@ -4,6 +4,7 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
+  const forceOnlineLogin = new URLSearchParams(location.search).get("online") === "1";
   const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", ...(window.BOY_BRANCH_CONFIG || {}) };
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
@@ -1513,7 +1514,7 @@
     state.profile = profile;
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && /^(tawana|bigc|bigc-v2|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
     }
@@ -1550,7 +1551,7 @@
     state.profile = readCache(profileCacheKey()) || { display_name: "Chotthanate", company_role: "admin" };
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(tawana|bigc|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
+    if (next && /^(tawana|bigc|bigc-v2|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
@@ -1581,7 +1582,7 @@
     }
     const { data } = await client.auth.getSession();
     if (data.session) await enterApp(data.session);
-    else if (window.BOY_LOCAL_ACCESS?.hasAccess()) await enterLocalApp();
+    else if (!forceOnlineLogin && window.BOY_LOCAL_ACCESS?.hasAccess()) await enterLocalApp();
     else { document.body.classList.add("auth-mode"); $("#authCard").hidden = false; $$(".page,.bottom-nav").forEach((element) => element.hidden = true); setConnection("กรุณาเข้าสู่ระบบ"); }
   }
 
@@ -1730,7 +1731,7 @@
     const { data, error } = await client.auth.signInWithPassword({ email: config.ownerLoginEmail, password: pin });
     button.disabled = false; button.textContent = "เข้าใช้งาน";
     if (error) {
-      if (localPinValid) { await enterLocalApp(); return; }
+      if (localPinValid && !forceOnlineLogin) { await enterLocalApp(); return; }
       input.value = "";
       const invalidPin = error.status === 400 || /invalid login credentials/i.test(error.message || "");
       $("#loginError").textContent = invalidPin ? "รหัสไม่ถูกต้อง ลองอีกครั้ง" : "ระบบออนไลน์ยังไม่พร้อม กรุณาลองใหม่ภายหลัง";

@@ -82,6 +82,12 @@
   function notice(text, isError = false) {
     const box = $("#pageNotice"); box.textContent = text || ""; box.classList.toggle("error", isError);
   }
+  function showSettingsConnection(visible, message = "เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง") {
+    const warning = $("#settingsSyncWarning");
+    if (!warning) return;
+    warning.hidden = !visible;
+    $("#settingsSyncMessage").textContent = message;
+  }
   function loading(text, active = true) { $("#loadingText").textContent = text; $("#loadingOverlay").classList.toggle("hidden", !active); }
 
   async function sheetApi(action, payload = {}) {
@@ -169,6 +175,7 @@
     localStorage.removeItem(SETTINGS_PENDING_KEY);
     cacheSettings(payload, false);
     if (state.context) state.context.settings = data.settings;
+    showSettingsConnection(false);
     return data.settings;
   }
   async function flushPendingSettings(quiet = false) {
@@ -179,7 +186,11 @@
       if (!quiet) { setSync("ส่งการตั้งค่าแล้ว", "ok"); notice("ส่งการตั้งค่าที่ค้างไว้เรียบร้อย"); }
       return true;
     } catch (error) {
-      if (!quiet) { setSync("การตั้งค่ารอส่ง", "pending"); notice(`เก็บการตั้งค่าไว้ในเครื่องแล้ว รอส่งใหม่: ${error.message}`, true); }
+      if (!quiet) {
+        setSync("การตั้งค่ารอส่ง", "pending");
+        showSettingsConnection(true, `ส่งไม่สำเร็จ: ${error.message}`);
+        notice(`เก็บการตั้งค่าไว้ในเครื่องแล้ว รอส่งใหม่: ${error.message}`, true);
+      }
       return false;
     }
   }
@@ -460,7 +471,12 @@
     $$('[data-pick]').forEach((button) => { button.onclick = () => { const item = state.menu.find((row) => row.key === button.dataset.pick); selected[item.key] = { ...lineFromMenu(item), checked: state.pickerTarget === "receive" }; saveDraft(); $("#pickerModal").classList.add("hidden"); state.pickerTarget === "receive" ? renderReceive() : renderReturns(); }; });
   }
 
-  function openSettings() { $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = ""; renderSettings(); }
+  function openSettings() {
+    $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
+    const hasPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
+    showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
+    renderSettings();
+  }
   function renderSettings() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
@@ -474,21 +490,33 @@
     const payload = settingsPayload();
     cacheSettings(payload, true);
     try {
-      if (!state.session || !navigator.onLine) {
-        setSync("การตั้งค่ารอส่ง", "pending"); notice(`${successText}ในเครื่องแล้ว ระบบจะส่งเมื่อออนไลน์`);
+      if (!state.session) {
+        showSettingsConnection(true, "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง");
+        notice(`${successText}ในเครื่อง แต่ยังไม่ได้ส่ง Supabase`, true);
+        addMissingDefaultReturns(); renderAll(); saveDraft();
+        setSync("ต้องเชื่อม Supabase", "error"); return "queued";
+      }
+      if (!navigator.onLine) {
+        showSettingsConnection(true, "อุปกรณ์ออฟไลน์ การตั้งค่าจะส่งให้อัตโนมัติเมื่อกลับมาออนไลน์");
+        notice(`${successText}ในเครื่องแล้ว ระบบจะส่งเมื่อออนไลน์`);
+        addMissingDefaultReturns(); renderAll(); saveDraft();
+        setSync("ออฟไลน์ · การตั้งค่ารอส่ง", "pending"); return "queued";
       } else {
         await uploadSettingsPayload(payload);
-        setSync("บันทึกการตั้งค่าแล้ว", "ok"); notice(successText);
+        notice(successText);
       }
-      addMissingDefaultReturns(); renderAll(); saveDraft(); return true;
+      addMissingDefaultReturns(); renderAll(); saveDraft();
+      setSync("บันทึกการตั้งค่าแล้ว", "ok"); return "synced";
     } catch (error) {
-      setSync("การตั้งค่ารอส่ง", "pending"); notice(`${successText}ในเครื่องแล้ว รอส่ง Supabase: ${error.message}`, true);
-      addMissingDefaultReturns(); renderAll(); saveDraft(); return true;
+      showSettingsConnection(true, `ส่งไม่สำเร็จ: ${error.message}`);
+      notice(`${successText}ในเครื่องแล้ว รอส่ง Supabase: ${error.message}`, true);
+      addMissingDefaultReturns(); renderAll(); saveDraft();
+      setSync("การตั้งค่ารอส่ง", "pending"); return "queued";
     } finally { loading("", false); }
   }
   async function saveSettings() {
-    if (!await persistSettings("บันทึกการตั้งค่าแล้ว")) return;
-    $("#settingsModal").classList.add("hidden");
+    const status = await persistSettings("บันทึกการตั้งค่าแล้ว");
+    if (status === "synced") $("#settingsModal").classList.add("hidden");
   }
   function openAddItem() {
     $("#newItemName").value = ""; $("#newItemCategory").value = categoryNames()[0] || ""; $("#newItemUnit").value = "";
@@ -573,8 +601,9 @@
   }
   async function saveSortOrder() {
     normalizeMenuOrder();
-    if (!await persistSettings("บันทึกลำดับแล้ว")) return;
-    $("#sortModal").classList.add("hidden"); $("#settingsModal").classList.add("hidden");
+    const status = await persistSettings("บันทึกลำดับแล้ว");
+    $("#sortModal").classList.add("hidden");
+    if (status === "synced") $("#settingsModal").classList.add("hidden");
   }
 
   function bindStaticEvents() {
@@ -609,7 +638,13 @@
     const config = window.BOY_CENTRAL_CONFIG || {};
     state.client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
     const { data } = await state.client.auth.getSession(); state.session = data.session;
-    if (!state.session && authContext?.localAccess) { setSync("ต้องเข้าออนไลน์", "error"); notice("หน้า BigC รุ่นใหม่ต้องเข้าสู่ระบบออนไลน์ก่อนทดสอบ", true); state.menu = await loadLegacyMenu(); hydrateDraft(readLocalDraft()); renderAll(); return; }
+    if (!state.session && authContext?.localAccess) {
+      setSync("ต้องเชื่อม Supabase", "error");
+      showSettingsConnection(true, "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง");
+      notice("กำลังใช้ข้อมูลในเครื่อง · การตั้งค่าจะยังไม่ส่ง Supabase", true);
+      state.menu = settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu());
+      hydrateDraft(readLocalDraft()); renderAll(); return;
+    }
     await loadPage();
   }
 
