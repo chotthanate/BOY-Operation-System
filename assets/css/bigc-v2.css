@@ -31,6 +31,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .settings-sync-warning span,.settings-sync-warning strong,.settings-sync-warning small{display:block}
 .settings-sync-warning small{margin-top:2px;font-size:10px;line-height:1.45;color:#8b5b51}
 .settings-sync-warning a{flex:0 0 auto;padding:9px 11px;border-radius:9px;background:#d9573f;color:#fff;text-decoration:none;font-size:11px;font-weight:900;text-align:center}
+.fruit-cost-open{width:100%;margin-bottom:10px}.fruit-cost-open[hidden]{display:none}
 @media(max-width:600px){.app-shell{padding-top:73px}.branch-brand strong{font-size:13px}.branch-brand small{font-size:10px}.branch-mark{width:38px;height:38px;border-radius:11px}.header-actions{min-width:0}.setting-legend{display:none}.setting-row{grid-template-columns:minmax(0,1fr) 38px 38px 76px;gap:4px;padding:8px}.setting-check{gap:1px}.setting-check small{display:block}.setting-actions{grid-template-columns:35px 35px}.setting-actions button{width:35px;height:38px}}
 
 /* BigC compact touch-first ordering */

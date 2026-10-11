@@ -42,6 +42,10 @@
 
 ## Pending
 
+- BigC interbranch withdrawal costing (2026-10-11) is a **code draft only**. BigC receipt keeps whole watermelon/pineapple in `ลูก`. The admin weight form is hidden until its database migration is deployed and verified. SQL draft supports mixed `ลูก`/`กก.` Tawana purchases and marks missing conversion pending. It has **not** been applied to production. Do not describe branch expense allocation as live; see `docs/BIGC_WITHDRAWAL_COSTING.md`.
+- Before rollout: import and reconcile Tawana's confirmed purchases into canonical Supabase transactions; add canonical watermelon/pineapple raw items; map BigC menu UUIDs to raw items and reviewed yields; enter sampled kg/fruit values through the new form; add count-unit rules for other goods and return-to-receipt association; run functional DB and 390 px UI tests; reconcile branch/company reports. Supabase read on 2026-10-11 still found 0 Tawana transactions, 0 BigC workflows and no watermelon/pineapple item names.
+- `น้ำส้ม (ขวด)` is consignment, not freshly extracted juice. Do not apply orange yield or change its source `item_name` while the Apps Script mirror still keys by display name.
+
 - POS ร้านน้ำบน Android พร้อมเครื่องพิมพ์ในตัว ยังไม่ได้ build/ติดตั้ง/ทดสอบ: Mac ยังไม่เห็นอุปกรณ์ใน `adb devices -l` (17 ก.ย. 2569) และไม่มี Java Runtime สำหรับ Gradle; ต้องตรวจรุ่นเครื่อง, Android version และ printer SDK หลังเปิด USB debugging/อนุญาตเครื่องนี้ก่อน เลือก bridge เครื่องพิมพ์ตามฮาร์ดแวร์จริง ไม่ควรนำ bridge LAN/Bluetooth ของ Burger POS ไปใช้กับเครื่องพิมพ์ในตัวโดยเดา
 
 - ติดตั้ง migration BOY Central บน Cloud และรัน schema contract ผ่านแล้ว; Data API มองเห็น `boy_central` แต่ผู้ใช้ anonymous ไม่มีสิทธิ์อ่านข้อมูลตามที่ออกแบบ

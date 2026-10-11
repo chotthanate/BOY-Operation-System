@@ -18,7 +18,7 @@
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false
+    cloudTimer: 0, saving: false, started: false, fruitCostItems: [], fruitWeights: []
   };
 
   function keyFor(name, unit = "") {
@@ -137,7 +137,9 @@
       displayName: item.displayName || item.item_name, name: item.name || item.item_name,
       category: item.category || "อื่นๆ", unit: item.unit || "",
       inputMode: item.inputMode === "weight" ? "weight" : "quantity",
-      active: item.active !== false, defaultReturn: defaultKeys.has(item.key), sortOrder: Number(item.sortOrder ?? index)
+      active: item.active !== false, defaultReturn: defaultKeys.has(item.key), sortOrder: Number(item.sortOrder ?? index),
+      handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
+      itemId: item.itemId || item.item_id || null
     })).sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
@@ -157,6 +159,8 @@
     const normalized = menu.map((item, index) => ({
       key: item.key || "", displayName: item.displayName || item.item_name || "", name: item.name || item.item_name || "",
       category: item.category || "อื่นๆ", unit: item.unit || "", inputMode: item.inputMode === "weight" ? "weight" : "quantity",
+      handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
+      itemId: item.itemId || item.item_id || null,
       active: item.active !== false, sortOrder: Number(item.sortOrder ?? index)
     })).sort((left, right) => left.sortOrder - right.sortOrder || left.key.localeCompare(right.key));
     return JSON.stringify({ menu: normalized, returns: [...(payload?.default_return_keys || [])].sort() });
@@ -258,6 +262,12 @@
       state.order = Object.fromEntries((close.lines || []).map((line) => [line.line_key, number(line.quantity)]));
     }
     if (receive && !Object.keys(state.receive).length) state.receive = Object.fromEntries((receive.lines || []).map((line) => [line.line_key, { ...line, checked: line.received !== false }]));
+    else if (receive) (receive.lines || []).forEach((line) => {
+      const local = state.receive[line.line_key]; if (!local) return;
+      ["estimated_unit_cost", "estimated_value", "costing_status", "cost_status", "cost_value", "calculated_cost"].forEach((field) => {
+        if (line[field] !== undefined && line[field] !== null) local[field] = line[field];
+      });
+    });
     if (returned) {
       if (!Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
       if (!$("#cashAmount").value && !$("#transferAmount").value && !$("#thaiAmount").value) {
@@ -278,7 +288,66 @@
     state.menu.filter((item) => item.active && item.defaultReturn && !state.returns[item.key]).forEach((item) => { state.returns[item.key] = lineFromMenu(item, 0); });
   }
   function lineFromMenu(item, quantity = 0, inputMode = item.inputMode) {
-    return { line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit, input_mode: inputMode, quantity, received: true, sort_order: item.sortOrder };
+    const handlingType = receiveHandlingType(item);
+    return {
+      line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit,
+      input_mode: inputMode, quantity, received: true, sort_order: item.sortOrder,
+      item_id: item.itemId || item.item_id || null,
+      handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType)
+    };
+  }
+
+  function receiveHandlingType(item) {
+    if (item.handlingType) return item.handlingType;
+    const text = `${item.category || ""} ${item.displayName || ""} ${item.name || ""}`.toLowerCase();
+    if (/ฝากขาย/.test(text) || /น้ำส้ม\s*\(ขวด\)/.test(text)) return "consignment";
+    if (/ปอก|ใส่กล่อง|\(กล่อง\)|คั้น|น้ำผลไม้|น้ำส้ม/.test(text)) return /คั้น|น้ำผลไม้|น้ำส้ม/.test(text) ? "juiced" : "prepared";
+    if (/ผลไม้|แตงโม|สับปะรด|มะม่วง|อโวคาโด|อาโวคาโด|ส้ม|มะนาว|มะพร้าว|มะละกอ|เมลอน|แคนตาลูป|เสาวรส/.test(text)) return "whole_fruit";
+    return "standard";
+  }
+  function receiveCostingBasis(item, handlingType = receiveHandlingType(item)) {
+    if (isPieceEstimatedFruit(item) && handlingType === "whole_fruit") return "estimated_raw_piece";
+    if (item.costingBasis) return item.costingBasis;
+    return handlingType === "consignment" ? "consignment" : handlingType === "standard" ? "backend" : handlingType === "whole_fruit" ? "actual_raw_weight_kg" : "backend_yield_from_actual_weight";
+  }
+  function isPieceEstimatedFruit(item) {
+    return receiveHandlingType(item) === "whole_fruit" && item.unit === "ลูก" && /แตงโม|สับปะรด/.test(`${item.name || ""} ${item.displayName || ""}`);
+  }
+  function needsActualWeight(item) { return !isPieceEstimatedFruit(item) && ["whole_fruit", "prepared", "juiced"].includes(receiveHandlingType(item)); }
+  function isWeightQuantity(item) { return item.inputMode === "weight"; }
+  function handlingLabel(type) {
+    if (type === "prepared") return "ปอก/พร้อมใช้";
+    if (type === "juiced") return "คั้นแล้ว";
+    if (type === "whole_fruit") return "ผลไม้ทั้งลูก";
+    if (type === "consignment") return "ฝากขาย";
+    return "";
+  }
+  function costingBasisForHandling(type) {
+    if (type === "consignment") return "consignment";
+    if (type === "whole_fruit") return "actual_raw_weight_kg";
+    if (["prepared", "juiced"].includes(type)) return "backend_yield_from_actual_weight";
+    return "backend";
+  }
+  function handlingSettingLabel(item) {
+    const type = receiveHandlingType(item);
+    return handlingLabel(type) || "ทั่วไป";
+  }
+  function finiteNumber(value) { const parsed = Number(value); return value !== null && value !== "" && Number.isFinite(parsed) ? parsed : null; }
+  function costStatusHtml(line) {
+    const value = finiteNumber(line.estimated_value ?? line.cost_value ?? line.calculated_cost);
+    const status = String(line.costing_status || line.cost_status || "").toLowerCase();
+    const estimated = line.measurement_basis === "estimated_raw" || Number(line.cost_provenance?.price_estimated_purchase_line_count || 0) > 0;
+    if (value !== null && !["pending", "waiting", "unavailable"].includes(status)) return `<small class="cost-status">${estimated ? "ต้นทุนประมาณ" : "ต้นทุน"} ${money(value)} บาท</small>`;
+    if (["pending", "waiting"].includes(status)) return `<small class="cost-status pending">${line.cost_pending_reason === "missing_piece_weight_estimate" ? "รอน้ำหนักเฉลี่ยต่อลูก" : "รอคำนวณต้นทุน"}</small>`;
+    if (status === "unavailable") return `<small class="cost-status pending">ยังไม่มีข้อมูลต้นทุน</small>`;
+    return "";
+  }
+  function receiveControls(item, line, key) {
+    if (isPieceEstimatedFruit(item)) return inputControl({ ...item, inputMode: "quantity" }, line.quantity, "receive");
+    if (!needsActualWeight(item)) return inputControl(item, line.quantity, "receive");
+    const weight = finiteNumber(line.actual_weight_kg);
+    const quantityControl = isWeightQuantity(item) ? "" : `<label class="receive-measurement"><span>จำนวนที่รับ (${escapeHtml(item.unit || "หน่วย")})</span><input data-qty-target="receive" data-key="${key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(line.quantity) || ""}" aria-label="จำนวนที่รับ"></label>`;
+    return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="number" min="0" step="0.001" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
   }
 
   function renderDateDisplays() {
@@ -318,16 +387,34 @@
     $$('[data-category-target]').forEach((button) => { button.onclick = () => $("#" + button.dataset.categoryTarget)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents(); bindOrderCards(); updateCartBar();
   }
-  function findMenu(key, line) { return state.menu.find((item) => item.key === key) || { key, displayName: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", sortOrder: line.sort_order || 0 }; }
+  function findMenu(key, line) { return state.menu.find((item) => item.key === key) || { key, displayName: line.item_name, name: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", handlingType: line.handling_type || "", costingBasis: line.costing_basis || "", itemId: line.item_id || null, sortOrder: line.sort_order || 0 }; }
   function renderReceive() {
     const entries = Object.entries(state.receive); let checked = 0;
     $("#receiveList").innerHTML = entries.length ? entries.map(([key, line]) => {
       const item = findMenu(key, line); if (line.checked) checked += 1;
-      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small></span></label>${inputControl(item, line.quantity, "receive")}</div></div>`;
+      const type = receiveHandlingType(item); const kind = handlingLabel(type);
+      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${kind ? `<span class="receive-kind">${escapeHtml(kind)}</span>` : ""}${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div></div>`;
     }).join("") : `<div class="empty-state">ยังไม่มีรายการจากเมื่อคืน<br>กด “+ เพิ่ม” เพื่อเพิ่มเอง</div>`;
     $("#receiveProgress").textContent = `${checked} / ${entries.length} รายการ`;
     $("#receiveProgressBar").style.width = `${entries.length ? checked / entries.length * 100 : 0}%`;
-    bindQuantityEvents(); bindRowEvents();
+    bindQuantityEvents(); bindActualWeightEvents(); bindRowEvents();
+  }
+
+  function bindActualWeightEvents() {
+    $$('[data-actual-weight-key]').forEach((input) => {
+      input.onclick = (event) => event.stopPropagation();
+      input.onpointerdown = (event) => event.stopPropagation();
+      input.oninput = () => {
+        const key = input.dataset.actualWeightKey;
+        const line = state.receive[key]; if (!line) return;
+        const item = findMenu(key, line); const actualWeight = number(input.value);
+        line.actual_weight_kg = actualWeight;
+        line.handling_type = receiveHandlingType(item);
+        line.costing_basis = receiveCostingBasis(item, line.handling_type);
+        if (isWeightQuantity(item)) line.quantity = actualWeight;
+        saveDraft();
+      };
+    });
   }
   function renderReturns() {
     const entries = Object.entries(state.returns);
@@ -428,7 +515,17 @@
   function linesFor(type) {
     if (type === "close_order") return state.menu.filter((item) => number(state.order[item.key]) > 0).map((item) => ({ ...lineFromMenu(item, state.order[item.key], "quantity"), received: true }));
     const source = type === "receive" ? state.receive : state.returns;
-    return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => ({ ...line, line_key: key, received: type === "receive" ? Boolean(line.checked) : true }));
+    return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => {
+      const item = findMenu(key, line); const handlingType = line.handling_type || receiveHandlingType(item);
+      return {
+        ...line, line_key: key, item_id: line.item_id || item.itemId || item.item_id || null,
+        input_mode: isPieceEstimatedFruit(item) && type === "receive" ? "quantity" : line.input_mode,
+        actual_weight_kg: isPieceEstimatedFruit(item) && type === "receive" ? null : line.actual_weight_kg,
+        handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType),
+        measurement_basis: isPieceEstimatedFruit(item) && type === "receive" ? "estimated_raw" : line.measurement_basis,
+        received: type === "receive" ? Boolean(line.checked) : true
+      };
+    });
   }
 
   async function submitWorkflow(type) {
@@ -436,6 +533,12 @@
     const lines = linesFor(type);
     if (type === "close_order" && !lines.length) { notice("ยังไม่มีรายการสั่งของ", true); return false; }
     if (type === "receive" && !lines.length) { notice("กรุณาเช็กรายการที่ได้รับอย่างน้อย 1 รายการ", true); return false; }
+    if (type === "receive") {
+      const invalidPiece = lines.find((line) => isPieceEstimatedFruit(findMenu(line.line_key, line)) && !Number.isInteger(Number(line.quantity)));
+      if (invalidPiece) { notice(`จำนวนลูกของ ${invalidPiece.item_name} ต้องเป็นจำนวนเต็ม`, true); return false; }
+      const missingWeight = lines.find((line) => needsActualWeight(findMenu(line.line_key, line)) && number(line.actual_weight_kg) <= 0);
+      if (missingWeight) { notice(`กรอกน้ำหนักจริงของ ${missingWeight.item_name} ก่อนบันทึก`, true); return false; }
+    }
     const payload = {
       workflow_type: type, business_date: type === "close_order" ? $("#orderDate").value : type === "receive" ? $("#receiveDate").value : $("#returnDate").value,
       source_workflow_id: type === "receive" ? state.contexts.receive?.previous_order?.id || null : null,
@@ -477,10 +580,69 @@
     showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
     renderSettings();
   }
+  function renderFruitCostItemOptions() {
+    $("#fruitCostError").textContent = "";
+    const pattern = $("#fruitCostKind").value === "pineapple" ? /สับปะรด/ : /แตงโม/;
+    const candidates = state.fruitCostItems.filter((item) => pattern.test(item.name));
+    const previous = $("#fruitCostRawItem").value;
+    $("#fruitCostRawItem").innerHTML = `<option value="">เลือกวัตถุดิบ</option>` + candidates.map((item) =>
+      `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} (${escapeHtml(item.code || "")})</option>`).join("");
+    if (candidates.some((item) => item.id === previous)) $("#fruitCostRawItem").value = previous;
+    else if (candidates.length === 1) $("#fruitCostRawItem").value = candidates[0].id;
+    renderFruitCostExisting();
+    if (!candidates.length) $("#fruitCostError").textContent = "ยังไม่มีวัตถุดิบนี้ในข้อมูลกลาง กรุณาเพิ่มก่อน";
+  }
+  function renderFruitCostExisting() {
+    const itemId = $("#fruitCostRawItem").value;
+    const month = $("#fruitCostMonth").value + "-01";
+    const existing = state.fruitWeights.find((row) => row.raw_item_id === itemId && row.effective_month === month);
+    $("#fruitCostKgPerPiece").value = existing?.kg_per_piece ?? "";
+    $("#fruitCostSampleNote").value = existing?.sample_note ?? "";
+  }
+  async function openFruitCostSettings() {
+    $("#fruitCostError").textContent = "";
+    $("#fruitCostMonth").value = today().slice(0, 7);
+    $("#fruitCostModal").classList.remove("hidden");
+    if (!state.session) { $("#fruitCostError").textContent = "เชื่อมต่อบัญชีออนไลน์ก่อนตั้งค่าต้นทุน"; return; }
+    loading("กำลังโหลดต้นทุนผลไม้");
+    try {
+      const { data, error } = await state.client.schema("boy_central").rpc("get_bigc_piece_weight_settings");
+      if (error) throw error;
+      state.fruitCostItems = data?.items || [];
+      state.fruitWeights = data?.weights || [];
+      renderFruitCostItemOptions();
+    } catch (error) {
+      $("#fruitCostError").textContent = `โหลดการตั้งค่าต้นทุนไม่ได้: ${error.message}`;
+    } finally { loading("", false); }
+  }
+  async function saveFruitCost() {
+    const itemId = $("#fruitCostRawItem").value;
+    const kg = Number($("#fruitCostKgPerPiece").value);
+    const month = $("#fruitCostMonth").value;
+    const sampleNote = $("#fruitCostSampleNote").value.trim();
+    if (!itemId || !month || !Number.isFinite(kg) || kg <= 0 || !sampleNote) {
+      $("#fruitCostError").textContent = "เลือกวัตถุดิบ เดือน น้ำหนัก และกรอกที่มาของค่าเฉลี่ย"; return;
+    }
+    loading("กำลังบันทึกน้ำหนักเฉลี่ย"); $("#fruitCostError").textContent = "";
+    try {
+      const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
+        payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
+      });
+      if (error) throw error;
+      const next = { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote };
+      state.fruitWeights = state.fruitWeights.filter((row) => row.raw_item_id !== itemId || row.effective_month !== next.effective_month);
+      state.fruitWeights.push(next);
+      $("#fruitCostModal").classList.add("hidden");
+      notice(data?.workflows_requiring_reprocess > 0
+        ? `บันทึกแล้ว · มี ${data.workflows_requiring_reprocess} รายการรับของที่ต้องคำนวณต้นทุนใหม่`
+        : "บันทึกน้ำหนักเฉลี่ยแล้ว");
+    } catch (error) { $("#fruitCostError").textContent = `บันทึกไม่สำเร็จ: ${error.message}`; }
+    finally { loading("", false); }
+  }
   function renderSettings() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
-    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" ? "checked" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>ชั่ง</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("");
+    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.itemId || item.item_id ? "จับคู่สินค้าแล้ว" : "ยังไม่จับคู่สินค้า"}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("");
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
@@ -536,15 +698,18 @@
   function openEditItem(key) {
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
+    $("#editItemHandlingType").value = receiveHandlingType(item);
+    $("#editItemMappingStatus").textContent = item.itemId || item.item_id ? "จับคู่กับสินค้าในระบบแล้ว" : "ยังไม่จับคู่สินค้า จึงยังคำนวณต้นทุนไม่ได้";
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
   }
   async function saveEditedItem() {
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
-    const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim(); const category = $("#editItemCategory").value.trim();
+    const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim(); const category = $("#editItemCategory").value.trim(); const handlingType = $("#editItemHandlingType").value;
     if (!name || !category) { $("#editItemError").textContent = "กรุณากรอกชื่อรายการและหมวดหมู่"; return; }
     const previous = { ...item };
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
+    item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
     if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     $("#editItemModal").classList.add("hidden"); renderSettings();
   }
@@ -623,6 +788,11 @@
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    $("#openFruitCostSettings").onclick = openFruitCostSettings;
+    $("#saveFruitCost").onclick = saveFruitCost;
+    $("#fruitCostKind").onchange = renderFruitCostItemOptions;
+    $("#fruitCostRawItem").onchange = renderFruitCostExisting;
+    $("#fruitCostMonth").onchange = renderFruitCostExisting;
     $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });
     $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
     $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
