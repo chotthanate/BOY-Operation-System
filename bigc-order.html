@@ -37,6 +37,14 @@
         .btn-plus { background: #E8F5E9; color: var(--primary); }
         .qty-input { width: 45px; text-align: center; font-size: 18px; font-weight: bold; color: var(--primary-dark); border: none; background: transparent; outline: none; }
         .weight-input { width: 100%; padding: 12px 10px; border: 1px solid #cfd8dc; border-radius: 6px; text-align: center; font-size: 16px; font-weight: bold; outline: none; background: #fff; }
+        .receive-order-status { margin: 0 0 12px; padding: 10px 12px; border-radius: 11px; background: #e8f5e9; color: var(--primary-dark); font-size: 13px; font-weight: 700; line-height: 1.4; }
+        .receive-order-status:empty { display: none; }
+        .receive-check { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; cursor: pointer; }
+        .receive-check input { width: 24px; height: 24px; flex: 0 0 24px; margin: 0; accent-color: var(--primary); }
+        .receive-copy { min-width: 0; display: grid; gap: 2px; }
+        .receive-copy small { color: #63746a; font-size: 11px; font-weight: 600; }
+        .receive-card-unchecked { opacity: .68; }
+        @media (max-width: 420px) { .receive-row { gap: 8px; flex-wrap: wrap; } .receive-row > .weight-input, .receive-row > .controls { margin-left: 34px; } }
         .swipe-container { position: relative; border-radius: 12px; background: var(--danger); overflow: hidden; margin-bottom: 10px; touch-action: pan-y; }
         .swipe-background { position: absolute; top: 0; right: 0; bottom: 0; width: 80px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; z-index: 1; }
         .swipe-card { background: var(--card-bg); z-index: 2; position: relative; width: 100%; border: 1px solid #eee; border-radius: 12px; transition: transform 0.2s; }
@@ -113,6 +121,7 @@
 </div>
 
 <div id="tab-receive" class="tab-content">
+    <div id="receive-order-status" class="receive-order-status" role="status">กำลังตรวจรายการสั่งของเมื่อคืน</div>
     <div class="search-box">
         <input type="text" id="receive-search" class="form-control" style="margin-bottom:0;" placeholder="พิมพ์ค้นหาสินค้า..." oninput="window.showSuggestionsRec(this.value)">
         <div id="autocomplete-list-rec" class="autocomplete-items"></div>
@@ -254,6 +263,9 @@
     window.cleanItemName = function(item) {
         return String(item || '').trim();
     }
+    window.escapeHtml = function(value) {
+        return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+    }
     window.uniqueItemList = function(items) {
         return Array.from(new Set((items || []).map(window.cleanItemName).filter(Boolean)));
     }
@@ -326,6 +338,11 @@
     window.orderCart = {}; 
     window.receiveQty = {}; 
     window.receiveWgt = {}; 
+    window.receiveChecked = {};
+    window.receiveOrderedQty = {};
+    window.receiveDismissed = [];
+    window.receiveOrderSeedDate = '';
+    window.receiveSubmittedDate = '';
     window.returnQty = {}; 
     window.returnWgt = {};
     window.revenue = { cash: "", transfer: "" };
@@ -383,6 +400,7 @@
         const actionMap = {
             loadDB: 'bigcOrderLoadDB',
             loadDraft: 'bigcOrderLoadDraft',
+            loadPreviousOrder: 'bigcOrderLoadPreviousOrder',
             autoSave: 'bigcOrderAutoSave',
             saveDB: 'bigcOrderSaveDB',
             order: 'bigcOrderSubmitOrder',
@@ -417,6 +435,11 @@
         window.orderCart = draft.cart || {};
         window.receiveQty = draft.receiveQty || {};
         window.receiveWgt = draft.receiveWgt || {};
+        window.receiveChecked = draft.receiveChecked || Object.fromEntries(Object.keys(window.receiveQty).map(item => [item, true]));
+        window.receiveOrderedQty = draft.receiveOrderedQty || {};
+        window.receiveDismissed = draft.receiveDismissed || [];
+        window.receiveOrderSeedDate = draft.receiveOrderSeedDate || '';
+        window.receiveSubmittedDate = draft.receiveSubmittedDate || '';
         window.returnQty = draft.returnQty || {};
         window.returnWgt = draft.returnWgt || {};
         window.revenue = draft.revenue || {cash:"", transfer:""};
@@ -436,6 +459,11 @@
             cart: window.orderCart, 
             receiveQty: window.receiveQty, 
             receiveWgt: window.receiveWgt, 
+            receiveChecked: window.receiveChecked,
+            receiveOrderedQty: window.receiveOrderedQty,
+            receiveDismissed: window.receiveDismissed,
+            receiveOrderSeedDate: window.receiveOrderSeedDate,
+            receiveSubmittedDate: window.receiveSubmittedDate,
             returnQty: window.returnQty, 
             returnWgt: window.returnWgt, 
             revenue: window.revenue,
@@ -501,12 +529,63 @@
             const serverDraft = res.draft || {};
             const hasServerDraft = Object.keys(serverDraft).length > 0;
             const serverDraftTimestamp = getDraftTimestamp(serverDraft);
-            if (hasServerDraft && (!localBackup || serverDraftTimestamp > localDraftTimestamp)) {
+            let latestLocalTimestamp = localDraftTimestamp;
+            try {
+                const latestLocalDraft = window.safeLocalStorageGet('boy_draft_' + dateKey);
+                if (latestLocalDraft) latestLocalTimestamp = Math.max(latestLocalTimestamp, getDraftTimestamp(JSON.parse(latestLocalDraft)));
+            } catch(e) {}
+            if (hasServerDraft && serverDraftTimestamp > latestLocalTimestamp) {
                 hydrateDraft(serverDraft);
                 window.safeLocalStorageSet('boy_draft_' + dateKey, JSON.stringify(serverDraft));
                 window.renderOrder(); window.renderReceive(); window.renderReturn();
             }
-        }).catch(e => console.log("Load draft skipped"));
+        }).catch(e => console.log("Load draft skipped")).finally(() => window.loadPreviousOrder());
+    }
+
+    window.updateReceiveOrderStatus = function(message) {
+        const status = document.getElementById('receive-order-status');
+        if (message) { status.textContent = message; return; }
+        if (window.receiveSubmittedDate === window.getBusinessDateKey()) {
+            status.textContent = 'วันนี้บันทึกรับสินค้าแล้ว';
+            return;
+        }
+        if (!window.receiveOrderSeedDate) return;
+        const orderedItems = Object.keys(window.receiveOrderedQty);
+        const checked = orderedItems.filter(item => window.receiveChecked[item] && window.receiveQty[item] !== undefined).length;
+        status.textContent = `สั่งเมื่อ ${window.receiveOrderSeedDate} · เช็กแล้ว ${checked}/${orderedItems.length} รายการ`;
+    }
+
+    window.loadPreviousOrder = async function() {
+        const receiveDate = window.getBusinessDateKey();
+        try {
+            const result = await apiCall('loadPreviousOrder', { date: receiveDate });
+            if (result.receivedToday || window.receiveSubmittedDate === receiveDate) {
+                window.updateReceiveOrderStatus('วันนี้บันทึกรับสินค้าแล้ว');
+                return;
+            }
+            const order = result.order;
+            if (!order || !Object.keys(order.qtyData || {}).some(item => Number(order.qtyData[item]) > 0)) {
+                window.updateReceiveOrderStatus('ไม่พบรายการสั่งของเมื่อคืน · เพิ่มรายการเองได้');
+                return;
+            }
+            if (window.receiveOrderSeedDate !== order.date) {
+                window.receiveOrderSeedDate = order.date;
+                Object.entries(order.qtyData).forEach(([item, quantity]) => {
+                    const count = Number(quantity);
+                    if (!(count > 0) || window.receiveDismissed.includes(item)) return;
+                    window.receiveOrderedQty[item] = count;
+                    if (window.receiveQty[item] === undefined) {
+                        window.receiveQty[item] = count;
+                        window.receiveChecked[item] = false;
+                    }
+                });
+                scheduleAutoSave();
+            }
+            window.renderReceive();
+            window.updateReceiveOrderStatus();
+        } catch (error) {
+            window.updateReceiveOrderStatus('โหลดรายการสั่งของเมื่อคืนไม่ได้ · ลองเปิดหน้าใหม่เมื่อออนไลน์');
+        }
     }
 
     // ==========================================
@@ -562,6 +641,13 @@
         const safeItem = item.replace(/'/g, "\\'");
         const inputEl = document.getElementById(`qty-rec-${safeItem}`);
         if(inputEl) inputEl.value = window.receiveQty[item];
+    }
+
+    window.toggleReceiveChecked = function(item, checked) {
+        window.receiveChecked[item] = checked;
+        scheduleAutoSave();
+        window.renderReceive();
+        window.updateReceiveOrderStatus();
     }
 
     window.updateRetQty = function(item, change) {
@@ -622,28 +708,39 @@
     window.renderReceive = function() {
         const container = document.getElementById('receive-container');
         container.innerHTML = '';
+        const rendered = new Set();
+        const appendItem = item => {
+            rendered.add(item);
+            const q = window.receiveQty[item] || 0;
+            const w = window.receiveWgt[item] || '';
+            const safeItem = item.replace(/'/g, "\\'");
+            const checked = window.receiveChecked[item] !== false;
+            const ordered = window.receiveOrderedQty[item];
+            container.innerHTML += `
+                <div id="item-rec-${safeItem}" class="swipe-container">
+                    <div class="swipe-background">🗑️</div>
+                    <div class="swipe-card ${checked ? '' : 'receive-card-unchecked'}" ontouchstart="window.swipeStart(event)" ontouchmove="window.swipeMove(event)" ontouchend="window.swipeEnd(event,'${safeItem}','receive')">
+                        <div class="receive-row" style="display:flex; justify-content:space-between; align-items:center; padding:12px;">
+                            <label class="receive-check"><input type="checkbox" data-receive-item="${encodeURIComponent(item)}" ${checked ? 'checked' : ''} onchange="window.toggleReceiveChecked(decodeURIComponent(this.dataset.receiveItem), this.checked)"><span class="receive-copy"><span class="item-id-name" style="font-weight:bold;">${window.escapeHtml(item)}</span>${ordered !== undefined ? `<small>สั่งไว้ ${window.escapeHtml(ordered)}</small>` : ''}</span></label>
+                            ${window.weightItems.includes(item) ? `<input type="number" class="weight-input" style="width:120px" placeholder="กิโลกรัม" value="${window.escapeHtml(w)}" oninput="window.localWgt('${safeItem}',this.value,'receive')" onclick="this.select()">` : `<div class="controls"><button class="btn-minus" onclick="window.updateRecQty('${safeItem}',-1)">-</button><input type="number" id="qty-rec-${safeItem}" class="qty-input" value="${window.escapeHtml(q)}" oninput="window.manualQty('${safeItem}',this.value,'receive')" onclick="this.select()"><button class="btn-plus" onclick="window.updateRecQty('${safeItem}', 1)">+</button></div>`}
+                        </div>
+                    </div>
+                </div>`;
+        };
         window.categoryOrder.forEach(cat => {
             if(!window.activeCategories[cat]) return;
             const items = window.activeCategories[cat].filter(i => window.receiveQty[i] !== undefined);
             if(items.length > 0) {
                 container.innerHTML += `<div class="category-title">${cat}</div>`;
-                items.forEach(item => {
-                    const q = window.receiveQty[item] || 0;
-                    const w = window.receiveWgt[item] || "";
-                    const safeItem = item.replace(/'/g, "\\'");
-                    container.innerHTML += `
-                    <div id="item-rec-${safeItem}" class="swipe-container">
-                        <div class="swipe-background">🗑️</div>
-                        <div class="swipe-card" ontouchstart="window.swipeStart(event)" ontouchmove="window.swipeMove(event)" ontouchend="window.swipeEnd(event,'${safeItem}','receive')">
-                            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px;">
-                                <span class="item-id-name" style="font-weight:bold;">${item}</span>
-                                ${window.weightItems.includes(item) ? `<input type="number" class="weight-input" style="width:120px" placeholder="กิโลกรัม" value="${w}" oninput="window.localWgt('${safeItem}',this.value,'receive')" onclick="this.select()">` : `<div class="controls"><button class="btn-minus" onclick="window.updateRecQty('${safeItem}',-1)">-</button><input type="number" id="qty-rec-${safeItem}" class="qty-input" value="${q}" oninput="window.manualQty('${safeItem}',this.value,'receive')" onclick="this.select()"><button class="btn-plus" onclick="window.updateRecQty('${safeItem}', 1)">+</button></div>`}
-                            </div>
-                        </div>
-                    </div>`;
-                });
+                items.forEach(appendItem);
             }
         });
+        const otherItems = Object.keys(window.receiveQty).filter(item => !rendered.has(item));
+        if (otherItems.length) {
+            container.innerHTML += '<div class="category-title">รายการอื่น</div>';
+            otherItems.forEach(appendItem);
+        }
+        window.updateReceiveOrderStatus();
     }
 
     window.renderReturn = function() {
@@ -708,18 +805,23 @@
 
     window.confirmReceive = async function() {
         if (isSubmitting) return;
-        let finalData = {}; let hasData = false;
+        let finalData = {}; let hasData = false; let missingAmount = '';
         document.querySelectorAll('#receive-container .swipe-card').forEach(card => {
+            if (!card.querySelector('.receive-check input')?.checked) return;
             let itemName = card.querySelector('.item-id-name').innerText.trim();
             let v = window.weightItems.includes(itemName) ? (parseFloat(card.querySelector('.weight-input')?.value) || 0) : (parseInt(card.querySelector('.qty-input')?.value) || 0);
             if (v > 0) { finalData[window.itemMappings[itemName] || itemName] = v; hasData = true; }
+            else if (!missingAmount) missingAmount = itemName;
         });
-        if(!hasData) return alert("กรุณาใส่จำนวนรับเข้า");
+        if (missingAmount) return alert(`กรอกจำนวนที่รับของ “${missingAmount}” หรือเอาเครื่องหมายเช็กออก`);
+        if(!hasData) return alert("เช็กรายการที่ได้รับและกรอกจำนวนก่อนบันทึก");
         
         isSubmitting = true; document.getElementById('btn-submit-receive').disabled = true; window.showLoader("กำลังบันทึก...");
         try {
             await apiCall('receive', { date: window.getBusinessDateKey(), qtyData: finalData });
-            window.receiveQty = {}; window.receiveWgt = {}; scheduleAutoSave();
+            window.receiveQty = {}; window.receiveWgt = {}; window.receiveChecked = {}; window.receiveOrderedQty = {};
+            window.receiveDismissed = []; window.receiveOrderSeedDate = ''; window.receiveSubmittedDate = window.getBusinessDateKey();
+            scheduleAutoSave();
             alert("✅ บันทึกรับสินค้าสำเร็จ!"); window.switchTab('return'); window.renderReceive();
         } catch(e) { alert("❌ " + e.message); } finally { isSubmitting = false; document.getElementById('btn-submit-receive').disabled = false; window.hideLoader(); }
     }
@@ -856,9 +958,16 @@
         let dX = startX - e.changedTouches[0].clientX;
         e.currentTarget.style.transition = 'transform 0.3s ease';
         if (dX > 70) {
+            if (!confirm(`นำ “${item}” ออกจากรายการ${type === 'receive' ? 'รับของ' : 'คืนของ'}?`)) {
+                e.currentTarget.style.transform = 'translateX(0)';
+                return;
+            }
             if(type==='receive') {
                 delete window.receiveQty[item];
                 delete window.receiveWgt[item];
+                delete window.receiveChecked[item];
+                delete window.receiveOrderedQty[item];
+                if (!window.receiveDismissed.includes(item)) window.receiveDismissed.push(item);
                 window.renderReceive();
             } else {
                 delete window.returnQty[item];
@@ -871,7 +980,7 @@
         }
     }
 
-    window.showSuggestionsRec = function(v) { const l = document.getElementById('autocomplete-list-rec'); l.innerHTML = ''; if(!v) return; const query = v.toLowerCase(); window.categoryOrder.forEach(c => { if(window.activeCategories[c]) window.activeCategories[c].filter(i => window.receiveQty[i] === undefined && i.toLowerCase().includes(query)).forEach(m => { const d = document.createElement('div'); d.innerText = m; d.onclick = () => { if (window.receiveQty[m] === undefined) window.receiveQty[m] = 0; scheduleAutoSave(); window.renderReceive(); l.innerHTML = ''; document.getElementById('receive-search').value = ''; setTimeout(() => { const target = document.getElementById(`item-rec-${m.replace(/'/g, "\\'")}`); if(target) target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150); }; l.appendChild(d); }); }); }
+    window.showSuggestionsRec = function(v) { const l = document.getElementById('autocomplete-list-rec'); l.innerHTML = ''; if(!v) return; const query = v.toLowerCase(); window.categoryOrder.forEach(c => { if(window.activeCategories[c]) window.activeCategories[c].filter(i => window.receiveQty[i] === undefined && i.toLowerCase().includes(query)).forEach(m => { const d = document.createElement('div'); d.innerText = m; d.onclick = () => { if (window.receiveQty[m] === undefined) window.receiveQty[m] = 0; window.receiveChecked[m] = true; window.receiveDismissed = window.receiveDismissed.filter(item => item !== m); scheduleAutoSave(); window.renderReceive(); l.innerHTML = ''; document.getElementById('receive-search').value = ''; setTimeout(() => { const target = document.getElementById(`item-rec-${m.replace(/'/g, "\\'")}`); if(target) target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150); }; l.appendChild(d); }); }); }
     window.showSuggestions = function(v) { const l = document.getElementById('autocomplete-list'); l.innerHTML = ''; if(!v) return; const query = v.toLowerCase(); window.categoryOrder.forEach(c => { if(window.activeCategories[c]) window.activeCategories[c].filter(i => window.returnQty[i] === undefined && i.toLowerCase().includes(query)).forEach(m => { const d = document.createElement('div'); d.innerText = m; d.onclick = () => { if (window.returnQty[m] === undefined) window.returnQty[m] = 0; scheduleAutoSave(); window.renderReturn(); l.innerHTML = ''; document.getElementById('return-search').value = ''; setTimeout(() => { const target = document.getElementById(`item-ret-${m.replace(/'/g, "\\'")}`); if(target) target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150); }; l.appendChild(d); }); }); }
 
     window.onload = initApp;

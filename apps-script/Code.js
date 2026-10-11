@@ -226,6 +226,9 @@ function doPost(e) {
       case 'bigcOrderLoadDraft':
         result = handleBigcOrderLoadDraft_();
         break;
+      case 'bigcOrderLoadPreviousOrder':
+        result = handleBigcOrderLoadPreviousOrder_(payload.date);
+        break;
       case 'bigcOrderAutoSave':
         result = handleBigcOrderAutoSave_(payload.draftData || {});
         break;
@@ -3038,6 +3041,23 @@ function handleBigcOrderLoadDraft_() {
   };
 }
 
+function handleBigcOrderLoadPreviousOrder_(receiveDate) {
+  const dateObj = receiveDate ? parseDate_(receiveDate) : now_();
+  const receiveKey = dateKey_(dateObj);
+  const previousDate = new Date(dateObj.getTime());
+  previousDate.setDate(previousDate.getDate() - 1);
+  const orderKey = dateKey_(previousDate);
+  const properties = PropertiesService.getScriptProperties();
+  const orderText = properties.getProperty(scopedPropKey_('order', 'BigCOrder', orderKey));
+  const receivedText = properties.getProperty(scopedPropKey_('received', 'BigCOrder', receiveKey));
+  const order = orderText ? JSON.parse(orderText) : null;
+  return {
+    status: 'success',
+    order: order && order.qtyData ? { date: orderKey, qtyData: order.qtyData } : null,
+    receivedToday: !!receivedText
+  };
+}
+
 function handleBigcOrderAutoSave_(draftData) {
   const key = dateKey_(draftData.date || now_());
   PropertiesService.getScriptProperties().setProperty(
@@ -3206,16 +3226,16 @@ function handleBigcOrderSubmitOrder_(date, qtyData, categories) {
     categories: categories || {},
     timestamp: new Date().toISOString()
   };
-  PropertiesService.getScriptProperties().setProperty(
-    scopedPropKey_('order', 'BigCOrder', key),
-    JSON.stringify(orderData)
-  );
   writeBigcOrderTransactionV2_(dateObj, qtyData || {}, {
     transactionType: 'สั่งซื้อ',
     sourceName: 'BOY Operation System:BigC Order',
     idPrefix: 'BIGC-ORDER',
     note: 'คำสั่งเบิกของสำหรับบิ๊กซีพัทยากลาง'
   });
+  PropertiesService.getScriptProperties().setProperty(
+    scopedPropKey_('order', 'BigCOrder', key),
+    JSON.stringify(orderData)
+  );
   return { status: 'success', saved: Object.keys(qtyData || {}).length };
 }
 
@@ -3238,6 +3258,10 @@ function handleBigcOrderReceive_(date, qtyData) {
       stockDirection: 'TO_BIGC'
     });
     const key = dateKey_(dateObj);
+    PropertiesService.getScriptProperties().setProperty(
+      scopedPropKey_('received', 'BigCOrder', key),
+      new Date().toISOString()
+    );
     PropertiesService.getScriptProperties().deleteProperty(scopedPropKey_('draft', 'BigCOrder', key));
     return { status: 'success', saved: count };
   } finally {
