@@ -154,6 +154,9 @@ function doPost(e) {
       case 'masterBulkItemBranches':
         result = handleMasterBulkItemBranches_(payload.assignments || [], payload.actor || {});
         break;
+      case 'masterBulkItemFlags':
+        result = handleMasterBulkItemFlags_(payload.changes || [], payload.actor || {});
+        break;
       case 'burgerCatalog':
         result = handleBurgerCatalog_();
         break;
@@ -989,6 +992,45 @@ function syncExpenseMirrorFromItem_(item, incomingBranchIds) {
   });
   if (existingOffset >= 0) sh.getRange(targetRow, 1, 1, headers.length).setValues([next]);
   else appendRows_(sh, [next]);
+}
+
+function handleMasterBulkItemFlags_(changes, actor) {
+  if (!Array.isArray(changes) || !changes.length || changes.length > 500) throw new Error('เลือกได้ครั้งละ 1–500 รายการ');
+  const allowed = ['ซื้อได้', 'เบิกได้', 'ขายได้', 'เปิดใช้งาน', 'ติดตามสต็อก', 'รูปแบบสต็อก', 'stock_target_item_id'];
+  const seen = {};
+  const rows = changes.map(function(change) {
+    const itemId = normalizeText_(change && change.itemId);
+    if (!itemId || seen[itemId]) throw new Error('รหัสสินค้าหายหรือซ้ำ');
+    seen[itemId] = true;
+    const values = change.values || {};
+    const row = { item_id: itemId };
+    Object.keys(values).forEach(function(key) {
+      if (allowed.indexOf(key) >= 0) row[key] = values[key];
+    });
+    return row;
+  });
+  const sh = sheet_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems);
+  ensureMasterExtraHeaders_('items', sh);
+  const headers = masterHeaders_(sh);
+  const idIndex = headers.indexOf('item_id');
+  if (idIndex < 0) throw new Error('ไม่พบรหัสสินค้าในข้อมูลกลาง');
+  const lastRow = realLastDataRow_(sh);
+  const existingIds = {};
+  if (lastRow >= 2) sh.getRange(2, idIndex + 1, lastRow - 1, 1).getDisplayValues().forEach(function(row) {
+    existingIds[normalizeText_(row[0])] = true;
+  });
+  rows.forEach(function(row) {
+    if (!existingIds[row.item_id]) throw new Error('ไม่พบสินค้า ' + row.item_id + ' ใน Google Sheet สำรอง');
+  });
+  const catalog = handleSheetBulkSave_(CONFIG.sheets.masterItems, rows, actor);
+  const changed = {};
+  rows.forEach(function(row) {
+    if (['ซื้อได้', 'เปิดใช้งาน', 'ติดตามสต็อก', 'รูปแบบสต็อก'].some(function(key) { return Object.prototype.hasOwnProperty.call(row, key); })) changed[row.item_id] = true;
+  });
+  if (Object.keys(changed).length) (catalog.rows || []).forEach(function(row) {
+    if (changed[normalizeText_(row.item_id)]) syncExpenseMirrorFromItem_(row);
+  });
+  return { status: 'success', updatedItems: rows.length };
 }
 
 function handleMasterBulkItemBranches_(assignments, actor) {
