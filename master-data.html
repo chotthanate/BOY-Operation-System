@@ -49,6 +49,11 @@
     .bulk-store-table .bulk-locked{color:#9b6b24;font-size:.68rem}
     @media(max-width:760px){.bulk-store-controls{grid-template-columns:1fr 1fr}.bulk-store-controls label{grid-column:1/-1}.bulk-store-controls input{grid-column:1/-1}.bulk-store-controls select#bulkStoreCategory{grid-column:1/-1}}
   </style>
+  <style>
+    /* Keep the item editor in the same place when switching between short and long tabs. */
+    #editor{align-items:flex-start;padding:clamp(16px,4vh,44px) 12px 12px}
+    #editor .dialog{max-height:calc(100vh - clamp(16px,4vh,44px) - 12px);max-height:calc(100dvh - clamp(16px,4vh,44px) - 12px);overflow-y:auto}
+  </style>
 </head>
 <body data-required-role="admin">
   <div class="shell">
