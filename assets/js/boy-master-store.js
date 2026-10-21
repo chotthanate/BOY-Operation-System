@@ -486,7 +486,7 @@
 
   async function syncAllPending() {
     if (!navigator.onLine || !client()) return { synced: 0 };
-    const entries = (await allEntries()).filter(entry => entry?.kind === "operation-outbox" && entry.targetSheetName);
+    const entries = (await allEntries()).filter(entry => entry?.kind === "operation-outbox" && entry.targetSheetName && entry.targetSheetName !== "M_สินค้า");
     let synced = 0;
     for (const entry of entries) {
       try {
