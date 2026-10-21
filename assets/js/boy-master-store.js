@@ -121,6 +121,15 @@
     return Array.isArray(queued?.operations) ? queued.operations.length : 0;
   }
 
+  async function mergePendingOperations(sheetName, catalog) {
+    const queued = await cached(operationKey(sheetName));
+    const operations = Array.isArray(queued?.operations) ? queued.operations : [];
+    return operations.reduce((current, operation) => {
+      if (operation.type === "bulk") return mergeLocalBulk(current, operation.rows || []);
+      return mergeLocalSave(current, operation.rowNumber, operation.values || {}, operation.localRowNumber);
+    }, catalog);
+  }
+
   async function queueCatalog(sheetName, catalog) {
     try {
       const db = await database();
@@ -208,11 +217,15 @@
     if (!central) throw new Error("Supabase ยังไม่พร้อม");
     const { data: sessionData } = await withTimeout(central.auth.getSession(), 2500, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (!sessionData?.session) throw new Error("ยังไม่มีเซสชัน Supabase");
-    await flushOperationOutbox(central, sheetName);
+    let outboxError = null;
+    try { await flushOperationOutbox(central, sheetName); }
+    catch (error) { outboxError = error; }
     const { data, error } = await withTimeout(central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: sheetName }), 8000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (error) throw error;
     if (!data?.sheetName) throw new Error("ไม่พบข้อมูลใน Supabase");
-    return data;
+    const catalog = await mergePendingOperations(sheetName, data);
+    if (outboxError) catalog._outboxError = outboxError?.message || String(outboxError);
+    return catalog;
   }
 
   async function refresh(sheetName, legacyLoad, notify = true) {
