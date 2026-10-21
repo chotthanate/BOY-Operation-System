@@ -379,10 +379,31 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/boy-master-store.js?v=20261021-3"></script>
+  <script src="assets/js/boy-master-store.js?v=20261021-4"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
   <script>
+    let pendingSyncRunning = false;
+    async function sendPendingItems() {
+      if (pendingSyncRunning || !navigator.onLine || !(await window.BOY_MASTER_STORE.pendingCount('M_สินค้า'))) return;
+      pendingSyncRunning = true;
+      const list = document.getElementById('pendingList');
+      const progress = document.createElement('p');
+      progress.textContent = 'กำลังส่งรายการที่ค้าง…';
+      list.prepend(progress);
+      try {
+        await window.BOY_MASTER_STORE.syncLegacyPending('M_สินค้า', () => api('masterCatalog', { entity: 'items' }),
+          (operation, rowNumber, expectedVersion) => api('masterSave', {
+            entity: 'items', rowNumber, values: operation.values, compact: true,
+            actor: actor(), expectedVersion
+          }));
+        progress.textContent = 'ส่งรายการที่ค้างครบแล้ว';
+      } catch (error) {
+        progress.textContent = `ส่งรายการที่ค้างไม่สำเร็จ: ${error.message}`;
+      } finally {
+        pendingSyncRunning = false;
+      }
+    }
     document.getElementById('healthButton').addEventListener('click', async () => {
       const list = document.getElementById('pendingList');
       const sheetName = document.querySelector('.entity.active small')?.textContent || 'M_สินค้า';
@@ -391,6 +412,14 @@
       const heading = document.createElement('strong');
       heading.textContent = `รายการรอส่งในเครื่องนี้: ${details.length}`;
       list.append(heading);
+      if (details.length) {
+        const send = document.createElement('button');
+        send.type = 'button';
+        send.className = 'secondary';
+        send.textContent = 'ส่งรายการที่ค้าง';
+        send.onclick = sendPendingItems;
+        list.append(send);
+      }
       details.forEach((detail, index) => {
         const row = document.createElement('article');
         row.className = 'health-row';

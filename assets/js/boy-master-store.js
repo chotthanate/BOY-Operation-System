@@ -132,6 +132,46 @@
     }));
   }
 
+  async function syncLegacyPending(sheetName, legacyLoad, legacySaveOperation) {
+    const key = operationKey(sheetName);
+    const queued = await cached(key);
+    let operations = Array.isArray(queued?.operations) ? queued.operations.slice() : [];
+    if (!operations.length) return null;
+    let remote = await legacyLoad();
+    while (operations.length) {
+      const operation = operations[0];
+      if (operation.type !== "save") throw new Error("รายการรอส่งแบบกลุ่มต้องตรวจสอบก่อนส่ง");
+      const idHeader = operation.idHeader || remote.idHeader;
+      const id = String(operation.idValue || operation.values?.[idHeader] || "").trim();
+      const existing = id ? (remote.rows || []).find(row => String(row[idHeader] || "") === id) : null;
+      if (operation.rowNumber && !existing) throw new Error(`ไม่พบรหัส ${id || operation.rowNumber} ในข้อมูลล่าสุด`);
+      if (!operation.rowNumber && !id) {
+        const name = String(operation.values?.["ชื่อสินค้า"] || "").trim();
+        if (name && (remote.rows || []).some(row => String(row["ชื่อสินค้า"] || "").trim() === name)) {
+          throw new Error(`มีชื่อ ${name} อยู่แล้ว กรุณาตรวจสอบก่อนส่ง`);
+        }
+        const numericId = `${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
+        operation.values = { ...operation.values, [idHeader]: `ITEM-${numericId}` };
+        operation.idValue = operation.values[idHeader];
+        operations[0] = operation;
+        await putEntry({ ...queued, operations, queuedAt: Date.now() });
+      }
+      const target = existing?.__rowNumber || null;
+      await legacySaveOperation(operation, target, existing?.__version || "");
+      remote = await legacyLoad();
+      const savedId = String(operation.idValue || operation.values?.[idHeader] || "");
+      const saved = (remote.rows || []).find(row => String(row[idHeader] || "") === savedId);
+      if (!saved) throw new Error(`ส่ง ${savedId} แล้ว แต่ตรวจไม่พบในข้อมูลล่าสุด`);
+      operations.shift();
+      if (operations.length) await putEntry({ ...queued, operations, queuedAt: Date.now() });
+      else await remove(key);
+      window.dispatchEvent(new CustomEvent("boy-master-outbox-updated", { detail: { sheetName, count: operations.length } }));
+    }
+    const catalog = await remember(sheetName, remote, "google-sheets-fallback");
+    window.dispatchEvent(new CustomEvent("boy-master-catalog-updated", { detail: { sheetName, catalog, syncedFromOutbox: true } }));
+    return catalog;
+  }
+
   async function mergePendingOperations(sheetName, catalog) {
     const queued = await cached(operationKey(sheetName));
     const operations = Array.isArray(queued?.operations) ? queued.operations : [];
@@ -364,6 +404,14 @@
         if (!isRetryable(error)) throw error;
       }
     }
+    if (!(await pendingCount(sheetName))) {
+      try {
+        const result = await legacySave("fallback");
+        return remember(sheetName, mergeCompactResult(currentCatalog, result), "google-sheets-fallback");
+      } catch (error) {
+        if (!isRetryable(error)) throw error;
+      }
+    }
     const operationId = localOperationId();
     const previousLocal = isLocalRowNumber(rowNumber) ? String(rowNumber) : "";
     const localRowNumber = previousLocal || `local:${operationId}`;
@@ -453,5 +501,5 @@
   setTimeout(() => syncAllPending().catch(() => {}), 1500);
   setInterval(() => syncAllPending().catch(() => {}), 5 * 60 * 1000);
 
-  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached, pendingCount, pendingDetails, syncPending, syncAllPending };
+  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached, pendingCount, pendingDetails, syncLegacyPending, syncPending, syncAllPending };
 })();
