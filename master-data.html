@@ -384,9 +384,7 @@
   <script src="assets/js/boy-auth-guard.js"></script>
   <script>
     window.addEventListener('boy-master-catalog-updated', event => {
-      if (event.detail?.sheetName === 'M_สินค้า' && event.detail.catalog?._source === 'supabase') {
-        event.stopImmediatePropagation();
-      }
+      if (event.detail?.sheetName === 'M_สินค้า') event.stopImmediatePropagation();
     }, true);
     let pendingSyncRunning = false;
     async function sendPendingItems() {
@@ -403,6 +401,7 @@
             actor: actor(), expectedVersion
           }));
         progress.textContent = 'ส่งรายการที่ค้างครบแล้ว';
+        if (current === 'items') await load();
       } catch (error) {
         progress.textContent = `ส่งรายการที่ค้างไม่สำเร็จ: ${error.message}`;
       } finally {
