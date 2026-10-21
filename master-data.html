@@ -383,6 +383,11 @@
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
   <script>
+    window.addEventListener('boy-master-catalog-updated', event => {
+      if (event.detail?.sheetName === 'M_สินค้า' && event.detail.catalog?._source === 'supabase') {
+        event.stopImmediatePropagation();
+      }
+    }, true);
     let pendingSyncRunning = false;
     async function sendPendingItems() {
       if (pendingSyncRunning || !navigator.onLine || !(await window.BOY_MASTER_STORE.pendingCount('M_สินค้า'))) return;
