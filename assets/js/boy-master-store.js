@@ -235,14 +235,21 @@
       let source = "supabase";
       try { catalog = await fromSupabase(sheetName); }
       catch (supabaseError) {
-        const local = await cached(sheetName);
-        if (local?.catalog) {
-          source = "device-cache";
-          catalog = { ...local.catalog, _source: "device-cache", _supabaseError: supabaseError?.message || String(supabaseError) };
-        } else {
+        try {
           source = "google-sheets-fallback";
           catalog = await legacyLoad();
+          catalog = await mergePendingOperations(sheetName, catalog);
           catalog._supabaseError = supabaseError?.message || String(supabaseError);
+        } catch (legacyError) {
+          const local = await cached(sheetName);
+          if (!local?.catalog) throw legacyError;
+          source = "device-cache";
+          catalog = {
+            ...local.catalog,
+            _source: "device-cache",
+            _supabaseError: supabaseError?.message || String(supabaseError),
+            _legacyError: legacyError?.message || String(legacyError)
+          };
         }
       }
       const waiting = await pendingCount(sheetName);

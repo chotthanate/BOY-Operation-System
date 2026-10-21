@@ -17,3 +17,11 @@ test('pending edits are overlaid on the latest catalog instead of being discarde
   assert.match(source, /mergeLocalSave\(current, operation\.rowNumber, operation\.values \|\| \{\}, operation\.localRowNumber\)/);
   assert.match(source, /await mergePendingOperations\(sheetName, data\)/);
 });
+
+test('local PIN sessions prefer the current Google Sheet over a stale device cache', () => {
+  const fallbackStart = source.indexOf('catch (supabaseError)');
+  const fallbackEnd = source.indexOf('const waiting = await pendingCount', fallbackStart);
+  const fallback = source.slice(fallbackStart, fallbackEnd);
+  assert.ok(fallback.indexOf('catalog = await legacyLoad()') < fallback.indexOf('const local = await cached(sheetName)'));
+  assert.match(fallback, /catalog = await mergePendingOperations\(sheetName, catalog\)/);
+});
