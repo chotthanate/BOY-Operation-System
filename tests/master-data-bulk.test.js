@@ -35,7 +35,7 @@ function context(overrides = {}) {
 test('item bulk actions keep only useful controls', () => {
   const { scope } = context();
   const keys = Array.from(scope.bulkFields(), entry => entry[0]);
-  assert.deepEqual(keys, ['stores', 'เปิดใช้งาน', 'ติดตามสต็อก']);
+  assert.deepEqual(keys, ['เปิดใช้งาน', 'ติดตามสต็อก']);
 });
 
 test('grouped stock items cannot be toggled as independent stock', () => {
@@ -57,7 +57,7 @@ test('readonly fields are not offered for bulk edits', () => {
   const { scope } = context({
     catalog: { idHeader: 'item_id', headers: ['item_id', 'เบิกได้', 'เปิดใช้งาน'], readonlyHeaders: ['เบิกได้'] }
   });
-  assert.deepEqual(Array.from(scope.bulkFields(), entry => entry[0]), ['stores', 'เปิดใช้งาน']);
+  assert.deepEqual(Array.from(scope.bulkFields(), entry => entry[0]), ['เปิดใช้งาน']);
 });
 
 test('category scopes can be edited in bulk without stock-specific controls', () => {

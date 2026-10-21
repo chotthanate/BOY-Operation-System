@@ -18,7 +18,7 @@
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false, fruitCostItems: [], fruitWeights: []
+    cloudTimer: 0, saving: false, started: false, fruitCostItems: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -139,7 +139,7 @@
       inputMode: item.inputMode === "weight" ? "weight" : "quantity",
       active: item.active !== false, defaultReturn: defaultKeys.has(item.key), sortOrder: Number(item.sortOrder ?? index),
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
-      itemId: item.itemId || item.item_id || null
+      itemId: item.itemId || item.item_id || null, masterItemId: item.masterItemId || item.master_item_id || null
     })).sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
@@ -160,7 +160,7 @@
       key: item.key || "", displayName: item.displayName || item.item_name || "", name: item.name || item.item_name || "",
       category: item.category || "อื่นๆ", unit: item.unit || "", inputMode: item.inputMode === "weight" ? "weight" : "quantity",
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
-      itemId: item.itemId || item.item_id || null,
+      itemId: item.itemId || item.item_id || null, masterItemId: item.masterItemId || item.master_item_id || null,
       active: item.active !== false, sortOrder: Number(item.sortOrder ?? index)
     })).sort((left, right) => left.sortOrder - right.sortOrder || left.key.localeCompare(right.key));
     return JSON.stringify({ menu: normalized, returns: [...(payload?.default_return_keys || [])].sort() });
@@ -292,7 +292,7 @@
     return {
       line_key: item.key, item_name: item.displayName, category_name: item.category, unit_name: item.unit,
       input_mode: inputMode, quantity, received: true, sort_order: item.sortOrder,
-      item_id: item.itemId || item.item_id || null,
+      item_id: item.itemId || item.item_id || null, master_item_id: item.masterItemId || item.master_item_id || null,
       handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType)
     };
   }
@@ -580,6 +580,31 @@
     showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
     renderSettings();
   }
+  async function loadMasterItems() {
+    if (state.masterItems.length || !state.session) return;
+    const [catalogResult, normalizedResult] = await Promise.all([
+      state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_สินค้า" }),
+      state.client.schema("boy_central").from("items").select("id,code,name,active").eq("active", true).limit(1000)
+    ]);
+    if (catalogResult.error) throw catalogResult.error;
+    if (normalizedResult.error) throw normalizedResult.error;
+    state.masterItems = (catalogResult.data?.rows || []).filter((row) => row.item_id && row["เปิดใช้งาน"] !== false)
+      .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id) }));
+    state.normalizedItemsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row.id]));
+  }
+  function renderMasterItemOptions(selected = "") {
+    const query = $("#editItemMappingSearch").value.trim().toLowerCase();
+    const choices = state.masterItems.filter((row) => !query || `${row.name} ${row.code}`.toLowerCase().includes(query) || row.code === selected);
+    $("#editItemMasterId").innerHTML = `<option value="">ยังไม่จับคู่สินค้า</option>` + choices.map((row) =>
+      `<option value="${escapeHtml(row.code)}">${escapeHtml(row.name)} · ${escapeHtml(row.code)}</option>`).join("");
+    $("#editItemMasterId").value = selected;
+  }
+  function updateMappingStatus() {
+    const code = $("#editItemMasterId").value;
+    $("#editItemMappingStatus").textContent = !code ? "ยังไม่จับคู่สินค้า — รายการรับได้ แต่ต้นทุนอัตโนมัติจะยังไม่ครบ"
+      : state.normalizedItemsByCode.has(code) ? `เชื่อมกับ ${code} และฐานต้นทุนกลางแล้ว`
+      : `เชื่อมกับ ${code} แล้ว แต่ยังไม่มีรหัสวัตถุดิบ UUID สำหรับคำนวณต้นทุน กรุณาตรวจในข้อมูลกลาง`;
+  }
   function renderFruitCostItemOptions() {
     $("#fruitCostError").textContent = "";
     const pattern = $("#fruitCostKind").value === "pineapple" ? /สับปะรด/ : /แตงโม/;
@@ -642,7 +667,7 @@
   function renderSettings() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
-    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.itemId || item.item_id ? "จับคู่สินค้าแล้ว" : "ยังไม่จับคู่สินค้า"}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("");
+    $("#settingsList").innerHTML = items.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.masterItemId ? `สินค้า ${escapeHtml(item.masterItemId)}${item.itemId ? " · ต้นทุนพร้อม" : " · รอจับคู่ต้นทุน"}` : "ยังไม่จับคู่สินค้า"}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("");
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
@@ -689,19 +714,23 @@
   async function addMenuItem() {
     const name = $("#newItemName").value.trim(); const category = $("#newItemCategory").value.trim(); const unit = $("#newItemUnit").value.trim();
     if (!name || !category) { $("#addItemError").textContent = "กรุณากรอกชื่อรายการและประเภท"; return; }
-    const key = keyFor(name, unit); if (state.menu.some((item) => item.key === key)) { $("#addItemError").textContent = "มีรายการนี้แล้ว"; return; }
-    const item = { key, displayName: unit ? `${name} (${unit})` : name, name, category, unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length };
+    const key = keyFor(name, unit); if (state.menu.some((item) => item.displayName === (unit ? `${name} (${unit})` : name))) { $("#addItemError").textContent = "มีรายการนี้แล้ว"; return; }
+    const item = { key: globalThis.crypto?.randomUUID?.() || key, displayName: unit ? `${name} (${unit})` : name, name, category, unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length };
     state.menu.push(item);
     if (!await persistSettings("เพิ่มรายการแล้ว")) { state.menu = state.menu.filter((row) => row !== item); $("#addItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     $("#addItemModal").classList.add("hidden"); renderSettings();
   }
-  function openEditItem(key) {
+  async function openEditItem(key) {
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
     $("#editItemHandlingType").value = receiveHandlingType(item);
-    $("#editItemMappingStatus").textContent = item.itemId || item.item_id ? "จับคู่กับสินค้าในระบบแล้ว" : "ยังไม่จับคู่สินค้า จึงยังคำนวณต้นทุนไม่ได้";
+    $("#editItemActive").checked = item.active !== false;
+    $("#editItemMappingSearch").value = "";
+    $("#editItemMappingStatus").textContent = "กำลังโหลดสินค้าข้อมูลกลาง…";
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
+    try { await loadMasterItems(); renderMasterItemOptions(item.masterItemId || item.master_item_id || ""); updateMappingStatus(); }
+    catch (error) { $("#editItemMappingStatus").textContent = `โหลดสินค้าข้อมูลกลางไม่สำเร็จ: ${error.message}`; }
   }
   async function saveEditedItem() {
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
@@ -710,6 +739,9 @@
     const previous = { ...item };
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
+    item.active = $("#editItemActive").checked;
+    item.masterItemId = $("#editItemMasterId").value || null;
+    item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
     if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     $("#editItemModal").classList.add("hidden"); renderSettings();
   }
@@ -788,6 +820,8 @@
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    $("#editItemMappingSearch").oninput = () => renderMasterItemOptions($("#editItemMasterId").value);
+    $("#editItemMasterId").onchange = updateMappingStatus;
     $("#openFruitCostSettings").onclick = openFruitCostSettings;
     $("#saveFruitCost").onclick = saveFruitCost;
     $("#fruitCostKind").onchange = renderFruitCostItemOptions;
