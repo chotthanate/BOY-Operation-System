@@ -284,7 +284,12 @@
     const task = (async () => {
       let catalog;
       let source = "supabase";
-      try { catalog = await fromSupabase(sheetName); }
+      try {
+        if (sheetName === "M_สินค้า") {
+          source = "google-sheets";
+          catalog = await mergePendingOperations(sheetName, await legacyLoad());
+        } else catalog = await fromSupabase(sheetName);
+      }
       catch (supabaseError) {
         try {
           source = "google-sheets-fallback";
@@ -384,7 +389,7 @@
   }
 
   async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog) {
-    const central = client();
+    const central = sheetName === "M_สินค้า" ? null : client();
     if (central) {
       try {
         const { data: sessionData } = await central.auth.getSession();

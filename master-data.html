@@ -379,7 +379,7 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/boy-master-store.js?v=20261021-4"></script>
+  <script src="assets/js/boy-master-store.js?v=20261021-5"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
   <script>
@@ -404,6 +404,8 @@
         pendingSyncRunning = false;
       }
     }
+    window.addEventListener('boy-auth-ready', () => setTimeout(sendPendingItems, 1500));
+    if (window.BOY_AUTH_CONTEXT) setTimeout(sendPendingItems, 1500);
     document.getElementById('healthButton').addEventListener('click', async () => {
       const list = document.getElementById('pendingList');
       const sheetName = document.querySelector('.entity.active small')?.textContent || 'M_สินค้า';
