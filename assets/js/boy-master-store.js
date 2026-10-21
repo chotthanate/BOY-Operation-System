@@ -121,6 +121,17 @@
     return Array.isArray(queued?.operations) ? queued.operations.length : 0;
   }
 
+  async function pendingDetails(sheetName) {
+    const queued = await cached(operationKey(sheetName));
+    return (queued?.operations || []).map(operation => ({
+      type: operation.type,
+      rowNumber: operation.rowNumber || operation.localRowNumber || "",
+      id: operation.idValue || operation.values?.item_id || "",
+      name: operation.values?.["ชื่อสินค้า"] || operation.values?.["ชื่อรายการค่าใช้จ่าย"] || "",
+      rows: operation.type === "bulk" ? operation.rows?.length || 0 : 1
+    }));
+  }
+
   async function mergePendingOperations(sheetName, catalog) {
     const queued = await cached(operationKey(sheetName));
     const operations = Array.isArray(queued?.operations) ? queued.operations : [];
@@ -442,5 +453,5 @@
   setTimeout(() => syncAllPending().catch(() => {}), 1500);
   setInterval(() => syncAllPending().catch(() => {}), 5 * 60 * 1000);
 
-  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached, pendingCount, syncPending, syncAllPending };
+  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, applyPatch, refresh, prefetch, cached, pendingCount, pendingDetails, syncPending, syncAllPending };
 })();

@@ -80,7 +80,7 @@
   </div>
   <div class="sheet hidden" id="editor" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><div><small id="editorCode"></small><h2 id="editorTitle">เพิ่มข้อมูล</h2></div><button class="close" id="close" type="button" aria-label="ปิด">×</button></div><div class="details-tabs hidden" id="detailsTabs"></div><div class="editor-panel" id="employeeDataPanel"><form id="form"><div class="form" id="fields"></div><div class="actions"><button class="secondary" type="button" id="cancel">ยกเลิก</button><button class="primary" type="submit">บันทึกลงข้อมูลกลาง</button></div></form></div><section class="editor-panel hidden" id="employeeHistoryPanel"><div id="employeeHistory"><div class="empty">กำลังโหลดประวัติ…</div></div></section><section class="editor-panel hidden" id="relationsPanel"><div id="relationsContent"></div></section></section></div>
   <div class="sheet tool-dialog hidden" id="historyDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>ประวัติแก้ไข</h2><button class="close" data-close-dialog="historyDialog" type="button" aria-label="ปิด">×</button></div><div class="tool-list" id="historyList"></div></section></div>
-  <div class="sheet tool-dialog hidden" id="healthDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>สถานะระบบ</h2><button class="close" data-close-dialog="healthDialog" type="button" aria-label="ปิด">×</button></div><div class="tool-list" id="healthList"></div></section></div>
+  <div class="sheet tool-dialog hidden" id="healthDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>สถานะระบบ</h2><button class="close" data-close-dialog="healthDialog" type="button" aria-label="ปิด">×</button></div><div class="tool-list" id="healthList"></div><div class="tool-list" id="pendingList"></div></section></div>
   <div class="sheet tool-dialog hidden" id="importDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>ตรวจข้อมูลนำเข้า</h2><button class="close" data-close-dialog="importDialog" type="button" aria-label="ปิด">×</button></div><div class="import-summary" id="importSummary"></div><div class="preview-wrap"><table class="preview-table"><thead id="importHead"></thead><tbody id="importBody"></tbody></table></div><div class="actions"><button class="secondary" data-close-dialog="importDialog" type="button">ยกเลิก</button><button class="primary" id="confirmImport" type="button">นำเข้าข้อมูล</button></div></section></div>
   <div class="sheet tool-dialog bulk-store-dialog hidden" id="bulkStoreDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><div><small id="bulkEntityLabel">ข้อมูลกลาง</small><h2>กำหนดหลายรายการ</h2></div><button class="close" data-close-dialog="bulkStoreDialog" type="button" aria-label="ปิด">×</button></div><div class="bulk-store-controls"><label>กำหนดหัวข้อ<select id="bulkField"></select></label><input id="bulkStoreSearch" type="search" placeholder="ค้นหารายการ"><select id="bulkStoreCategory"><option value="">ทุกหมวดหมู่</option></select></div><p class="bulk-hint" id="bulkHint"></p><div class="bulk-store-wrap"><table class="bulk-store-table"><thead id="bulkStoreHead"></thead><tbody id="bulkStoreRows"></tbody></table></div><div class="actions bulk-store-actions"><span class="bulk-store-summary" id="bulkStoreSummary"></span><button class="secondary" data-close-dialog="bulkStoreDialog" type="button">ยกเลิก</button><button class="primary" id="saveBulkStores" type="button">บันทึกการเปลี่ยนแปลง</button></div></section></div>
   <script>
@@ -379,8 +379,25 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
-  <script src="assets/js/boy-master-store.js?v=20261021-2"></script>
+  <script src="assets/js/boy-master-store.js?v=20261021-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
+  <script>
+    document.getElementById('healthButton').addEventListener('click', async () => {
+      const list = document.getElementById('pendingList');
+      const sheetName = document.querySelector('.entity.active small')?.textContent || 'M_สินค้า';
+      const details = await window.BOY_MASTER_STORE.pendingDetails(sheetName);
+      list.replaceChildren();
+      const heading = document.createElement('strong');
+      heading.textContent = `รายการรอส่งในเครื่องนี้: ${details.length}`;
+      list.append(heading);
+      details.forEach((detail, index) => {
+        const row = document.createElement('article');
+        row.className = 'health-row';
+        row.textContent = `${index + 1}. ${detail.name || detail.id || detail.type} · ${detail.id || detail.rowNumber} · ${detail.type}${detail.rows > 1 ? ` (${detail.rows} แถว)` : ''}`;
+        list.append(row);
+      });
+    });
+  </script>
 </body>
 </html>
