@@ -1141,13 +1141,31 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expect
   const lock = lock_();
   lock.waitLock(15000);
   try {
-    const rn = Number(rowNumber);
+    let rn = Number(rowNumber);
+    const incomingId = (entity === 'items' || entity === 'itemUnits') ? normalizeText_(incoming[spec.id]) : '';
+    if (incomingId) {
+      if (rn >= 2 && rn <= sh.getLastRow() && normalizeText_(sh.getRange(rn, idIndex + 1).getDisplayValue()) !== incomingId) rn = 0;
+      if (!(rn >= 2 && rn <= sh.getLastRow()) && sh.getLastRow() >= 2) {
+        const ids = sh.getRange(2, idIndex + 1, sh.getLastRow() - 1, 1).getDisplayValues();
+        const found = ids.findIndex(function(cell) { return normalizeText_(cell[0]) === incomingId; });
+        if (found >= 0) rn = found + 2;
+      }
+    }
     const isUpdate = rn >= 2 && rn <= sh.getLastRow();
     const existing = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getValues()[0] : new Array(headers.length).fill('');
     const beforeValues = isUpdate ? sh.getRange(rn, 1, 1, headers.length).getDisplayValues()[0] : new Array(headers.length).fill('');
     if (isUpdate) assertMasterVersion_(headers, beforeValues, expectedVersion);
     const row = headers.map(function(header, index) {
-      if (header === spec.id) return isUpdate ? existing[index] : nextMasterId_(sh, idIndex + 1, spec.prefix);
+      if (header === spec.id) {
+        if (isUpdate) return existing[index];
+        const requestedId = (entity === 'items' || entity === 'itemUnits') ? normalizeText_(incoming[header]) : '';
+        if (requestedId) {
+          if (!new RegExp('^' + spec.prefix + '-[0-9]+$').test(requestedId)) throw new Error('รหัสรายการไม่ถูกต้อง');
+          if (sh.getLastRow() >= 2 && sh.getRange(2, idIndex + 1, sh.getLastRow() - 1, 1).getDisplayValues().some(function(cell) { return normalizeText_(cell[0]) === requestedId; })) throw new Error('รหัสรายการซ้ำ');
+          return requestedId;
+        }
+        return nextMasterId_(sh, idIndex + 1, spec.prefix);
+      }
       if (!Object.prototype.hasOwnProperty.call(incoming, header)) return existing[index];
       if (header === 'เปิดใช้งาน') return toBool_(incoming[header], true);
       return incoming[header];
@@ -1171,6 +1189,12 @@ function handleMasterSave_(entity, rowNumber, incoming, branchIds, actor, expect
     savedRow.__version = masterRowVersion_(headers, afterValues);
     savedRowNumber = targetRow;
     if (entity === 'items') syncExpenseMirrorFromItem_(savedRow, branchIds);
+    if (entity === 'itemUnits') {
+      const item = tableObjects_(CONFIG.spreadsheets.master, CONFIG.sheets.masterItems).find(function(candidate) {
+        return normalizeText_(candidate.item_id) === normalizeText_(savedRow.item_id);
+      });
+      if (item) syncExpenseMirrorFromItem_(item);
+    }
     recordMasterAudit_(sh.getName(), targetRow, isUpdate ? 'แก้ไข' : 'เพิ่ม', masterRowObject_(headers, beforeValues), masterRowObject_(headers, afterValues), actor);
   } finally {
     lock.releaseLock();

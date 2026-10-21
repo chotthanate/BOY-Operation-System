@@ -32,10 +32,10 @@ function context(overrides = {}) {
   return { scope, field };
 }
 
-test('item bulk actions include store, purchase, withdrawal, sales, active and stock', () => {
+test('item bulk actions keep only useful controls', () => {
   const { scope } = context();
   const keys = Array.from(scope.bulkFields(), entry => entry[0]);
-  assert.deepEqual(keys, ['stores', 'ซื้อได้', 'เบิกได้', 'ขายได้', 'เปิดใช้งาน', 'ติดตามสต็อก']);
+  assert.deepEqual(keys, ['stores', 'เปิดใช้งาน', 'ติดตามสต็อก']);
 });
 
 test('grouped stock items cannot be toggled as independent stock', () => {
