@@ -75,6 +75,22 @@
       font-weight: 850;
     }
     .home-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #14a77d; }
+    .home-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+    .home-action {
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, .94);
+      font: inherit;
+      font-size: .74rem;
+      font-weight: 850;
+      cursor: pointer;
+    }
+    .home-action:hover { border-color: #bddbce; background: #fff; }
+    .home-action:disabled { cursor: wait; opacity: .58; }
+    .home-action.logout { color: #a43e2c; }
     .section + .section { margin-top: 28px; }
     .section-head { margin: 0 2px 13px; }
     .section-head h1, .section-head h2 { margin: 0; line-height: 1.2; }
@@ -145,6 +161,8 @@
       .tool-grid .card { grid-template-columns: auto minmax(0, 1fr); min-height: 112px; align-content: center; }
       .tool-grid .card-arrow { display: none; }
       .tool-grid .card-copy span { font-size: .7rem; }
+      .home-status { display: none; }
+      .home-action { min-height: 40px; padding: 8px 10px; }
     }
     @media (max-width: 380px) {
       .tool-grid { grid-template-columns: 1fr; }
@@ -159,7 +177,11 @@
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="index.html" aria-label="หน้าหลัก"><div class="brand-mark">BOY</div><div><small>BOY OPERATION</small><strong>หน้าหลัก</strong></div></a>
-      <span class="home-status">พร้อมใช้งาน</span>
+      <div class="home-actions">
+        <span class="home-status" id="homeStatus">พร้อมใช้งาน</span>
+        <button class="home-action" id="refreshButton" type="button">↻ รีเฟรช</button>
+        <button class="home-action logout" id="logoutButton" type="button">ออกจากระบบ</button>
+      </div>
     </header>
 
     <section class="section" aria-labelledby="branchHeading">
@@ -195,5 +217,30 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
+  <script>
+    const refreshButton = document.querySelector('#refreshButton');
+    const logoutButton = document.querySelector('#logoutButton');
+    const homeStatus = document.querySelector('#homeStatus');
+
+    refreshButton.addEventListener('click', () => {
+      refreshButton.disabled = true;
+      refreshButton.textContent = 'กำลังรีเฟรช…';
+      homeStatus.textContent = 'กำลังโหลดข้อมูลใหม่';
+      location.reload();
+    });
+
+    logoutButton.addEventListener('click', async () => {
+      if (!confirm('ออกจากระบบใช่ไหม?')) return;
+      logoutButton.disabled = true;
+      logoutButton.textContent = 'กำลังออก…';
+      window.BOY_LOCAL_ACCESS?.clear();
+      const config = window.BOY_CENTRAL_CONFIG || {};
+      if (window.supabase && config.url && config.publishableKey) {
+        const client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
+        await Promise.race([client.auth.signOut(), new Promise(resolve => setTimeout(resolve, 2500))]);
+      }
+      location.replace('burger.html?online=1');
+    });
+  </script>
 </body>
 </html>
