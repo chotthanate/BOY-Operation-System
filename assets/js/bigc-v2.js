@@ -797,7 +797,7 @@
         state.fruitWeights.push({ raw_item_id: itemId, effective_month: monthStart, kg_per_piece: kg, sample_note: sampleNote });
       }
       $("#fruitCostModal").classList.add("hidden");
-      notice(affected > 0 ? `บันทึกแล้ว · มี ${affected} รายการรับของที่ต้องคำนวณต้นทุนใหม่` : "บันทึกการคำนวณต้นทุนแล้ว");
+      notice(affected > 0 ? `บันทึกแล้ว · ระบบคำนวณต้นทุนรายการเดิมให้อัตโนมัติ ${affected} รายการ` : "บันทึกการคำนวณต้นทุนแล้ว");
     } catch (error) { $("#fruitCostError").textContent = `บันทึกไม่สำเร็จ: ${error.message}`; }
     finally { loading("", false); }
   }

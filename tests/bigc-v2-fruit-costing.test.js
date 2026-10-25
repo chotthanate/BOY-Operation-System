@@ -8,6 +8,7 @@ const page = fs.readFileSync(path.join(__dirname, '..', 'bigc-v2.html'), 'utf8')
 const costingMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261010193000_bigc_interbranch_cost_allocations.sql'), 'utf8');
 const canonicalMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261025113948_canonical_bigc_fruit_workflow.sql'), 'utf8');
 const revaluationMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261026040000_auto_revalue_bigc_monthly_costs.sql'), 'utf8');
+const settingRevaluationMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261026042000_auto_revalue_bigc_cost_settings.sql'), 'utf8');
 
 test('prepared display forms keep a stable canonical master item and UUID', () => {
   assert.match(canonicalMigration, /'แตงโม','ITEM-0011'/);
@@ -52,4 +53,12 @@ test('later Tawana purchases automatically revalue open BigC receipts', () => {
   assert.match(revaluationMigration, /a\.cost_status in \('pending','provisional'\)/);
   assert.match(revaluationMigration, /reversal\.cost_status='reversed'/);
   assert.doesNotMatch(revaluationMigration, /a\.cost_status in \([^\n]*'final'/);
+});
+
+test('later fruit yield and piece-weight settings revalue prior receipts', () => {
+  assert.match(settingRevaluationMigration, /revalue_bigc_costs_after_rule_setting/);
+  assert.match(settingRevaluationMigration, /revalue_bigc_costs_after_yield_setting/);
+  assert.match(settingRevaluationMigration, /revalue_bigc_costs_after_piece_weight_setting/);
+  assert.match(settingRevaluationMigration, /revalue_bigc_costs_for_month/);
+  assert.match(script, /ระบบคำนวณต้นทุนรายการเดิมให้อัตโนมัติ/);
 });
