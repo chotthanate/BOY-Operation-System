@@ -79,3 +79,17 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   .order-card .qty-control input{width:27px;height:31px;font-size:17px}
   .summary-row{grid-template-columns:minmax(0,1fr) auto}
 }
+
+/* Make long settings lists easier to scan by category. */
+.settings-list{gap:16px}
+.setting-category-group{display:grid;gap:7px}
+.setting-category-group+.setting-category-group{padding-top:14px;border-top:2px solid #dfe9e5}
+.setting-category-group>h3{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0;padding:0 3px;color:var(--green);font-size:13px}
+.setting-category-group>h3 small{padding:4px 8px;border-radius:999px;background:#eef7f3;color:var(--muted);font-size:9px;font-weight:850}
+
+/* iOS zooms focused form fields smaller than 16px. */
+@media(max-width:600px){
+  .modal-sheet input:not([type="checkbox"]):not([type="radio"]),
+  .modal-sheet select,
+  .modal-sheet textarea{font-size:16px}
+}

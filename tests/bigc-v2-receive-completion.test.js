@@ -20,3 +20,9 @@ test('a completed receipt clears its local draft and is not seeded again', () =>
   assert.match(script, /if \(receive\) clearCompletedReceiveDraft/);
   assert.match(script, /if \(type === "receive"\) \{\s*clearCompletedReceiveDraft\(payload\.business_date\)/);
 });
+
+test('settings are separated by category and iPhone fields do not trigger focus zoom', () => {
+  assert.match(script, /setting-category-group/);
+  assert.match(styles, /\.setting-category-group\+\.setting-category-group\{[^}]*border-top:2px/);
+  assert.match(styles, /\.modal-sheet input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)[\s\S]*font-size:16px/);
+});
