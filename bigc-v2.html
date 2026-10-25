@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261025-3">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261025-4">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -89,7 +89,7 @@
         <span><strong>ยังไม่ได้ส่งขึ้น Supabase</strong><small id="settingsSyncMessage">เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง</small></span>
         <a id="settingsReconnect" href="burger.html?next=bigc-v2.html&amp;online=1">เชื่อมต่อและส่งข้อมูล</a>
       </div>
-      <button id="openFruitCostSettings" class="secondary-button fruit-cost-open" type="button" hidden>ต้นทุนผลไม้ · น้ำหนักเฉลี่ยต่อลูก</button>
+      <button id="openFruitCostSettings" class="secondary-button fruit-cost-open" type="button">ต้นทุนผลไม้ · Yield และน้ำหนักต่อลูก</button>
       <div class="settings-quick-tools">
         <button id="openMappingManager" class="settings-tool-button" type="button"><span>จับคู่สินค้ากลาง</span><small id="mappingSummary">กำลังตรวจสอบ</small></button>
         <div class="staff-link-panel">
@@ -121,14 +121,14 @@
     <div class="modal-sheet edit-item-sheet">
       <header><div><small>BigC · ผู้ดูแล</small><h2 id="fruitCostTitle">ต้นทุนผลไม้</h2></div><button data-close-modal="fruitCostModal" type="button">×</button></header>
       <div class="edit-item-fields">
-        <label>ผลไม้<select id="fruitCostKind"><option value="watermelon">แตงโม</option><option value="pineapple">สับปะรด</option></select></label>
-        <label>วัตถุดิบที่ซื้อ<select id="fruitCostRawItem"></select></label>
-        <label>น้ำหนักดิบเฉลี่ยต่อ 1 ลูก (กก.)<input id="fruitCostKgPerPiece" type="number" min="0.001" step="0.001" inputmode="decimal" placeholder="กรอกจากการชั่งตัวอย่าง"></label>
+        <label>ผลไม้หลัก<select id="fruitCostRawItem"></select></label>
+        <label>น้ำหนักใช้ได้หลังปอก/คั้น (%)<input id="fruitCostYieldPercent" type="number" min="0.01" max="100" step="0.01" inputmode="decimal" placeholder="เช่น 60"></label>
+        <label>น้ำหนักเฉลี่ยก่อนปอกต่อ 1 ลูก (กก.)<input id="fruitCostKgPerPiece" type="number" min="0.001" step="0.001" inputmode="decimal" placeholder="กรอกเฉพาะรายการที่รับเป็นลูก"></label>
         <label>ใช้ตั้งแต่เดือน<input id="fruitCostMonth" type="month"></label>
-        <label>ที่มาของค่าเฉลี่ย<input id="fruitCostSampleNote" type="text" placeholder="เช่น ชั่งตัวอย่าง 10 ลูก"></label>
+        <label>ที่มาของตัวเลข<input id="fruitCostSampleNote" type="text" placeholder="เช่น ทดลองปอก 10 ลูก / ชั่งตัวอย่าง 10 ลูก"></label>
       </div>
       <p id="fruitCostError" class="modal-error" role="status"></p>
-      <button id="saveFruitCost" class="primary-action" type="button">บันทึกน้ำหนักเฉลี่ย</button>
+      <button id="saveFruitCost" class="primary-action" type="button">บันทึกการคำนวณต้นทุน</button>
     </div>
   </div>
 
@@ -168,14 +168,14 @@
         <label>หมวดหมู่<input id="editItemCategory" type="text"></label>
         <label>ประเภทการรับและคิดต้นทุน<select id="editItemHandlingType">
           <option value="standard">ทั่วไป</option>
-          <option value="whole_fruit">ผลไม้ทั้งลูก (น้ำหนักดิบ)</option>
+          <option value="whole_fruit">ผลไม้ทั้งลูก (ชั่งก่อนปอก)</option>
           <option value="prepared">ปอกพร้อมใช้ (น้ำหนักหลังปอก)</option>
           <option value="juiced">น้ำคั้น (น้ำหนักหลังคั้น)</option>
           <option value="consignment">สินค้าฝากขาย</option>
         </select></label>
         <label class="setting-check"><input id="editItemActive" type="checkbox">แสดงในหน้าสั่งของ</label>
         <label>ค้นหาสินค้าข้อมูลกลาง<input id="editItemMappingSearch" type="search" placeholder="พิมพ์ชื่อหรือรหัสสินค้า"></label>
-        <label>สินค้าที่อ้างอิง<select id="editItemMasterId"><option value="">ยังไม่จับคู่สินค้า</option></select></label>
+        <label>ผลไม้/สินค้าหลักในข้อมูลกลาง<select id="editItemMasterId"><option value="">ยังไม่จับคู่สินค้า</option></select></label>
         <p id="editItemMappingStatus" class="page-notice"></p>
       </div>
       <p id="editItemError" class="modal-error"></p>
@@ -203,6 +203,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261025-1"></script>
-  <script src="assets/js/bigc-v2.js?v=20261025-3"></script>
+  <script src="assets/js/bigc-v2.js?v=20261025-4"></script>
 </body>
 </html>

@@ -21,7 +21,7 @@
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false,
-    fruitCostItems: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map()
+    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -724,22 +724,23 @@
   }
   function renderFruitCostItemOptions() {
     $("#fruitCostError").textContent = "";
-    const pattern = $("#fruitCostKind").value === "pineapple" ? /สับปะรด/ : /แตงโม/;
-    const candidates = state.fruitCostItems.filter((item) => pattern.test(item.name));
+    const candidates = state.fruitCostItems;
     const previous = $("#fruitCostRawItem").value;
-    $("#fruitCostRawItem").innerHTML = `<option value="">เลือกวัตถุดิบ</option>` + candidates.map((item) =>
-      `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} (${escapeHtml(item.code || "")})</option>`).join("");
+    $("#fruitCostRawItem").innerHTML = `<option value="">เลือกผลไม้หลัก</option>` + candidates.map((item) =>
+      `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${escapeHtml(item.base_unit || "")}</option>`).join("");
     if (candidates.some((item) => item.id === previous)) $("#fruitCostRawItem").value = previous;
     else if (candidates.length === 1) $("#fruitCostRawItem").value = candidates[0].id;
     renderFruitCostExisting();
-    if (!candidates.length) $("#fruitCostError").textContent = "ยังไม่มีวัตถุดิบนี้ในข้อมูลกลาง กรุณาเพิ่มก่อน";
+    if (!candidates.length) $("#fruitCostError").textContent = "ยังไม่มีผลไม้หลักในข้อมูลกลาง";
   }
   function renderFruitCostExisting() {
     const itemId = $("#fruitCostRawItem").value;
     const month = $("#fruitCostMonth").value + "-01";
-    const existing = state.fruitWeights.find((row) => row.raw_item_id === itemId && row.effective_month === month);
-    $("#fruitCostKgPerPiece").value = existing?.kg_per_piece ?? "";
-    $("#fruitCostSampleNote").value = existing?.sample_note ?? "";
+    const rule = state.fruitCostRules.find((row) => row.received_item_id === itemId && row.effective_month === month);
+    const weight = state.fruitWeights.find((row) => row.raw_item_id === itemId && row.effective_month === month);
+    $("#fruitCostYieldPercent").value = rule?.yield_ratio ? number(rule.yield_ratio) * 100 : "";
+    $("#fruitCostKgPerPiece").value = weight?.kg_per_piece ?? "";
+    $("#fruitCostSampleNote").value = rule?.yield_source_note || weight?.sample_note || "";
   }
   async function openFruitCostSettings() {
     $("#fruitCostError").textContent = "";
@@ -748,9 +749,10 @@
     if (!state.session) { $("#fruitCostError").textContent = "เชื่อมต่อบัญชีออนไลน์ก่อนตั้งค่าต้นทุน"; return; }
     loading("กำลังโหลดต้นทุนผลไม้");
     try {
-      const { data, error } = await state.client.schema("boy_central").rpc("get_bigc_piece_weight_settings");
+      const { data, error } = await state.client.schema("boy_central").rpc("get_bigc_fruit_cost_settings");
       if (error) throw error;
       state.fruitCostItems = data?.items || [];
+      state.fruitCostRules = data?.rules || [];
       state.fruitWeights = data?.weights || [];
       renderFruitCostItemOptions();
     } catch (error) {
@@ -760,24 +762,42 @@
   async function saveFruitCost() {
     const itemId = $("#fruitCostRawItem").value;
     const kg = Number($("#fruitCostKgPerPiece").value);
+    const yieldPercent = Number($("#fruitCostYieldPercent").value);
     const month = $("#fruitCostMonth").value;
     const sampleNote = $("#fruitCostSampleNote").value.trim();
-    if (!itemId || !month || !Number.isFinite(kg) || kg <= 0 || !sampleNote) {
-      $("#fruitCostError").textContent = "เลือกวัตถุดิบ เดือน น้ำหนัก และกรอกที่มาของค่าเฉลี่ย"; return;
+    const hasKg = Number.isFinite(kg) && kg > 0;
+    const hasYield = Number.isFinite(yieldPercent) && yieldPercent > 0 && yieldPercent <= 100;
+    if (!itemId || !month || (!hasKg && !hasYield) || !sampleNote) {
+      $("#fruitCostError").textContent = "เลือกผลไม้ เดือน กรอก Yield หรือน้ำหนักต่อลูก และระบุที่มาของตัวเลข"; return;
     }
-    loading("กำลังบันทึกน้ำหนักเฉลี่ย"); $("#fruitCostError").textContent = "";
+    loading("กำลังบันทึกต้นทุนผลไม้"); $("#fruitCostError").textContent = "";
     try {
-      const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
-        payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
+      const selected = state.fruitCostItems.find((item) => item.id === itemId);
+      const { error: ruleError } = await state.client.schema("boy_central").rpc("admin_save_bigc_interbranch_cost_rule", {
+        payload: {
+          received_item_id: itemId, raw_item_id: itemId, effective_month: `${month}-01`,
+          counted_by_piece: selected?.base_unit_code === "UNIT-013", yield_ratio: hasYield ? yieldPercent / 100 : null,
+          yield_source_note: hasYield ? sampleNote : null, note: "ผลไม้หลักตัวเดียว; รูปแบบรับของกำหนดใน BigC"
+        }
       });
-      if (error) throw error;
-      const next = { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote };
-      state.fruitWeights = state.fruitWeights.filter((row) => row.raw_item_id !== itemId || row.effective_month !== next.effective_month);
-      state.fruitWeights.push(next);
+      if (ruleError) throw ruleError;
+      let affected = 0;
+      if (hasKg) {
+        const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
+          payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
+        });
+        if (error) throw error;
+        affected = Number(data?.workflows_requiring_reprocess || 0);
+      }
+      const monthStart = `${month}-01`;
+      state.fruitCostRules = state.fruitCostRules.filter((row) => row.received_item_id !== itemId || row.effective_month !== monthStart);
+      state.fruitCostRules.push({ received_item_id: itemId, raw_item_id: itemId, effective_month: monthStart, yield_ratio: hasYield ? yieldPercent / 100 : null, yield_source_note: sampleNote });
+      if (hasKg) {
+        state.fruitWeights = state.fruitWeights.filter((row) => row.raw_item_id !== itemId || row.effective_month !== monthStart);
+        state.fruitWeights.push({ raw_item_id: itemId, effective_month: monthStart, kg_per_piece: kg, sample_note: sampleNote });
+      }
       $("#fruitCostModal").classList.add("hidden");
-      notice(data?.workflows_requiring_reprocess > 0
-        ? `บันทึกแล้ว · มี ${data.workflows_requiring_reprocess} รายการรับของที่ต้องคำนวณต้นทุนใหม่`
-        : "บันทึกน้ำหนักเฉลี่ยแล้ว");
+      notice(affected > 0 ? `บันทึกแล้ว · มี ${affected} รายการรับของที่ต้องคำนวณต้นทุนใหม่` : "บันทึกการคำนวณต้นทุนแล้ว");
     } catch (error) { $("#fruitCostError").textContent = `บันทึกไม่สำเร็จ: ${error.message}`; }
     finally { loading("", false); }
   }
@@ -954,7 +974,6 @@
     $("#editItemMasterId").onchange = updateMappingStatus;
     $("#openFruitCostSettings").onclick = openFruitCostSettings;
     $("#saveFruitCost").onclick = saveFruitCost;
-    $("#fruitCostKind").onchange = renderFruitCostItemOptions;
     $("#fruitCostRawItem").onchange = renderFruitCostExisting;
     $("#fruitCostMonth").onchange = renderFruitCostExisting;
     $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });

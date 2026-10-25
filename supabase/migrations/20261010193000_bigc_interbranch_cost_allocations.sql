@@ -4,6 +4,7 @@
 
 alter table boy_central.bigc_workflow_lines
   add column if not exists actual_weight_kg numeric(18,6),
+  add column if not exists master_item_id text,
   add column if not exists handling_type text,
   add column if not exists costing_basis text,
   add column if not exists measurement_basis text;
@@ -151,6 +152,8 @@ create index if not exists bigc_interbranch_cost_rules_company_id_idx
   on boy_central.bigc_interbranch_cost_rules(company_id);
 create index if not exists bigc_interbranch_cost_rules_raw_item_id_idx
   on boy_central.bigc_interbranch_cost_rules(raw_item_id);
+create index if not exists bigc_interbranch_cost_rules_received_item_id_idx
+  on boy_central.bigc_interbranch_cost_rules(received_item_id);
 create index if not exists bigc_interbranch_cost_rules_created_by_idx
   on boy_central.bigc_interbranch_cost_rules(created_by) where created_by is not null;
 create index if not exists bigc_interbranch_cost_rules_updated_by_idx
@@ -159,6 +162,12 @@ create index if not exists bigc_interbranch_yields_lookup_idx
   on boy_central.bigc_interbranch_yields(cost_rule_id,effective_month desc);
 create index if not exists bigc_raw_fruit_piece_weights_lookup_idx
   on boy_central.bigc_raw_fruit_piece_weights(raw_item_id,effective_month desc);
+create index if not exists bigc_raw_fruit_piece_weights_company_id_idx
+  on boy_central.bigc_raw_fruit_piece_weights(company_id);
+create index if not exists bigc_raw_fruit_piece_weights_created_by_idx
+  on boy_central.bigc_raw_fruit_piece_weights(created_by) where created_by is not null;
+create index if not exists bigc_raw_fruit_piece_weights_updated_by_idx
+  on boy_central.bigc_raw_fruit_piece_weights(updated_by) where updated_by is not null;
 create index if not exists bigc_interbranch_yields_company_id_idx
   on boy_central.bigc_interbranch_yields(company_id);
 create index if not exists bigc_interbranch_yields_created_by_idx
@@ -1006,13 +1015,13 @@ begin
       else 'unknown' end;
 
     insert into boy_central.bigc_workflow_lines(
-      company_id,workflow_id,line_key,source_line_key,item_id,item_name,category_name,unit_name,input_mode,
+      company_id,workflow_id,line_key,source_line_key,item_id,master_item_id,item_name,category_name,unit_name,input_mode,
       quantity,received,sort_order,estimated_unit_cost,estimated_value,note,
       actual_weight_kg,handling_type,costing_basis,measurement_basis
     ) values(
       target_branch.company_id,target_id,
       coalesce(nullif(line->>'line_key',''),'line-'||line_no),nullif(line->>'source_line_key',''),
-      nullif(line->>'item_id','')::uuid,trim(line->>'item_name'),nullif(trim(line->>'category_name'),''),
+      nullif(line->>'item_id','')::uuid,nullif(trim(line->>'master_item_id'),''),trim(line->>'item_name'),nullif(trim(line->>'category_name'),''),
       nullif(trim(line->>'unit_name'),''),case when line->>'input_mode'='weight' then 'weight' else 'quantity' end,
       greatest(coalesce(nullif(line->>'quantity','')::numeric,0),0),coalesce((line->>'received')::boolean,true),
       coalesce(nullif(line->>'sort_order','')::integer,line_no),nullif(line->>'estimated_unit_cost','')::numeric,
@@ -1064,7 +1073,7 @@ begin
       'cash_amount',w.cash_amount,'transfer_amount',w.transfer_amount,'thai_chuay_thai_amount',w.thai_chuay_thai_amount,
       'sheet_sync_status',w.sheet_sync_status,'sheet_sync_error',w.sheet_sync_error,'revision',w.revision,
       'lines',coalesce((select jsonb_agg(jsonb_build_object(
-        'line_key',l.line_key,'source_line_key',l.source_line_key,'item_id',l.item_id,'item_name',l.item_name,
+        'line_key',l.line_key,'source_line_key',l.source_line_key,'item_id',l.item_id,'master_item_id',l.master_item_id,'item_name',l.item_name,
         'category_name',l.category_name,'unit_name',l.unit_name,'input_mode',l.input_mode,
         'quantity',l.quantity,'received',l.received,'sort_order',l.sort_order,'note',l.note,
         'actual_weight_kg',l.actual_weight_kg,'observed_weight_kg',l.actual_weight_kg,
@@ -1086,7 +1095,7 @@ begin
     'previous_order',coalesce((select jsonb_build_object(
       'id',w.id,'business_date',w.business_date,
       'lines',coalesce((select jsonb_agg(jsonb_build_object(
-        'line_key',l.line_key,'item_id',l.item_id,'item_name',l.item_name,'category_name',l.category_name,
+        'line_key',l.line_key,'item_id',l.item_id,'master_item_id',l.master_item_id,'item_name',l.item_name,'category_name',l.category_name,
         'unit_name',l.unit_name,'input_mode',l.input_mode,'quantity',l.quantity,'sort_order',l.sort_order
       ) order by l.sort_order,l.item_name) from boy_central.bigc_workflow_lines l
         where l.workflow_id=w.id and l.quantity>0),'[]'::jsonb)
