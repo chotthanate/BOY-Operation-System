@@ -5,6 +5,8 @@
   const CLOUD_DRAFT_DELAY = 8000;
   const SETTINGS_CACHE_KEY = "boy-bigc-v2-settings-cache";
   const SETTINGS_PENDING_KEY = "boy-bigc-v2-settings-pending";
+  const STAFF_SORT_KEY = "boy-bigc-v2-staff-sort-v1";
+  const REQUESTED_VIEW = new URLSearchParams(location.search).get("view") === "staff" ? "staff" : "admin";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const number = (value) => Math.max(0, Number(value) || 0);
@@ -18,7 +20,8 @@
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false, fruitCostItems: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map()
+    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false,
+    fruitCostItems: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -147,6 +150,50 @@
     try { return JSON.parse(localStorage.getItem(key) || "null"); }
     catch (_) { return null; }
   }
+  function isStaffView() { return REQUESTED_VIEW === "staff" || state.access?.canManage === false; }
+  function staffLink() {
+    const url = new URL("bigc-v2.html", location.href);
+    url.search = "?view=staff&online=1";
+    return url.href;
+  }
+  function applyStaffSort(menu) {
+    if (!isStaffView()) return menu;
+    const keys = readStoredJson(STAFF_SORT_KEY);
+    if (!Array.isArray(keys) || !keys.length) return menu;
+    const rank = new Map(keys.map((key, index) => [key, index]));
+    return menu.map((item, index) => ({ item, index })).sort((left, right) =>
+      (rank.get(left.item.key) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.item.key) ?? Number.MAX_SAFE_INTEGER) || left.index - right.index
+    ).map((row) => row.item);
+  }
+  async function loadAccess() {
+    if (state.access) return state.access;
+    if (!state.session) {
+      state.access = { canManage: Boolean(state.authContext?.localAccess), companyRole: state.authContext?.localAccess ? "admin" : "staff", branchRole: null };
+      return state.access;
+    }
+    const userId = state.session.user.id;
+    const [profileResult, roleResult] = await Promise.all([
+      state.client.schema("boy_central").from("profiles").select("company_role,active").eq("user_id", userId).maybeSingle(),
+      state.client.schema("boy_central").from("user_branch_roles").select("role,active").eq("user_id", userId).eq("branch_id", state.branch.id).maybeSingle()
+    ]);
+    if (profileResult.error) throw profileResult.error;
+    if (roleResult.error) throw roleResult.error;
+    const companyRole = profileResult.data?.company_role || "staff";
+    const branchRole = roleResult.data?.active === false ? null : roleResult.data?.role || null;
+    state.access = {
+      companyRole, branchRole,
+      canManage: profileResult.data?.active !== false && (companyRole === "admin" || ["admin", "manager"].includes(branchRole))
+    };
+    return state.access;
+  }
+  function applyAccessMode() {
+    const staff = isStaffView();
+    document.body.classList.toggle("staff-view", staff);
+    $("#settingsButton").hidden = staff || !state.access?.canManage;
+    $("#staffSortButton").hidden = !staff;
+    $("#branchModeLabel").textContent = staff ? "เวอร์ชันพนักงาน" : "BOY Operation · เวอร์ชันเต็ม";
+    $("#openStaffLink").href = staffLink();
+  }
   function settingsPayload(menu = state.menu) {
     return {
       menu_config: menu.map((item) => ({ ...item })),
@@ -212,11 +259,12 @@
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
+      await loadAccess();
       const localSettings = readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY);
       const cloudHasMenu = Array.isArray(state.context.settings?.menu_config) && state.context.settings.menu_config.length > 0;
       const localHasMenu = Array.isArray(localSettings?.menu_config) && localSettings.menu_config.length > 0;
       const legacyMenu = cloudHasMenu || localHasMenu ? [] : await loadLegacyMenu();
-      state.menu = settingsMenu(state.context.settings, settingsMenu(localSettings, legacyMenu));
+      state.menu = applyStaffSort(settingsMenu(state.context.settings, settingsMenu(localSettings, legacyMenu)));
       const localDraft = readLocalDraft();
       const orderCloud = state.contexts.order.draft || {};
       const receiveCloud = state.contexts.receive.draft || {};
@@ -238,6 +286,7 @@
       else $("#receiveSourceLabel").textContent = "รับของวันนี้เรียบร้อยแล้ว";
       seedDefaultReturns();
       renderAll();
+      applyAccessMode();
       const pending = (state.context.pending_sheet_sync || []).length;
       const settingsPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
       setSync(settingsPending ? "การตั้งค่ารอส่ง" : pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", settingsPending || pending ? "pending" : "ok");
@@ -580,10 +629,11 @@
   }
 
   function openSettings() {
+    if (isStaffView() || !state.access?.canManage) { notice("บัญชีนี้ใช้รายการได้ แต่ไม่มีสิทธิ์แก้การตั้งค่า", true); return; }
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
     const hasPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
     showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
-    renderSettings();
+    renderSettings(); updateMappingSummary();
   }
   async function loadMasterItems() {
     if (state.masterItems.length || !state.session) return;
@@ -596,6 +646,7 @@
     state.masterItems = (catalogResult.data?.rows || []).filter((row) => row.item_id && row["เปิดใช้งาน"] !== false)
       .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id) }));
     state.normalizedItemsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row.id]));
+    state.masterItemsByCode = new Map(state.masterItems.map((row) => [row.code, row]));
   }
   function renderMasterItemOptions(selected = "") {
     const query = $("#editItemMappingSearch").value.trim().toLowerCase();
@@ -609,6 +660,67 @@
     $("#editItemMappingStatus").textContent = !code ? "ยังไม่จับคู่สินค้า — รายการรับได้ แต่ต้นทุนอัตโนมัติจะยังไม่ครบ"
       : state.normalizedItemsByCode.has(code) ? `เชื่อมกับ ${code} และฐานต้นทุนกลางแล้ว`
       : `เชื่อมกับ ${code} แล้ว แต่ยังไม่มีรหัสวัตถุดิบ UUID สำหรับคำนวณต้นทุน กรุณาตรวจในข้อมูลกลาง`;
+  }
+  function normalizedMatchName(value) {
+    return String(value || "").normalize("NFKC").replace(/\([^)]*\)/g, "").replace(/[\s._\-/]+/g, "").toLowerCase();
+  }
+  function exactMasterSuggestion(item) {
+    const target = normalizedMatchName(item.name || item.displayName);
+    if (!target) return null;
+    const matches = state.masterItems.filter((row) => normalizedMatchName(row.name) === target);
+    return matches.length === 1 ? matches[0] : null;
+  }
+  function updateMappingSummary() {
+    const mapped = state.menu.filter((item) => item.masterItemId || item.master_item_id).length;
+    const text = `${mapped} / ${state.menu.length} รายการ`;
+    if ($("#mappingSummary")) $("#mappingSummary").textContent = text;
+    if ($("#mappingProgress")) $("#mappingProgress").textContent = `จับคู่แล้ว ${text}`;
+  }
+  function renderMappingList() {
+    const query = $("#mappingSearch").value.trim().toLowerCase();
+    const filter = $("#mappingFilter").value;
+    const rows = state.menu.filter((item) => {
+      const mapped = Boolean(item.masterItemId || item.master_item_id);
+      return (filter === "all" || (filter === "mapped" ? mapped : !mapped))
+        && (!query || `${item.displayName} ${item.category} ${item.masterItemId || ""}`.toLowerCase().includes(query));
+    });
+    $("#mappingList").innerHTML = rows.length ? rows.map((item) => {
+      const code = item.masterItemId || item.master_item_id || "";
+      const master = state.masterItemsByCode.get(code);
+      const suggestion = !code ? exactMasterSuggestion(item) : null;
+      const current = code ? `${master?.name || code} · ${code}` : "ยังไม่จับคู่";
+      return `<div class="mapping-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small><small class="mapping-current">${escapeHtml(current)}</small>${suggestion ? `<small>ชื่อที่ตรงกัน: ${escapeHtml(suggestion.name)} · ${escapeHtml(suggestion.code)}</small>` : ""}</span><span class="mapping-actions">${suggestion ? `<button data-apply-map="${escapeHtml(item.key)}" data-map-code="${escapeHtml(suggestion.code)}" type="button">ใช้รายการแนะนำ</button>` : ""}<button data-map-edit="${escapeHtml(item.key)}" type="button">${code ? "เปลี่ยน" : "ค้นหา"}</button></span></div>`;
+    }).join("") : `<div class="empty-state">ไม่พบรายการตามตัวกรอง</div>`;
+    $$('[data-apply-map]').forEach((button) => { button.onclick = () => {
+      const item = state.menu.find((row) => row.key === button.dataset.applyMap); if (!item) return;
+      item.masterItemId = button.dataset.mapCode; item.itemId = state.normalizedItemsByCode.get(button.dataset.mapCode) || null;
+      state.mappingDirty = true; renderMappingList(); updateMappingSummary();
+    }; });
+    $$('[data-map-edit]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.mapEdit, true); });
+    updateMappingSummary();
+  }
+  async function openMappingManager() {
+    if (isStaffView() || !state.access?.canManage) return;
+    $("#mappingModal").classList.remove("hidden"); $("#mappingSearch").value = ""; $("#mappingFilter").value = "unmapped";
+    $("#mappingList").innerHTML = `<div class="empty-state">กำลังโหลดสินค้าข้อมูลกลาง</div>`;
+    try { await loadMasterItems(); renderMappingList(); }
+    catch (error) { $("#mappingList").innerHTML = `<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(error.message)}</div>`; }
+  }
+  function applyExactMappings() {
+    const suggestions = state.menu.map((item) => ({ item, master: (item.masterItemId || item.master_item_id) ? null : exactMasterSuggestion(item) })).filter((row) => row.master);
+    if (!suggestions.length) { notice("ไม่พบชื่อที่ตรงกันแบบหนึ่งต่อหนึ่ง"); return; }
+    if (!confirm(`เติมรายการแนะนำ ${suggestions.length} รายการเพื่อให้ตรวจสอบก่อนบันทึก?`)) return;
+    suggestions.forEach(({ item, master }) => { item.masterItemId = master.code; item.itemId = state.normalizedItemsByCode.get(master.code) || null; });
+    state.mappingDirty = true; renderMappingList(); updateMappingSummary(); notice(`เติมรายการแนะนำแล้ว ${suggestions.length} รายการ · กรุณาตรวจและกดบันทึก`);
+  }
+  async function saveMappings() {
+    if (!state.mappingDirty) { notice("ไม่มีการจับคู่ที่เปลี่ยนแปลง"); return; }
+    const status = await persistSettings("บันทึกการจับคู่แล้ว");
+    if (status === "synced") { state.mappingDirty = false; renderMappingList(); renderSettings(); }
+  }
+  async function copyStaffLink() {
+    try { await navigator.clipboard.writeText(staffLink()); notice("คัดลอกลิงก์พนักงานแล้ว"); }
+    catch (_) { notice("คัดลอกลิงก์ไม่สำเร็จ กรุณากดเปิดแล้วคัดลอกจากแถบที่อยู่", true); }
   }
   function renderFruitCostItemOptions() {
     $("#fruitCostError").textContent = "";
@@ -727,12 +839,12 @@
     if (!await persistSettings("เพิ่มรายการแล้ว")) { state.menu = state.menu.filter((row) => row !== item); $("#addItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     $("#addItemModal").classList.add("hidden"); renderSettings();
   }
-  async function openEditItem(key) {
+  async function openEditItem(key, focusMapping = false) {
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
     $("#editItemHandlingType").value = receiveHandlingType(item);
     $("#editItemActive").checked = item.active !== false;
-    $("#editItemMappingSearch").value = "";
+    $("#editItemMappingSearch").value = focusMapping ? (item.name || item.displayName || "") : "";
     $("#editItemMappingStatus").textContent = "กำลังโหลดสินค้าข้อมูลกลาง…";
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
@@ -750,7 +862,9 @@
     item.masterItemId = $("#editItemMasterId").value || null;
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
     if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
+    state.mappingDirty = false;
     $("#editItemModal").classList.add("hidden"); renderSettings();
+    if (!$("#mappingModal").classList.contains("hidden")) renderMappingList();
   }
   async function deleteMenuItem(key) {
     const item = state.menu.find((row) => row.key === key); if (!item || !confirm(`ลบ “${item.displayName}” ออกจากรายการทั้งหมด?`)) return;
@@ -799,13 +913,21 @@
     $$('[data-sort-key]').forEach((button) => { button.onclick = () => state.sortMode === "categories" ? moveCategory(button.dataset.sortKey, Number(button.dataset.sortStep)) : moveItem(button.dataset.sortKey, Number(button.dataset.sortStep)); });
   }
   function openSortSettings() {
+    state.sortSnapshot = state.menu.map((item) => ({ ...item }));
     state.sortMode = "categories"; state.sortCategory = categoryNames()[0] || "";
+    $("#sortTitle").textContent = isStaffView() ? "จัดลำดับในเครื่องนี้" : "จัดลำดับ";
     $$("[data-sort-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sortMode === state.sortMode));
     $("#sortModal").classList.remove("hidden"); renderSortList();
   }
   async function saveSortOrder() {
     normalizeMenuOrder();
+    if (isStaffView()) {
+      localStorage.setItem(STAFF_SORT_KEY, JSON.stringify(state.menu.map((item) => item.key)));
+      state.sortSnapshot = null;
+      $("#sortModal").classList.add("hidden"); renderAll(); notice("บันทึกลำดับสำหรับเครื่องนี้แล้ว"); return;
+    }
     const status = await persistSettings("บันทึกลำดับแล้ว");
+    state.sortSnapshot = null;
     $("#sortModal").classList.add("hidden");
     if (status === "synced") $("#settingsModal").classList.add("hidden");
   }
@@ -821,12 +943,13 @@
       renderDateDisplays(); const local = readLocalDraft(); hydrateDraft(local); saveDraft(); loadPage();
     }; });
     $("#refreshButton").onclick = loadPage;
-    $("#settingsButton").onclick = openSettings; $("#addReceiveButton").onclick = () => openPicker("receive"); $("#addReturnButton").onclick = () => openPicker("returns");
+    $("#settingsButton").onclick = openSettings; $("#staffSortButton").onclick = openSortSettings; $("#addReceiveButton").onclick = () => openPicker("receive"); $("#addReturnButton").onclick = () => openPicker("returns");
     $("#submitReceive").onclick = () => submitWorkflow("receive"); $("#submitReturn").onclick = () => submitWorkflow("return");
     $("#openOrderSummary").onclick = openOrderSummary;
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    $("#openMappingManager").onclick = openMappingManager; $("#mappingSearch").oninput = renderMappingList; $("#mappingFilter").onchange = renderMappingList; $("#applyExactMappings").onclick = applyExactMappings; $("#saveMappings").onclick = saveMappings; $("#copyStaffLink").onclick = copyStaffLink;
     $("#editItemMappingSearch").oninput = () => renderMasterItemOptions($("#editItemMasterId").value);
     $("#editItemMasterId").onchange = updateMappingStatus;
     $("#openFruitCostSettings").onclick = openFruitCostSettings;
@@ -836,7 +959,11 @@
     $("#fruitCostMonth").onchange = renderFruitCostExisting;
     $$("[data-sort-mode]").forEach((button) => { button.onclick = () => { state.sortMode = button.dataset.sortMode; $$("[data-sort-mode]").forEach((row) => row.classList.toggle("active", row === button)); renderSortList(); }; });
     $("#sortCategorySelect").onchange = () => { state.sortCategory = $("#sortCategorySelect").value; renderSortList(); };
-    $$('[data-close-modal]').forEach((button) => { button.onclick = () => { $("#" + button.dataset.closeModal).classList.add("hidden"); if (button.dataset.closeModal === "orderSummaryModal") renderOrder(); }; });
+    $$('[data-close-modal]').forEach((button) => { button.onclick = () => {
+      $("#" + button.dataset.closeModal).classList.add("hidden");
+      if (button.dataset.closeModal === "orderSummaryModal") renderOrder();
+      if (button.dataset.closeModal === "sortModal" && state.sortSnapshot) { state.menu = state.sortSnapshot; state.sortSnapshot = null; renderAll(); }
+    }; });
     $$('[data-clear]').forEach((button) => { button.onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); }; });
     window.addEventListener("online", async () => { await flushPendingSettings(); saveCloudDraft(); });
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveCloudDraft(); });
@@ -845,15 +972,18 @@
   async function start(authContext) {
     if (state.started) return;
     state.started = true;
+    state.authContext = authContext || null;
     ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).value = today(); }); renderDateDisplays(); bindStaticEvents();
     const config = window.BOY_CENTRAL_CONFIG || {};
     state.client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
     const { data } = await state.client.auth.getSession(); state.session = data.session;
     if (!state.session && authContext?.localAccess) {
+      await loadAccess();
+      applyAccessMode();
       setSync("ต้องเชื่อม Supabase", "error");
       showSettingsConnection(true, "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง");
       notice("กำลังใช้ข้อมูลในเครื่อง · การตั้งค่าจะยังไม่ส่ง Supabase", true);
-      state.menu = settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu());
+      state.menu = applyStaffSort(settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu()));
       hydrateDraft(readLocalDraft()); renderAll(); return;
     }
     await loadPage();

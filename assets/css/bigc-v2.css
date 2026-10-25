@@ -93,3 +93,22 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   .modal-sheet select,
   .modal-sheet textarea{font-size:16px}
 }
+
+/* Admin tools and safe employee sharing. */
+.settings-quick-tools{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:8px;margin-bottom:10px}
+.settings-tool-button,.staff-link-panel{min-height:62px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.settings-tool-button{display:grid;align-content:center;gap:3px;padding:9px 11px;color:var(--green);text-align:left;font-weight:900}
+.settings-tool-button small,.staff-link-panel small{display:block;color:var(--muted);font-size:9px;font-weight:750}
+.staff-link-panel{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px}
+.staff-link-panel strong{font-size:12px}
+.staff-link-panel>div{display:flex;gap:5px;flex:0 0 auto}
+.staff-link-panel button,.staff-link-panel a{display:grid;place-items:center;min-height:38px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:#f7f9f8;color:var(--green);font-size:11px;font-weight:900;text-decoration:none}
+.mapping-sheet{max-width:620px}.mapping-summary-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.mapping-summary-row strong{color:var(--green);font-size:13px}.mapping-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:7px}.mapping-toolbar input,.mapping-toolbar select{min-height:44px;padding:0 11px;border:1px solid var(--line);border-radius:10px;background:#fff}.mapping-list{display:grid;gap:7px;max-height:52vh;overflow:auto;margin:10px 0 12px}.mapping-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:12px;background:#fff}.mapping-row strong,.mapping-row small{display:block}.mapping-row strong{font-size:13px}.mapping-row small{margin-top:3px;color:var(--muted);font-size:10px}.mapping-row .mapping-current{color:var(--green)}.mapping-actions{display:grid;gap:5px;justify-items:end}.mapping-actions button{min-height:36px;padding:0 10px;border:1px solid var(--line);border-radius:9px;background:#f5f8f7;color:var(--green);font-size:10px;font-weight:900}.mapping-actions button[data-apply-map]{background:#eaf7f2;border-color:#cde8dc}.mapping-sheet>.primary-action{margin-top:4px}
+body.staff-view #settingsButton{display:none!important}
+
+@media(max-width:600px){
+  .settings-quick-tools{grid-template-columns:1fr}
+  .mapping-toolbar{grid-template-columns:1fr 120px}
+  .mapping-row{padding:9px}
+  .mapping-actions button{min-height:40px}
+}

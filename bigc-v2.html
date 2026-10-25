@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261025-2">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261025-3">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -16,12 +16,13 @@
   <header class="branch-header">
     <a class="branch-brand" href="index.html" aria-label="กลับหน้าหลัก">
       <span class="branch-mark">BC</span>
-      <span><strong>BigC พัทยากลาง</strong><small>BOY Operation</small></span>
+      <span><strong>BigC พัทยากลาง</strong><small id="branchModeLabel">BOY Operation</small></span>
     </a>
     <div class="header-actions">
       <span id="syncBadge" class="sync-badge pending">กำลังโหลด</span>
       <button id="refreshButton" class="icon-button" type="button" aria-label="อัปเดตข้อมูล">↻</button>
-      <button id="settingsButton" class="icon-button" type="button" aria-label="ตั้งค่ารายการ">⚙</button>
+      <button id="staffSortButton" class="icon-button" type="button" aria-label="จัดลำดับรายการ" hidden>⇅</button>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="ตั้งค่ารายการ" hidden>⚙</button>
       <a class="icon-button home-link" href="index.html" aria-label="หน้าหลัก">⌂</a>
     </div>
   </header>
@@ -89,10 +90,30 @@
         <a id="settingsReconnect" href="burger.html?next=bigc-v2.html&amp;online=1">เชื่อมต่อและส่งข้อมูล</a>
       </div>
       <button id="openFruitCostSettings" class="secondary-button fruit-cost-open" type="button" hidden>ต้นทุนผลไม้ · น้ำหนักเฉลี่ยต่อลูก</button>
+      <div class="settings-quick-tools">
+        <button id="openMappingManager" class="settings-tool-button" type="button"><span>จับคู่สินค้ากลาง</span><small id="mappingSummary">กำลังตรวจสอบ</small></button>
+        <div class="staff-link-panel">
+          <span><strong>ลิงก์สำหรับพนักงาน</strong><small>ใช้งานและจัดลำดับได้ แต่แก้รายการไม่ได้</small></span>
+          <div><button id="copyStaffLink" type="button">คัดลอก</button><a id="openStaffLink" href="bigc-v2.html?view=staff&amp;online=1" target="_blank" rel="noopener">เปิด</a></div>
+        </div>
+      </div>
       <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div>
       <div class="setting-legend"><span>ชั่งตอนรับ/คืน</span><span>ขึ้นหน้าคืนอัตโนมัติ</span></div>
       <div id="settingsList" class="settings-list"></div>
       <button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button>
+    </div>
+  </div>
+
+  <div id="mappingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mappingTitle">
+    <div class="modal-sheet mapping-sheet">
+      <header><div><small>BigC · ข้อมูลกลาง</small><h2 id="mappingTitle">จับคู่สินค้า</h2></div><button data-close-modal="mappingModal" type="button">×</button></header>
+      <div class="mapping-summary-row"><strong id="mappingProgress">0 / 0 รายการ</strong><button id="applyExactMappings" class="text-button" type="button">แนะนำชื่อที่ตรงกัน</button></div>
+      <div class="mapping-toolbar">
+        <input id="mappingSearch" type="search" placeholder="ค้นหารายการ BigC">
+        <select id="mappingFilter" aria-label="กรองสถานะการจับคู่"><option value="unmapped">ยังไม่จับคู่</option><option value="mapped">จับคู่แล้ว</option><option value="all">ทั้งหมด</option></select>
+      </div>
+      <div id="mappingList" class="mapping-list"></div>
+      <button id="saveMappings" class="primary-action" type="button">บันทึกการจับคู่</button>
     </div>
   </div>
 
@@ -181,7 +202,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/boy-auth-guard.js"></script>
-  <script src="assets/js/bigc-v2.js?v=20261025-2"></script>
+  <script src="assets/js/boy-auth-guard.js?v=20261025-1"></script>
+  <script src="assets/js/bigc-v2.js?v=20261025-3"></script>
 </body>
 </html>
