@@ -62,3 +62,20 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
   .order-card .item-copy{min-height:68px;padding:10px 6px}
   .order-card .qty-control{min-height:50px;padding:6px}
 }
+
+/* Responsive order density and roomy circular controls in the order summary. */
+.order-grid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.summary-row .qty-control{display:flex;align-items:center;justify-content:flex-end;gap:7px;width:auto}
+.summary-row .qty-control button{width:38px;height:38px;flex:0 0 38px;border:0;border-radius:50%;line-height:1}
+.summary-row .qty-control button:first-child,.summary-row .qty-control button:last-child{border-radius:50%}
+.summary-row .qty-control input{width:42px;height:38px;border:0;background:transparent;font-size:17px}
+@media(max-width:600px){
+  .order-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .order-card{border-radius:13px}
+  .order-card .item-copy{min-height:58px;padding:8px 4px}
+  .order-card .item-copy strong{font-size:12px;line-height:1.25}
+  .order-card .qty-control{min-height:44px;gap:3px;padding:5px 3px}
+  .order-card .qty-control button{width:31px;height:31px;flex-basis:31px;font-size:20px}
+  .order-card .qty-control input{width:27px;height:31px;font-size:17px}
+  .summary-row{grid-template-columns:minmax(0,1fr) auto}
+}

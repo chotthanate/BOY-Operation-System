@@ -229,12 +229,13 @@
         revenue: Number(returnCloud.savedAt || 0) > Number(localDraft.savedAtByType?.returns || 0) ? returnCloud.revenue || blankDraft().revenue : localDraft.revenue
       };
       hydrateDraft(draft);
-      hydrateSubmitted([
+      const submitted = hydrateSubmitted([
         ...(state.contexts.order.workflows || []).filter((row) => row.workflow_type === "close_order"),
         ...(state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"),
         ...(state.contexts.returns.workflows || []).filter((row) => row.workflow_type === "return")
       ]);
-      seedReceiveFromPrevious(state.contexts.receive.previous_order);
+      if (!submitted.receive) seedReceiveFromPrevious(state.contexts.receive.previous_order);
+      else $("#receiveSourceLabel").textContent = "รับของวันนี้เรียบร้อยแล้ว";
       seedDefaultReturns();
       renderAll();
       const pending = (state.context.pending_sheet_sync || []).length;
@@ -261,19 +262,19 @@
     if (close && !Object.keys(state.order).length) {
       state.order = Object.fromEntries((close.lines || []).map((line) => [line.line_key, number(line.quantity)]));
     }
-    if (receive && !Object.keys(state.receive).length) state.receive = Object.fromEntries((receive.lines || []).map((line) => [line.line_key, { ...line, checked: line.received !== false }]));
-    else if (receive) (receive.lines || []).forEach((line) => {
-      const local = state.receive[line.line_key]; if (!local) return;
-      ["estimated_unit_cost", "estimated_value", "costing_status", "cost_status", "cost_value", "calculated_cost"].forEach((field) => {
-        if (line[field] !== undefined && line[field] !== null) local[field] = line[field];
-      });
-    });
+    if (receive) clearCompletedReceiveDraft($("#receiveDate").value);
     if (returned) {
       if (!Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
       if (!$("#cashAmount").value && !$("#transferAmount").value && !$("#thaiAmount").value) {
         $("#cashAmount").value = returned.cash_amount || ""; $("#transferAmount").value = returned.transfer_amount || ""; $("#thaiAmount").value = returned.thai_chuay_thai_amount || "";
       }
     }
+    return { close: Boolean(close), receive: Boolean(receive), returned: Boolean(returned) };
+  }
+  function clearCompletedReceiveDraft(date) {
+    state.receive = {};
+    window.clearTimeout(state.cloudTimer);
+    localStorage.setItem(draftKey("receive", date), JSON.stringify({ savedAt: Date.now(), receive: {}, completed: true }));
   }
   function seedReceiveFromPrevious(previous) {
     if (Object.keys(state.receive).length || !previous?.lines?.length) return;
@@ -551,7 +552,11 @@
     try {
       const { data, error } = await state.client.schema("boy_central").rpc("save_bigc_v2_workflow", { payload });
       if (error) throw error;
-      saveDraft();
+      if (type === "receive") {
+        clearCompletedReceiveDraft(payload.business_date);
+        $("#receiveSourceLabel").textContent = "รับของวันนี้เรียบร้อยแล้ว";
+        renderReceive();
+      } else saveDraft();
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...payload, workflow_id: data.workflow_id } });
