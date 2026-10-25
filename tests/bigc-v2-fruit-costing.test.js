@@ -7,6 +7,7 @@ const script = fs.readFileSync(path.join(__dirname, '..', 'assets/js/bigc-v2.js'
 const page = fs.readFileSync(path.join(__dirname, '..', 'bigc-v2.html'), 'utf8');
 const costingMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261010193000_bigc_interbranch_cost_allocations.sql'), 'utf8');
 const canonicalMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261025113948_canonical_bigc_fruit_workflow.sql'), 'utf8');
+const revaluationMigration = fs.readFileSync(path.join(__dirname, '..', 'supabase/migrations/20261026040000_auto_revalue_bigc_monthly_costs.sql'), 'utf8');
 
 test('prepared display forms keep a stable canonical master item and UUID', () => {
   assert.match(canonicalMigration, /'แตงโม','ITEM-0011'/);
@@ -41,4 +42,14 @@ test('fruit conversion uses observed usable weight and never creates another pur
   assert.match(costingMigration, /raw_equivalent_value:=round\(raw_equivalent_value,6\)/);
   assert.match(costingMigration, /Internal branch reallocation ledger/);
   assert.match(costingMigration, /company_cost_delta = 0/);
+});
+
+test('later Tawana purchases automatically revalue open BigC receipts', () => {
+  assert.match(revaluationMigration, /revalue_bigc_costs_for_month/);
+  assert.match(revaluationMigration, /after insert or delete or update of company_id,transaction_id,item_id,quantity,unit_id,line_total/);
+  assert.match(revaluationMigration, /after update of company_id,branch_id,transaction_type,transaction_date,status,affects_stock/);
+  assert.match(revaluationMigration, /refresh_bigc_interbranch_costs\(workflow_record\.workflow_id\)/);
+  assert.match(revaluationMigration, /a\.cost_status in \('pending','provisional'\)/);
+  assert.match(revaluationMigration, /reversal\.cost_status='reversed'/);
+  assert.doesNotMatch(revaluationMigration, /a\.cost_status in \([^\n]*'final'/);
 });
