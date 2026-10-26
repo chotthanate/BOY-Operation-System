@@ -8,11 +8,13 @@ const page = fs.readFileSync(path.join(__dirname, '..', 'bigc-v2.html'), 'utf8')
 const home = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const authGuard = fs.readFileSync(path.join(__dirname, '..', 'assets/js/boy-auth-guard.js'), 'utf8');
 
-test('BigC settings select a stable master item ID, not a typed product name', () => {
-  assert.match(page, /id="editItemMasterId"/);
+test('BigC settings select several stable master item IDs, not typed product names', () => {
+  assert.match(page, /id="editItemMasterList"/);
+  assert.match(page, /bigc-master-mapping\.js/);
   assert.match(script, /target_sheet_name: "M_สินค้า"/);
-  assert.match(script, /item\.masterItemId = \$\("#editItemMasterId"\)\.value \|\| null/);
-  assert.match(script, /masterItemId: item\.masterItemId \|\| item\.master_item_id \|\| null/);
+  assert.match(script, /state\.editingMasterCodes = masterItemCodes\(item\)/);
+  assert.match(script, /withMasterItemCodes\(item, state\.editingMasterCodes\)/);
+  assert.match(script, /masterItemIds: masterItemCodes\(item\)/);
 });
 
 test('BigC menu visibility and cost UUID are saved separately from the master ID', () => {

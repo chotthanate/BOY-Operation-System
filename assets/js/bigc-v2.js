@@ -9,6 +9,7 @@
   const REQUESTED_VIEW = new URLSearchParams(location.search).get("view") === "staff" ? "staff" : "admin";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
+  const { codesFor: masterItemCodes, withCodes: withMasterItemCodes } = globalThis.BOYBigCMasterMapping;
   const number = (value) => Math.max(0, Number(value) || 0);
   const money = (value) => number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -20,7 +21,7 @@
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false,
+    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [],
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
 
@@ -135,15 +136,15 @@
     const configured = Array.isArray(settings?.menu_config) ? settings.menu_config : [];
     if (!configured.length) return fallback;
     const defaultKeys = new Set(settings?.default_return_keys || []);
-    return configured.map((item, index) => ({
+    return configured.map((item, index) => withMasterItemCodes({
       key: item.key || keyFor(item.displayName || item.item_name, item.unit),
       displayName: item.displayName || item.item_name, name: item.name || item.item_name,
       category: item.category || "อื่นๆ", unit: item.unit || "",
       inputMode: item.inputMode === "weight" ? "weight" : "quantity",
       active: item.active !== false, defaultReturn: defaultKeys.has(item.key), sortOrder: Number(item.sortOrder ?? index),
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
-      itemId: item.itemId || item.item_id || null, masterItemId: item.masterItemId || item.master_item_id || null
-    })).sort((left, right) => left.sortOrder - right.sortOrder);
+      itemId: item.itemId || item.item_id || null
+    }, masterItemCodes(item), item.masterItemId || item.master_item_id || "")).sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
   function readStoredJson(key) {
@@ -196,7 +197,7 @@
   }
   function settingsPayload(menu = state.menu) {
     return {
-      menu_config: menu.map((item) => ({ ...item })),
+      menu_config: menu.map((item) => withMasterItemCodes(item, masterItemCodes(item), item.masterItemId || "")),
       default_return_keys: menu.filter((item) => item.defaultReturn).map((item) => item.key),
       savedAt: Date.now()
     };
@@ -208,6 +209,7 @@
       category: item.category || "อื่นๆ", unit: item.unit || "", inputMode: item.inputMode === "weight" ? "weight" : "quantity",
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
       itemId: item.itemId || item.item_id || null, masterItemId: item.masterItemId || item.master_item_id || null,
+      masterItemIds: masterItemCodes(item),
       active: item.active !== false, sortOrder: Number(item.sortOrder ?? index)
     })).sort((left, right) => left.sortOrder - right.sortOrder || left.key.localeCompare(right.key));
     return JSON.stringify({ menu: normalized, returns: [...(payload?.default_return_keys || [])].sort() });
@@ -717,18 +719,32 @@
     }
     items.forEach((item) => { if (item.masterItemId || item.master_item_id) item.itemId = state.normalizedItemsByCode.get(item.masterItemId || item.master_item_id) || null; });
   }
-  function renderMasterItemOptions(selected = "") {
+  function renderMasterItemOptions() {
     const query = $("#editItemMappingSearch").value.trim().toLowerCase();
-    const choices = state.masterItems.filter((row) => !query || `${row.name} ${row.code}`.toLowerCase().includes(query) || row.code === selected);
-    $("#editItemMasterId").innerHTML = `<option value="">ยังไม่จับคู่สินค้า</option>` + choices.map((row) =>
-      `<option value="${escapeHtml(row.code)}">${escapeHtml(row.name)} · ${escapeHtml(row.code)}</option>`).join("");
-    $("#editItemMasterId").value = selected;
+    const selected = new Set(state.editingMasterCodes);
+    const choices = [
+      ...state.editingMasterCodes.filter((code) => !state.masterItemsByCode.has(code)).map((code) => ({ code, name: code })),
+      ...state.masterItems.filter((row) => selected.has(row.code)
+        || !query || `${row.name} ${row.code}`.toLowerCase().includes(query))
+    ];
+    choices.sort((left, right) => {
+      const leftRank = state.editingMasterCodes.indexOf(left.code);
+      const rightRank = state.editingMasterCodes.indexOf(right.code);
+      return (leftRank < 0 ? Infinity : leftRank) - (rightRank < 0 ? Infinity : rightRank);
+    });
+    $("#editItemMasterList").innerHTML = choices.length ? choices.map((row) => {
+      const checked = selected.has(row.code);
+      const primary = state.editingMasterCodes[0] === row.code;
+      return `<div class="master-choice-row ${checked ? "selected" : ""}"><label><input data-master-code="${escapeHtml(row.code)}" type="checkbox" ${checked ? "checked" : ""}><span>${escapeHtml(row.name)} <small>· ${escapeHtml(row.code)}</small></span></label>${primary ? "<small>หลัก</small>" : checked ? `<button data-master-primary="${escapeHtml(row.code)}" type="button">ใช้เป็นหลัก</button>` : ""}</div>`;
+    }).join("") : `<div class="empty-state">ไม่พบสินค้า</div>`;
+    updateMappingStatus();
   }
   function updateMappingStatus() {
-    const code = $("#editItemMasterId").value;
-    $("#editItemMappingStatus").textContent = !code ? "ยังไม่จับคู่สินค้า — คำนวณต้นทุนจากสินค้ากลางไม่ได้"
-      : state.normalizedItemsByCode.has(code) ? `ผูกกับ ${code} แล้ว · การนับสต็อกเป็นอีกการตั้งค่า`
-      : `เลือก ${code} ได้ แม้ไม่ติดตามสต็อก · ถ้ายังไม่มีหน่วยฐาน ต้นทุนจะรอข้อมูลเพิ่ม`;
+    const codes = state.editingMasterCodes;
+    const primary = codes[0];
+    $("#editItemMappingStatus").textContent = !primary ? "ยังไม่จับคู่สินค้า"
+      : codes.length === 1 ? `ผูกแล้ว 1 รายการ · หลัก ${primary}`
+      : `ผูกแล้ว ${codes.length} รายการ · รับของและคิดต้นทุนด้วยสินค้าหลัก ${primary}`;
   }
   function normalizedMatchName(value) {
     return String(value || "").normalize("NFKC").replace(/\([^)]*\)/g, "").replace(/[\s._\-/]+/g, "").toLowerCase();
@@ -740,7 +756,7 @@
     return matches.length === 1 ? matches[0] : null;
   }
   function updateMappingSummary() {
-    const mapped = state.menu.filter((item) => item.masterItemId || item.master_item_id).length;
+    const mapped = state.menu.filter((item) => masterItemCodes(item).length).length;
     const text = `${mapped} / ${state.menu.length} รายการ`;
     if ($("#mappingSummary")) $("#mappingSummary").textContent = text;
     if ($("#mappingProgress")) $("#mappingProgress").textContent = `จับคู่แล้ว ${text}`;
@@ -749,20 +765,23 @@
     const query = $("#mappingSearch").value.trim().toLowerCase();
     const filter = $("#mappingFilter").value;
     const rows = state.menu.filter((item) => {
-      const mapped = Boolean(item.masterItemId || item.master_item_id);
+      const codes = masterItemCodes(item);
+      const mapped = codes.length > 0;
       return (filter === "all" || (filter === "mapped" ? mapped : !mapped))
-        && (!query || `${item.displayName} ${item.category} ${item.masterItemId || ""}`.toLowerCase().includes(query));
+        && (!query || `${item.displayName} ${item.category} ${codes.join(" ")}`.toLowerCase().includes(query));
     });
     $("#mappingList").innerHTML = rows.length ? rows.map((item) => {
-      const code = item.masterItemId || item.master_item_id || "";
-      const master = state.masterItemsByCode.get(code);
+      const codes = masterItemCodes(item);
+      const code = codes[0] || "";
       const suggestion = !code ? exactMasterSuggestion(item) : null;
-      const current = code ? `${master?.name || code} · ${code}` : "ยังไม่จับคู่";
-      return `<div class="mapping-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small><small class="mapping-current">${escapeHtml(current)}</small>${suggestion ? `<small>ชื่อที่ตรงกัน: ${escapeHtml(suggestion.name)} · ${escapeHtml(suggestion.code)}</small>` : ""}</span><span class="mapping-actions">${suggestion ? `<button data-apply-map="${escapeHtml(item.key)}" data-map-code="${escapeHtml(suggestion.code)}" type="button">ใช้รายการแนะนำ</button>` : ""}<button data-map-edit="${escapeHtml(item.key)}" type="button">${code ? "เปลี่ยน" : "ค้นหา"}</button></span></div>`;
+      const names = codes.map((value) => state.masterItemsByCode.get(value)?.name || value);
+      const current = code ? `หลัก ${names[0]}${names.length > 1 ? ` · ${names.slice(1, 3).join(" · ")}${names.length > 3 ? ` · +${names.length - 3}` : ""}` : ""}` : "ยังไม่จับคู่";
+      return `<div class="mapping-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small><small class="mapping-current">${escapeHtml(current)}</small>${suggestion ? `<small>ชื่อที่ตรงกัน: ${escapeHtml(suggestion.name)} · ${escapeHtml(suggestion.code)}</small>` : ""}</span><span class="mapping-actions">${suggestion ? `<button data-apply-map="${escapeHtml(item.key)}" data-map-code="${escapeHtml(suggestion.code)}" type="button">ใช้รายการแนะนำ</button>` : ""}<button data-map-edit="${escapeHtml(item.key)}" type="button">${code ? "แก้ไข" : "ค้นหา"}</button></span></div>`;
     }).join("") : `<div class="empty-state">ไม่พบรายการตามตัวกรอง</div>`;
     $$('[data-apply-map]').forEach((button) => { button.onclick = () => {
       const item = state.menu.find((row) => row.key === button.dataset.applyMap); if (!item) return;
-      item.masterItemId = button.dataset.mapCode; item.itemId = state.normalizedItemsByCode.get(button.dataset.mapCode) || null;
+      Object.assign(item, withMasterItemCodes(item, [button.dataset.mapCode]));
+      item.itemId = state.normalizedItemsByCode.get(button.dataset.mapCode) || null;
       state.mappingDirty = true; renderMappingList(); updateMappingSummary();
     }; });
     $$('[data-map-edit]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.mapEdit, true); });
@@ -776,10 +795,10 @@
     catch (error) { $("#mappingList").innerHTML = `<div class="empty-state">โหลดข้อมูลไม่สำเร็จ: ${escapeHtml(error.message)}</div>`; }
   }
   function applyExactMappings() {
-    const suggestions = state.menu.map((item) => ({ item, master: (item.masterItemId || item.master_item_id) ? null : exactMasterSuggestion(item) })).filter((row) => row.master);
+    const suggestions = state.menu.map((item) => ({ item, master: masterItemCodes(item).length ? null : exactMasterSuggestion(item) })).filter((row) => row.master);
     if (!suggestions.length) { notice("ไม่พบชื่อที่ตรงกันแบบหนึ่งต่อหนึ่ง"); return; }
     if (!confirm(`เติมรายการแนะนำ ${suggestions.length} รายการเพื่อให้ตรวจสอบก่อนบันทึก?`)) return;
-    suggestions.forEach(({ item, master }) => { item.masterItemId = master.code; item.itemId = state.normalizedItemsByCode.get(master.code) || null; });
+    suggestions.forEach(({ item, master }) => { Object.assign(item, withMasterItemCodes(item, [master.code])); item.itemId = state.normalizedItemsByCode.get(master.code) || null; });
     state.mappingDirty = true; renderMappingList(); updateMappingSummary(); notice(`เติมรายการแนะนำแล้ว ${suggestions.length} รายการ · กรุณาตรวจและกดบันทึก`);
   }
   async function saveMappings() {
@@ -877,7 +896,11 @@
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
     const groups = new Map();
     items.forEach((item) => { const category = item.category || "อื่นๆ"; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(item); });
-    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows]) => `<section class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.masterItemId ? `สินค้า ${escapeHtml(item.masterItemId)}${item.itemId ? " · ผูกข้อมูลแล้ว" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า"}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
+    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows]) => `<section class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
+      const codes = masterItemCodes(item);
+      const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ · หลัก ${escapeHtml(codes[0])}${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
+      return `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`;
+    }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
@@ -936,10 +959,11 @@
     $("#editItemHandlingType").value = receiveHandlingType(item);
     $("#editItemActive").checked = item.active !== false;
     $("#editItemMappingSearch").value = focusMapping ? (item.name || item.displayName || "") : "";
+    state.editingMasterCodes = masterItemCodes(item);
     $("#editItemMappingStatus").textContent = "กำลังโหลดสินค้าข้อมูลกลาง…";
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
-    try { await loadMasterItems(); renderMasterItemOptions(item.masterItemId || item.master_item_id || ""); updateMappingStatus(); }
+    try { await loadMasterItems(); renderMasterItemOptions(); }
     catch (error) { $("#editItemMappingStatus").textContent = `โหลดสินค้าข้อมูลกลางไม่สำเร็จ: ${error.message}`; }
   }
   async function saveEditedItem() {
@@ -950,7 +974,7 @@
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
     item.active = $("#editItemActive").checked;
-    item.masterItemId = $("#editItemMasterId").value || null;
+    Object.assign(item, withMasterItemCodes(item, state.editingMasterCodes));
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
     try { await ensureMappedCatalogItems([item]); }
     catch (error) { Object.assign(item, previous); $("#editItemError").textContent = `จับคู่ไม่สำเร็จ: ${error.message}`; return; }
@@ -1043,8 +1067,20 @@
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     $("#openMappingManager").onclick = openMappingManager; $("#mappingSearch").oninput = renderMappingList; $("#mappingFilter").onchange = renderMappingList; $("#applyExactMappings").onclick = applyExactMappings; $("#saveMappings").onclick = saveMappings; $("#copyStaffLink").onclick = copyStaffLink;
-    $("#editItemMappingSearch").oninput = () => renderMasterItemOptions($("#editItemMasterId").value);
-    $("#editItemMasterId").onchange = updateMappingStatus;
+    $("#editItemMappingSearch").oninput = renderMasterItemOptions;
+    $("#editItemMasterList").onchange = (event) => {
+      const code = event.target.dataset.masterCode;
+      if (!code) return;
+      state.editingMasterCodes = event.target.checked
+        ? [...state.editingMasterCodes, code] : state.editingMasterCodes.filter((value) => value !== code);
+      renderMasterItemOptions();
+    };
+    $("#editItemMasterList").onclick = (event) => {
+      const code = event.target.dataset.masterPrimary;
+      if (!code || !state.editingMasterCodes.includes(code)) return;
+      state.editingMasterCodes = [code, ...state.editingMasterCodes.filter((value) => value !== code)];
+      renderMasterItemOptions();
+    };
     $("#openFruitCostSettings").onclick = openFruitCostSettings;
     $("#saveFruitCost").onclick = saveFruitCost;
     $("#fruitCostRawItem").onchange = renderFruitCostExisting;
