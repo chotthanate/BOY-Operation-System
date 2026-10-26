@@ -9,7 +9,7 @@
   const REQUESTED_VIEW = new URLSearchParams(location.search).get("view") === "staff" ? "staff" : "admin";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
-  const { codesFor: masterItemCodes, withCodes: withMasterItemCodes } = globalThis.BOYBigCMasterMapping;
+  const { codesFor: masterItemCodes, withCodes: withMasterItemCodes, matchesSearch: matchesMasterSearch } = globalThis.BOYBigCMasterMapping;
   const number = (value) => Math.max(0, Number(value) || 0);
   const money = (value) => number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -720,19 +720,24 @@
     items.forEach((item) => { if (item.masterItemId || item.master_item_id) item.itemId = state.normalizedItemsByCode.get(item.masterItemId || item.master_item_id) || null; });
   }
   function renderMasterItemOptions() {
-    const query = $("#editItemMappingSearch").value.trim().toLowerCase();
+    const list = $("#editItemMasterList");
+    if (!state.session) {
+      list.innerHTML = `<div class="empty-state">ต้องเข้าสู่ระบบออนไลน์ก่อนเลือกสินค้ากลาง<br><a href="bigc-v2.html?online=1">เข้าสู่ระบบออนไลน์</a></div>`;
+      updateMappingStatus();
+      return;
+    }
+    const query = $("#editItemMappingSearch").value.trim();
     const selected = new Set(state.editingMasterCodes);
     const choices = [
       ...state.editingMasterCodes.filter((code) => !state.masterItemsByCode.has(code)).map((code) => ({ code, name: code })),
-      ...state.masterItems.filter((row) => selected.has(row.code)
-        || !query || `${row.name} ${row.code}`.toLowerCase().includes(query))
+      ...state.masterItems.filter((row) => selected.has(row.code) || matchesMasterSearch(row, query))
     ];
     choices.sort((left, right) => {
       const leftRank = state.editingMasterCodes.indexOf(left.code);
       const rightRank = state.editingMasterCodes.indexOf(right.code);
       return (leftRank < 0 ? Infinity : leftRank) - (rightRank < 0 ? Infinity : rightRank);
     });
-    $("#editItemMasterList").innerHTML = choices.length ? choices.map((row) => {
+    list.innerHTML = choices.length ? choices.map((row) => {
       const checked = selected.has(row.code);
       const primary = state.editingMasterCodes[0] === row.code;
       return `<div class="master-choice-row ${checked ? "selected" : ""}"><label><input data-master-code="${escapeHtml(row.code)}" type="checkbox" ${checked ? "checked" : ""}><span>${escapeHtml(row.name)} <small>· ${escapeHtml(row.code)}</small></span></label>${primary ? "<small>หลัก</small>" : checked ? `<button data-master-primary="${escapeHtml(row.code)}" type="button">ใช้เป็นหลัก</button>` : ""}</div>`;
@@ -961,10 +966,14 @@
     $("#editItemMappingSearch").value = focusMapping ? (item.name || item.displayName || "") : "";
     state.editingMasterCodes = masterItemCodes(item);
     $("#editItemMappingStatus").textContent = "กำลังโหลดสินค้าข้อมูลกลาง…";
+    $("#editItemMasterList").innerHTML = `<div class="empty-state">กำลังโหลดสินค้ากลาง…</div>`;
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
     try { await loadMasterItems(); renderMasterItemOptions(); }
-    catch (error) { $("#editItemMappingStatus").textContent = `โหลดสินค้าข้อมูลกลางไม่สำเร็จ: ${error.message}`; }
+    catch (error) {
+      $("#editItemMappingStatus").textContent = `โหลดสินค้าข้อมูลกลางไม่สำเร็จ: ${error.message}`;
+      $("#editItemMasterList").innerHTML = `<div class="empty-state">โหลดสินค้ากลางไม่สำเร็จ กรุณาลองใหม่</div>`;
+    }
   }
   async function saveEditedItem() {
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;

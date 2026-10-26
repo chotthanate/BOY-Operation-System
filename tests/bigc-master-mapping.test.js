@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { codesFor, withCodes } = require('../assets/js/bigc-master-mapping.js');
+const { codesFor, withCodes, matchesSearch } = require('../assets/js/bigc-master-mapping.js');
 
 function appSettingsFunctions() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'assets/js/bigc-v2.js'), 'utf8');
-  const context = { location: { search: '' }, URLSearchParams, window: { addEventListener() {} }, BOYBigCMasterMapping: { codesFor, withCodes } };
+  const context = { location: { search: '' }, URLSearchParams, window: { addEventListener() {} }, BOYBigCMasterMapping: { codesFor, withCodes, matchesSearch } };
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.__test = { settingsMenu, settingsPayload, settingsFingerprint };})();'), context);
   return context.__test;
 }
@@ -34,6 +34,18 @@ test('removing a primary item promotes the next selected item; clearing all link
 
 test('older payloads with snake-case mapping arrays remain readable', () => {
   assert.deepEqual(codesFor({ master_item_id: 'ITEM-100', master_item_ids: ['ITEM-200'] }), ['ITEM-100', 'ITEM-200']);
+});
+
+test('central product search finds Thai spelling variants and all cranberry brands', () => {
+  const products = [
+    { code: 'ITEM-0346', name: 'แครนเบอร์รี แช่แข็ง aro 1 กก.' },
+    { code: 'ITEM-0037', name: 'แครนเบอร์รี แช่แข็ง Savepak 1 กก.' },
+    { code: 'ITEM-0347', name: 'แครนเบอร์รี แช่แข็ง Supersave 1 กก.' },
+    { code: 'ITEM-0010', name: 'สตรอว์เบอร์รี แช่แข็ง 1 กก.' }
+  ];
+  assert.deepEqual(products.filter((product) => matchesSearch(product, 'แครนเบอร์รี่ แช่แข็ง')).map((product) => product.code),
+    ['ITEM-0346', 'ITEM-0037', 'ITEM-0347']);
+  assert.equal(matchesSearch(products[0], 'ITEM-0346'), true);
 });
 
 test('BigC settings save and reload every linked item while keeping the primary cost UUID', () => {

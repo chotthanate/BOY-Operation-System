@@ -19,7 +19,15 @@
     return { ...item, masterItemIds: ordered, masterItemId: selectedPrimary || null };
   }
 
-  const api = { codesFor, withCodes };
+  function matchesSearch(item, query) {
+    const normalize = (value) => String(value || "").normalize("NFKC").toLocaleLowerCase("th")
+      .replace(/[\u0E48-\u0E4B]/g, "").replace(/\s+/g, " ").trim();
+    const terms = normalize(query).split(" ").filter(Boolean);
+    const text = normalize(`${item.name || ""} ${item.code || ""}`);
+    return terms.every((term) => text.includes(term));
+  }
+
+  const api = { codesFor, withCodes, matchesSearch };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.BOYBigCMasterMapping = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
