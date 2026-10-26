@@ -21,7 +21,7 @@
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false,
-    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map()
+    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -260,6 +260,7 @@
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
       await loadAccess();
+      await loadMasterItems();
       const localSettings = readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY);
       const cloudHasMenu = Array.isArray(state.context.settings?.menu_config) && state.context.settings.menu_config.length > 0;
       const localHasMenu = Array.isArray(localSettings?.menu_config) && localSettings.menu_config.length > 0;
@@ -399,6 +400,18 @@
     const quantityControl = isWeightQuantity(item) ? "" : `<label class="receive-measurement"><span>จำนวนที่รับ (${escapeHtml(item.unit || "หน่วย")})</span><input data-qty-target="receive" data-key="${key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(line.quantity) || ""}" aria-label="จำนวนที่รับ"></label>`;
     return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="number" min="0" step="0.001" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
   }
+  function sharedStockOptions(item, line) {
+    return state.sharedStockVariants.get(item.itemId || item.item_id || line.item_id) || [];
+  }
+  function renderBrandAllocations(item, line, key) {
+    const variants = sharedStockOptions(item, line);
+    if (!variants.length) return "";
+    const allocations = Array.isArray(line.brand_allocations) && line.brand_allocations.length
+      ? line.brand_allocations : [{ item_id: "", quantity: number(line.quantity) || 1 }];
+    return `<div class="brand-allocations" data-brand-picker="${escapeHtml(key)}"><strong>ยี่ห้อที่ได้รับ</strong>${allocations.map((allocation, index) =>
+      `<div class="brand-allocation-row"><select data-brand-choice="${escapeHtml(key)}" data-brand-index="${index}" aria-label="เลือกยี่ห้อที่รับ"><option value="">เลือกยี่ห้อ</option>${variants.map((variant) =>
+        `<option value="${escapeHtml(variant.id)}" ${allocation.item_id === variant.id ? "selected" : ""}>${escapeHtml(variant.name)}</option>`).join("")}</select><input data-brand-quantity="${escapeHtml(key)}" data-brand-index="${index}" type="number" inputmode="numeric" min="1" step="1" value="${number(allocation.quantity)}" aria-label="จำนวนแกลลอน"><button data-brand-remove="${escapeHtml(key)}" data-brand-index="${index}" type="button" aria-label="ลบยี่ห้อ">×</button></div>`).join("")}<button class="brand-add" data-brand-add="${escapeHtml(key)}" type="button">+ อีกยี่ห้อ</button></div>`;
+  }
 
   function renderDateDisplays() {
     $$('[data-date-display]').forEach((label) => {
@@ -443,11 +456,37 @@
     $("#receiveList").innerHTML = entries.length ? entries.map(([key, line]) => {
       const item = findMenu(key, line); if (line.checked) checked += 1;
       const type = receiveHandlingType(item); const kind = handlingLabel(type);
-      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${kind ? `<span class="receive-kind">${escapeHtml(kind)}</span>` : ""}${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div></div>`;
+      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${kind ? `<span class="receive-kind">${escapeHtml(kind)}</span>` : ""}${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div>${line.checked ? renderBrandAllocations(item, line, key) : ""}</div>`;
     }).join("") : `<div class="empty-state">ยังไม่มีรายการจากเมื่อคืน<br>กด “+ เพิ่ม” เพื่อเพิ่มเอง</div>`;
     $("#receiveProgress").textContent = `${checked} / ${entries.length} รายการ`;
     $("#receiveProgressBar").style.width = `${entries.length ? checked / entries.length * 100 : 0}%`;
-    bindQuantityEvents(); bindActualWeightEvents(); bindRowEvents();
+    bindQuantityEvents(); bindActualWeightEvents(); bindBrandEvents(); bindRowEvents();
+  }
+
+  function bindBrandEvents() {
+    const current = (key) => {
+      const line = state.receive[key]; if (!line) return null;
+      if (!Array.isArray(line.brand_allocations) || !line.brand_allocations.length) {
+        line.brand_allocations = [{ item_id: "", quantity: number(line.quantity) || 1 }];
+      }
+      return line.brand_allocations;
+    };
+    $$('[data-brand-choice]').forEach((select) => { select.onchange = () => {
+      const rows = current(select.dataset.brandChoice); if (!rows) return;
+      rows[Number(select.dataset.brandIndex)].item_id = select.value; saveDraft();
+    }; });
+    $$('[data-brand-quantity]').forEach((input) => { input.oninput = () => {
+      const rows = current(input.dataset.brandQuantity); if (!rows) return;
+      rows[Number(input.dataset.brandIndex)].quantity = number(input.value); saveDraft();
+    }; });
+    $$('[data-brand-add]').forEach((button) => { button.onclick = () => {
+      const rows = current(button.dataset.brandAdd); if (!rows) return;
+      rows.push({ item_id: "", quantity: 1 }); saveDraft(); renderReceive();
+    }; });
+    $$('[data-brand-remove]').forEach((button) => { button.onclick = () => {
+      const rows = current(button.dataset.brandRemove); if (!rows) return;
+      rows.splice(Number(button.dataset.brandIndex), 1); saveDraft(); renderReceive();
+    }; });
   }
 
   function bindActualWeightEvents() {
@@ -550,9 +589,9 @@
     $$('[data-remove-target]').forEach((button) => { button.onclick = () => confirmRemoveLine(button.dataset.removeTarget, button.dataset.key); });
     $$('[data-swipe-key]').forEach((row) => {
       let start = 0;
-      row.ontouchstart = (event) => { start = event.touches[0].clientX; row.classList.remove("swiped"); };
-      row.ontouchmove = (event) => { const distance = Math.max(0, start - event.touches[0].clientX); row.querySelector(".item-row-inner").style.transform = `translateX(-${Math.min(90, distance)}px)`; };
-      row.ontouchend = (event) => { const distance = start - event.changedTouches[0].clientX; row.querySelector(".item-row-inner").style.transform = ""; row.classList.toggle("swiped", distance > 50); };
+      row.ontouchstart = (event) => { start = event.target.closest(".brand-allocations") ? null : event.touches[0].clientX; row.classList.remove("swiped"); };
+      row.ontouchmove = (event) => { if (start === null) return; const distance = Math.max(0, start - event.touches[0].clientX); row.querySelector(".item-row-inner").style.transform = `translateX(-${Math.min(90, distance)}px)`; };
+      row.ontouchend = (event) => { if (start === null) return; const distance = start - event.changedTouches[0].clientX; row.querySelector(".item-row-inner").style.transform = ""; row.classList.toggle("swiped", distance > 50); };
     });
   }
   function confirmRemoveLine(target, key) {
@@ -588,6 +627,20 @@
       if (invalidPiece) { notice(`จำนวนลูกของ ${invalidPiece.item_name} ต้องเป็นจำนวนเต็ม`, true); return false; }
       const missingWeight = lines.find((line) => needsActualWeight(findMenu(line.line_key, line)) && number(line.actual_weight_kg) <= 0);
       if (missingWeight) { notice(`กรอกน้ำหนักจริงของ ${missingWeight.item_name} ก่อนบันทึก`, true); return false; }
+      const invalidBrand = lines.find((line) => {
+        const item = findMenu(line.line_key, line);
+        const variants = sharedStockOptions(item, line);
+        if (!variants.length) return false;
+        const rows = line.brand_allocations || [];
+        const ids = new Set(); let total = 0;
+        for (const row of rows) {
+          if (!variants.some((variant) => variant.id === row.item_id) || ids.has(row.item_id)
+            || !Number.isInteger(Number(row.quantity)) || number(row.quantity) <= 0) return true;
+          ids.add(row.item_id); total += number(row.quantity);
+        }
+        return !rows.length || total !== number(line.quantity);
+      });
+      if (invalidBrand) { notice(`เลือกยี่ห้อและจำนวนแกลลอนให้ตรงกับที่รับจริง: ${invalidBrand.item_name}`, true); return false; }
     }
     const payload = {
       workflow_type: type, business_date: type === "close_order" ? $("#orderDate").value : type === "receive" ? $("#receiveDate").value : $("#returnDate").value,
@@ -639,7 +692,7 @@
     if (state.masterItems.length || !state.session) return;
     const [catalogResult, normalizedResult] = await Promise.all([
       state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_สินค้า" }),
-      state.client.schema("boy_central").from("items").select("id,code,name,active").eq("active", true).limit(1000)
+      state.client.schema("boy_central").from("items").select("id,code,name,stock_target_item_id,active").eq("active", true).limit(1000)
     ]);
     if (catalogResult.error) throw catalogResult.error;
     if (normalizedResult.error) throw normalizedResult.error;
@@ -647,6 +700,22 @@
       .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id) }));
     state.normalizedItemsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row.id]));
     state.masterItemsByCode = new Map(state.masterItems.map((row) => [row.code, row]));
+    state.sharedStockVariants = new Map();
+    (normalizedResult.data || []).filter((row) => row.stock_target_item_id).forEach((row) => {
+      const options = state.sharedStockVariants.get(row.stock_target_item_id) || [];
+      options.push({ id: row.id, name: row.name, code: row.code });
+      state.sharedStockVariants.set(row.stock_target_item_id, options);
+    });
+  }
+  async function ensureMappedCatalogItems(items) {
+    const codes = [...new Set(items.map((item) => item.masterItemId || item.master_item_id).filter((code) => code && !state.normalizedItemsByCode.has(code)))];
+    if (codes.length && !state.session) throw new Error("เข้าสู่ระบบออนไลน์ก่อนจับคู่สินค้า");
+    for (let index = 0; index < codes.length; index += 50) {
+      const { data, error } = await state.client.schema("boy_central").rpc("ensure_bigc_catalog_items", { target_codes: codes.slice(index, index + 50) });
+      if (error) throw error;
+      Object.entries(data || {}).forEach(([code, id]) => { if (id) state.normalizedItemsByCode.set(code, id); });
+    }
+    items.forEach((item) => { if (item.masterItemId || item.master_item_id) item.itemId = state.normalizedItemsByCode.get(item.masterItemId || item.master_item_id) || null; });
   }
   function renderMasterItemOptions(selected = "") {
     const query = $("#editItemMappingSearch").value.trim().toLowerCase();
@@ -657,9 +726,9 @@
   }
   function updateMappingStatus() {
     const code = $("#editItemMasterId").value;
-    $("#editItemMappingStatus").textContent = !code ? "ยังไม่จับคู่สินค้า — รายการรับได้ แต่ต้นทุนอัตโนมัติจะยังไม่ครบ"
-      : state.normalizedItemsByCode.has(code) ? `เชื่อมกับ ${code} และฐานต้นทุนกลางแล้ว`
-      : `เชื่อมกับ ${code} แล้ว แต่ยังไม่มีรหัสวัตถุดิบ UUID สำหรับคำนวณต้นทุน กรุณาตรวจในข้อมูลกลาง`;
+    $("#editItemMappingStatus").textContent = !code ? "ยังไม่จับคู่สินค้า — คำนวณต้นทุนจากสินค้ากลางไม่ได้"
+      : state.normalizedItemsByCode.has(code) ? `ผูกกับ ${code} แล้ว · การนับสต็อกเป็นอีกการตั้งค่า`
+      : `เลือก ${code} ได้ แม้ไม่ติดตามสต็อก · ถ้ายังไม่มีหน่วยฐาน ต้นทุนจะรอข้อมูลเพิ่ม`;
   }
   function normalizedMatchName(value) {
     return String(value || "").normalize("NFKC").replace(/\([^)]*\)/g, "").replace(/[\s._\-/]+/g, "").toLowerCase();
@@ -715,6 +784,8 @@
   }
   async function saveMappings() {
     if (!state.mappingDirty) { notice("ไม่มีการจับคู่ที่เปลี่ยนแปลง"); return; }
+    try { await ensureMappedCatalogItems(state.menu); }
+    catch (error) { notice(`จับคู่ไม่สำเร็จ: ${error.message}`, true); return; }
     const status = await persistSettings("บันทึกการจับคู่แล้ว");
     if (status === "synced") { state.mappingDirty = false; renderMappingList(); renderSettings(); }
   }
@@ -806,7 +877,7 @@
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
     const groups = new Map();
     items.forEach((item) => { const category = item.category || "อื่นๆ"; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(item); });
-    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows]) => `<section class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.masterItemId ? `สินค้า ${escapeHtml(item.masterItemId)}${item.itemId ? " · ต้นทุนพร้อม" : " · รอจับคู่ต้นทุน"}` : "ยังไม่จับคู่สินค้า"}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
+    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows]) => `<section class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${item.masterItemId ? `สินค้า ${escapeHtml(item.masterItemId)}${item.itemId ? " · ผูกข้อมูลแล้ว" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า"}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
@@ -881,6 +952,8 @@
     item.active = $("#editItemActive").checked;
     item.masterItemId = $("#editItemMasterId").value || null;
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
+    try { await ensureMappedCatalogItems([item]); }
+    catch (error) { Object.assign(item, previous); $("#editItemError").textContent = `จับคู่ไม่สำเร็จ: ${error.message}`; return; }
     if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
     state.mappingDirty = false;
     $("#editItemModal").classList.add("hidden"); renderSettings();
