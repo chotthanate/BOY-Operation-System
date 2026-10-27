@@ -119,3 +119,46 @@ body.staff-view #settingsButton{display:none!important}
   .mapping-row{padding:9px}
   .mapping-actions button{min-height:40px}
 }
+
+/* BigC settings are a small hub rather than one long mixed list. Keep navigation
+   inside the scrolling sheet so the close/back controls never leave the screen. */
+.modal-sheet>header{position:sticky;top:-16px;z-index:8;margin:-16px -16px 12px;padding:16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.97);backdrop-filter:blur(12px)}
+#settingsHome.hidden,#settingsDetail.hidden,#settingsBack.hidden,#openAddItem.hidden,#openFruitCostSettings.hidden{display:none}
+.edit-item-fields label.hidden{display:none}
+.settings-sheet{overscroll-behavior:contain}
+.settings-sheet>.settings-header{position:sticky;top:-16px;z-index:8;margin:-16px -16px 12px;padding:16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.97);backdrop-filter:blur(12px)}
+.settings-heading{display:flex;align-items:center;gap:9px;min-width:0}
+.settings-heading h2{line-height:1.25}
+.settings-sheet>.settings-header>button,.settings-back{display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;border:0;border-radius:12px;background:#f1f3ef;color:var(--ink);font-size:26px}
+.settings-back{background:#eaf5f0;color:var(--green);font-size:32px;line-height:1}
+.settings-intro{margin:2px 0 12px;color:var(--muted);font-size:12px;line-height:1.5}
+.settings-menu-grid{display:grid;gap:8px}
+.settings-menu-card{display:grid;grid-template-columns:42px minmax(0,1fr) 18px;align-items:center;gap:10px;min-height:72px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:#fff;text-align:left;color:var(--ink)}
+.settings-menu-card:active{background:#f3f9f6}
+.settings-menu-card>span:nth-child(2){min-width:0}
+.settings-menu-card strong,.settings-menu-card small{display:block}
+.settings-menu-card strong{font-size:14px}
+.settings-menu-card small{margin-top:2px;color:var(--muted);font-size:11px;line-height:1.4}
+.settings-menu-card>b{color:var(--green);font-size:22px}
+.settings-menu-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:#e9f5ef;color:var(--green);font-size:21px;font-weight:900}
+.settings-home .staff-link-panel{margin-top:10px}
+.settings-detail .fruit-cost-open{display:block}
+.settings-category-nav{position:sticky;top:72px;z-index:7;display:flex;gap:6px;min-height:48px;margin:8px -16px 6px;padding:5px 16px;overflow-x:auto;white-space:nowrap;background:rgba(255,255,255,.97);scrollbar-width:none;backdrop-filter:blur(12px)}
+.settings-category-nav::-webkit-scrollbar{display:none}
+.settings-category-nav button{min-height:36px;flex:0 0 auto;padding:0 11px;border:1px solid #dce9e2;border-radius:999px;background:#f1f8f4;color:var(--green);font-size:11px;font-weight:850}
+.settings-category-nav:empty{display:none}
+.setting-category-group{scroll-margin-top:128px}
+.settings-detail .setting-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
+.settings-detail .setting-row>span:first-child{min-width:0}
+.settings-detail .setting-row strong{overflow-wrap:anywhere}
+.settings-detail .setting-check{display:flex;align-items:center;gap:5px;min-width:38px}
+.settings-detail .setting-check small{display:block;font-size:10px;white-space:nowrap}
+.settings-detail .setting-actions{display:flex;gap:5px}
+.settings-detail .setting-actions button:only-child{background:#f7f6ef;color:var(--green);font-size:16px}
+.settings-save-bar{position:sticky;bottom:-16px;z-index:7;margin:8px -16px -16px;padding:10px 16px 16px;background:linear-gradient(0deg,#fff 80%,rgba(255,255,255,.94));border-top:1px solid var(--line)}
+@media(max-width:600px){
+  .settings-sheet>.settings-header{margin-bottom:10px}
+  .settings-detail .setting-row{grid-template-columns:minmax(0,1fr) auto auto}
+  .settings-detail .setting-check{flex-direction:column;gap:1px}
+  .settings-detail .setting-check small{font-size:9px}
+}

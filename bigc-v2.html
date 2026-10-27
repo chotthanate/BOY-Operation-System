@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261027-1">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261027-3">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -84,23 +84,34 @@
 
   <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
     <div class="modal-sheet settings-sheet">
-      <header><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่ารายการ</h2></div><div class="modal-header-actions"><button id="openSortSettings" class="sort-open-button" type="button">⇅ จัดลำดับ</button><button data-close-modal="settingsModal" type="button">×</button></div></header>
+      <header class="settings-header"><div class="settings-heading"><button id="settingsBack" class="settings-back hidden" type="button" aria-label="กลับเมนูตั้งค่า">‹</button><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่า</h2></div></div><button data-close-modal="settingsModal" type="button" aria-label="ปิดการตั้งค่า">×</button></header>
       <div id="settingsSyncWarning" class="settings-sync-warning" hidden>
         <span><strong>ยังไม่ได้ส่งขึ้น Supabase</strong><small id="settingsSyncMessage">เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง</small></span>
         <a id="settingsReconnect" href="burger.html?next=bigc-v2.html&amp;online=1">เชื่อมต่อและส่งข้อมูล</a>
       </div>
-      <button id="openFruitCostSettings" class="secondary-button fruit-cost-open" type="button">ต้นทุนผลไม้ · Yield และน้ำหนักต่อลูก</button>
-      <div class="settings-quick-tools">
-        <button id="openMappingManager" class="settings-tool-button" type="button"><span>จับคู่สินค้ากลาง</span><small id="mappingSummary">กำลังตรวจสอบ</small></button>
+      <div id="settingsHome" class="settings-home">
+        <p class="settings-intro">เลือกหัวข้อที่ต้องการจัดการ</p>
+        <div class="settings-menu-grid">
+          <button class="settings-menu-card" data-settings-section="items" type="button"><span class="settings-menu-icon">▦</span><span><strong>รายการสินค้า</strong><small>เพิ่ม แก้ไข ลบ และเลือกแสดงในหน้าสั่งของ</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="units" type="button"><span class="settings-menu-icon">⚖</span><span><strong>หน่วยและการรับของ</strong><small>หน่วยที่รับจริง และชั่งตอนรับ/คืน</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="costing" type="button"><span class="settings-menu-icon">◈</span><span><strong>วิธีคิดต้นทุน</strong><small>ประเภทการรับ ผลไม้ Yield และน้ำหนักต่อลูก</small></span><b>›</b></button>
+          <button id="openMappingManager" class="settings-menu-card" type="button"><span class="settings-menu-icon">↔</span><span><strong>จับคู่สินค้ากลาง</strong><small id="mappingSummary">กำลังตรวจสอบ</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="returns" type="button"><span class="settings-menu-icon">↩</span><span><strong>รายการคืนของประจำ</strong><small>เลือกของที่ขึ้นหน้าคืนอัตโนมัติ</small></span><b>›</b></button>
+          <button id="openSortSettings" class="settings-menu-card" type="button"><span class="settings-menu-icon">⇅</span><span><strong>จัดลำดับ</strong><small>เรียงหมวดหมู่และรายการในหน้าสั่งของ</small></span><b>›</b></button>
+        </div>
         <div class="staff-link-panel">
           <span><strong>ลิงก์สำหรับพนักงาน</strong><small>ใช้งานและจัดลำดับได้ แต่แก้รายการไม่ได้</small></span>
           <div><button id="copyStaffLink" type="button">คัดลอก</button><a id="openStaffLink" href="bigc-v2.html?view=staff&amp;online=1" target="_blank" rel="noopener">เปิด</a></div>
         </div>
       </div>
-      <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div>
-      <div class="setting-legend"><span>ชั่งตอนรับ/คืน</span><span>ขึ้นหน้าคืนอัตโนมัติ</span></div>
-      <div id="settingsList" class="settings-list"></div>
-      <button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button>
+      <div id="settingsDetail" class="settings-detail hidden">
+        <p id="settingsSectionDescription" class="settings-intro"></p>
+        <button id="openFruitCostSettings" class="secondary-button fruit-cost-open hidden" type="button">ตั้งค่า Yield และน้ำหนักผลไม้ต่อลูก</button>
+        <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div>
+        <nav id="settingsCategoryNav" class="settings-category-nav" aria-label="ไปยังหมวดสินค้า"></nav>
+        <div id="settingsList" class="settings-list"></div>
+        <div class="settings-save-bar"><button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button></div>
+      </div>
     </div>
   </div>
 
@@ -165,7 +176,8 @@
       <div class="edit-item-fields">
         <label>ชื่อรายการ<input id="editItemName" type="text"></label>
         <label>หน่วย<input id="editItemUnit" type="text"></label>
-        <label>หมวดหมู่<input id="editItemCategory" type="text"></label>
+        <label>หมวดหมู่<select id="editItemCategory" aria-label="เลือกหมวดหมู่สินค้า"></select></label>
+        <label id="editItemNewCategoryField" class="hidden">ชื่อหมวดหมู่ใหม่<input id="editItemNewCategory" type="text" autocomplete="off" placeholder="เช่น ผลไม้กระปุก/ผลไม้อบแห้ง"></label>
         <label>ประเภทการรับและคิดต้นทุน<select id="editItemHandlingType">
           <option value="standard">ทั่วไป</option>
           <option value="whole_fruit">ผลไม้ทั้งลูก (ชั่งก่อนปอก)</option>
@@ -204,6 +216,6 @@
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261025-1"></script>
   <script src="assets/js/bigc-master-mapping.js?v=20261027-1"></script>
-  <script src="assets/js/bigc-v2.js?v=20261027-1"></script>
+  <script src="assets/js/bigc-v2.js?v=20261027-3"></script>
 </body>
 </html>

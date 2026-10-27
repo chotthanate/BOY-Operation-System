@@ -20,7 +20,7 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
-    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", editingKey: "",
+    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [],
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
@@ -686,9 +686,30 @@
   function openSettings() {
     if (isStaffView() || !state.access?.canManage) { notice("บัญชีนี้ใช้รายการได้ แต่ไม่มีสิทธิ์แก้การตั้งค่า", true); return; }
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
+    showSettingsSection("");
     const hasPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
     showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
     renderSettings(); updateMappingSummary();
+  }
+  const SETTINGS_SECTIONS = {
+    items: ["รายการสินค้า", "แก้ชื่อ หมวดหมู่ หน่วย และการแสดงในหน้าสั่งของ"],
+    units: ["หน่วยและการรับของ", "เลือกว่ารายการใดต้องชั่งน้ำหนักตอนรับหรือคืน และแก้หน่วยที่ใช้จริง"],
+    costing: ["วิธีคิดต้นทุน", "เลือกประเภทการรับของแต่ละรายการ หรือกำหนด Yield และน้ำหนักผลไม้"],
+    returns: ["รายการคืนของประจำ", "เลือกของที่ต้องการให้ขึ้นหน้าคืนโดยอัตโนมัติ"]
+  };
+  function showSettingsSection(section) {
+    state.settingsSection = SETTINGS_SECTIONS[section] ? section : "";
+    const detail = Boolean(state.settingsSection);
+    $("#settingsHome").classList.toggle("hidden", detail);
+    $("#settingsDetail").classList.toggle("hidden", !detail);
+    $("#settingsBack").classList.toggle("hidden", !detail);
+    $("#settingsTitle").textContent = detail ? SETTINGS_SECTIONS[section][0] : "ตั้งค่า";
+    $("#settingsSectionDescription").textContent = detail ? SETTINGS_SECTIONS[section][1] : "";
+    $("#openAddItem").classList.toggle("hidden", section !== "items");
+    $("#openFruitCostSettings").classList.toggle("hidden", section !== "costing");
+    $("#settingsSearch").value = "";
+    $("#settingsModal .modal-sheet").scrollTop = 0;
+    if (detail) renderSettings();
   }
   async function loadMasterItems() {
     if (state.masterItems.length || !state.session) return;
@@ -901,11 +922,18 @@
     const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
     const groups = new Map();
     items.forEach((item) => { const category = item.category || "อื่นๆ"; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(item); });
-    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows]) => `<section class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
+    const mode = state.settingsSection;
+    $("#settingsCategoryNav").innerHTML = [...groups.keys()].map((category, index) => `<button data-settings-category="${index}" type="button">${escapeHtml(category)}</button>`).join("");
+    $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows], index) => `<section id="settings-category-${index}" class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
       const codes = masterItemCodes(item);
       const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ · หลัก ${escapeHtml(codes[0])}${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
-      return `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")} · ${escapeHtml(handlingSettingLabel(item))}</small><small>${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}</small></span><label class="setting-check"><input data-setting="inputMode" data-key="${item.key}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label><label class="setting-check"><input data-setting="defaultReturn" data-key="${item.key}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>คืน</small></label><span class="setting-actions"><button data-edit-item="${item.key}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button><button data-delete-item="${item.key}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button></span></div>`;
+      const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
+      const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
+      const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
+      const deleteControl = mode === "items" ? `<button data-delete-item="${escapeHtml(item.key)}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button>` : "";
+      return `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
+    $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
@@ -960,7 +988,13 @@
   }
   async function openEditItem(key, focusMapping = false) {
     const item = state.menu.find((row) => row.key === key); if (!item) return;
-    state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || ""; $("#editItemCategory").value = item.category || "อื่นๆ";
+    state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || "";
+    const category = item.category || "อื่นๆ";
+    const categories = [...new Set([...categoryNames(), category])];
+    $("#editItemCategory").innerHTML = categories.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("") + `<option value="__new__">＋ เพิ่มหมวดหมู่ใหม่</option>`;
+    $("#editItemCategory").value = category;
+    $("#editItemNewCategory").value = "";
+    $("#editItemNewCategoryField").classList.add("hidden");
     $("#editItemHandlingType").value = receiveHandlingType(item);
     $("#editItemActive").checked = item.active !== false;
     $("#editItemMappingSearch").value = focusMapping ? (item.name || item.displayName || "") : "";
@@ -977,7 +1011,9 @@
   }
   async function saveEditedItem() {
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
-    const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim(); const category = $("#editItemCategory").value.trim(); const handlingType = $("#editItemHandlingType").value;
+    const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim();
+    const category = $("#editItemCategory").value === "__new__" ? $("#editItemNewCategory").value.trim() : $("#editItemCategory").value.trim();
+    const handlingType = $("#editItemHandlingType").value;
     if (!name || !category) { $("#editItemError").textContent = "กรุณากรอกชื่อรายการและหมวดหมู่"; return; }
     const previous = { ...item };
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
@@ -1075,8 +1111,15 @@
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    $("#settingsBack").onclick = () => showSettingsSection("");
+    $$('[data-settings-section]').forEach((button) => { button.onclick = () => showSettingsSection(button.dataset.settingsSection); });
     $("#openMappingManager").onclick = openMappingManager; $("#mappingSearch").oninput = renderMappingList; $("#mappingFilter").onchange = renderMappingList; $("#applyExactMappings").onclick = applyExactMappings; $("#saveMappings").onclick = saveMappings; $("#copyStaffLink").onclick = copyStaffLink;
     $("#editItemMappingSearch").oninput = renderMasterItemOptions;
+    $("#editItemCategory").onchange = () => {
+      const isNew = $("#editItemCategory").value === "__new__";
+      $("#editItemNewCategoryField").classList.toggle("hidden", !isNew);
+      if (isNew) $("#editItemNewCategory").focus();
+    };
     $("#editItemMasterList").onchange = (event) => {
       const code = event.target.dataset.masterCode;
       if (!code) return;
