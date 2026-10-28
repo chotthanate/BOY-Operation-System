@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const script = fs.readFileSync(path.join(__dirname, '..', 'assets/js/bigc-v2.js'), 'utf8');
 const page = fs.readFileSync(path.join(__dirname, '..', 'bigc-v2.html'), 'utf8');
+const styles = fs.readFileSync(path.join(__dirname, '..', 'assets/css/bigc-v2.css'), 'utf8');
 const home = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const authGuard = fs.readFileSync(path.join(__dirname, '..', 'assets/js/boy-auth-guard.js'), 'utf8');
 
@@ -13,8 +14,17 @@ test('BigC settings select several stable master item IDs, not typed product nam
   assert.match(page, /bigc-master-mapping\.js/);
   assert.match(script, /target_sheet_name: "M_สินค้า"/);
   assert.match(script, /state\.editingMasterCodes = masterItemCodes\(item\)/);
-  assert.match(script, /withMasterItemCodes\(item, state\.editingMasterCodes\)/);
+  assert.match(script, /canonicalCodeFor\(state\.editingMasterCodes, state\.normalizedRowsByCode\)/);
+  assert.doesNotMatch(script, /data-master-primary/);
   assert.match(script, /masterItemIds: masterItemCodes\(item\)/);
+});
+
+test('settings and item editor use full-screen pages with a visible back action', () => {
+  assert.match(page, /id="settingsModal" class="modal page-surface hidden"/);
+  assert.match(page, /id="editItemModal" class="modal page-surface edit-page-surface hidden"/);
+  assert.match(page, /aria-label="กลับหน้าหลัก">← กลับ/);
+  assert.match(page, /aria-label="กลับหน้ารายการสินค้า">← กลับ/);
+  assert.match(styles, /\.page-surface \.modal-sheet\{[^}]*height:100dvh/);
 });
 
 test('BigC menu visibility and cost UUID are saved separately from the master ID', () => {

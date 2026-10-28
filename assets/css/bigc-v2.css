@@ -122,6 +122,15 @@ body.staff-view #settingsButton{display:none!important}
 
 /* BigC settings are a small hub rather than one long mixed list. Keep navigation
    inside the scrolling sheet so the close/back controls never leave the screen. */
+.page-surface{display:block;padding:0;background:#fff;backdrop-filter:none}
+.page-surface .modal-sheet{width:100%;max-width:100%;height:100dvh;max-height:100dvh;margin:0 auto;padding:16px max(16px,calc((100vw - 920px)/2));border-radius:0;box-shadow:none;overscroll-behavior:contain}
+.page-surface .settings-sheet{max-width:none}
+.page-surface .modal-sheet>header{top:-16px;margin-left:calc(-1 * max(16px,(100vw - 920px)/2));margin-right:calc(-1 * max(16px,(100vw - 920px)/2));padding-left:max(16px,calc((100vw - 920px)/2));padding-right:max(16px,calc((100vw - 920px)/2))}
+.page-surface .modal-sheet header>button{width:auto;min-width:76px;padding:0 12px;font-size:13px;font-weight:800;color:var(--green)}
+.page-surface .master-choice-list{max-height:42dvh}
+.edit-page-surface{z-index:110}
+.fruit-yield-source{grid-column:1/-1;padding:12px;border:1px solid #dce9e2;border-radius:12px;background:#f5faf7;color:var(--ink)}
+.fruit-yield-source strong{font-size:13px}.fruit-yield-source p{margin:7px 0;color:var(--green);font-size:13px;font-weight:800;line-height:1.5}.fruit-yield-source small{color:var(--muted);font-size:11px}
 .modal-sheet>header{position:sticky;top:-16px;z-index:8;margin:-16px -16px 12px;padding:16px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.97);backdrop-filter:blur(12px)}
 #settingsHome.hidden,#settingsDetail.hidden,#settingsBack.hidden,#openAddItem.hidden,#openFruitCostSettings.hidden{display:none}
 .edit-item-fields label.hidden{display:none}

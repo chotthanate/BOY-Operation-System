@@ -9,7 +9,7 @@
   const REQUESTED_VIEW = new URLSearchParams(location.search).get("view") === "staff" ? "staff" : "admin";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
-  const { codesFor: masterItemCodes, withCodes: withMasterItemCodes, matchesSearch: matchesMasterSearch } = globalThis.BOYBigCMasterMapping;
+  const { codesFor: masterItemCodes, withCodes: withMasterItemCodes, canonicalCodeFor, matchesSearch: matchesMasterSearch } = globalThis.BOYBigCMasterMapping;
   const number = (value) => Math.max(0, Number(value) || 0);
   const money = (value) => number(value).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -22,7 +22,7 @@
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [],
-    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], masterItems: [], normalizedItemsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
+    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -72,9 +72,10 @@
     state.cloudTimer = window.setTimeout(() => saveCloudDraft(draft), CLOUD_DRAFT_DELAY);
   }
   async function saveCloudDraft(draft = currentDraft()) {
-    if (!state.session || !navigator.onLine) return;
+    if (!state.session) { setSync("ต้องเชื่อม Supabase", "error"); return; }
+    if (!navigator.onLine) { setSync("ออฟไลน์ · รอส่งข้อมูล", "pending"); return; }
     const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_draft", { payload: draft });
-    if (error) { setSync("รอส่งข้อมูล", "error"); return; }
+    if (error) { setSync("รอส่งข้อมูล", "error"); notice(`ร่างเก็บไว้ในเครื่องแล้ว แต่ส่ง Supabase ไม่สำเร็จ: ${error.message}`, true); return; }
     setSync("บันทึกแล้ว", "ok");
   }
 
@@ -722,6 +723,7 @@
     state.masterItems = (catalogResult.data?.rows || []).filter((row) => row.item_id && row["เปิดใช้งาน"] !== false)
       .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id) }));
     state.normalizedItemsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row.id]));
+    state.normalizedRowsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row]));
     state.masterItemsByCode = new Map(state.masterItems.map((row) => [row.code, row]));
     state.sharedStockVariants = new Map();
     (normalizedResult.data || []).filter((row) => row.stock_target_item_id).forEach((row) => {
@@ -760,17 +762,15 @@
     });
     list.innerHTML = choices.length ? choices.map((row) => {
       const checked = selected.has(row.code);
-      const primary = state.editingMasterCodes[0] === row.code;
-      return `<div class="master-choice-row ${checked ? "selected" : ""}"><label><input data-master-code="${escapeHtml(row.code)}" type="checkbox" ${checked ? "checked" : ""}><span>${escapeHtml(row.name)} <small>· ${escapeHtml(row.code)}</small></span></label>${primary ? "<small>หลัก</small>" : checked ? `<button data-master-primary="${escapeHtml(row.code)}" type="button">ใช้เป็นหลัก</button>` : ""}</div>`;
+      return `<div class="master-choice-row ${checked ? "selected" : ""}"><label><input data-master-code="${escapeHtml(row.code)}" type="checkbox" ${checked ? "checked" : ""}><span>${escapeHtml(row.name)} <small>· ${escapeHtml(row.code)}</small></span></label></div>`;
     }).join("") : `<div class="empty-state">ไม่พบสินค้า</div>`;
     updateMappingStatus();
   }
   function updateMappingStatus() {
     const codes = state.editingMasterCodes;
-    const primary = codes[0];
-    $("#editItemMappingStatus").textContent = !primary ? "ยังไม่จับคู่สินค้า"
-      : codes.length === 1 ? `ผูกแล้ว 1 รายการ · หลัก ${primary}`
-      : `ผูกแล้ว ${codes.length} รายการ · รับของและคิดต้นทุนด้วยสินค้าหลัก ${primary}`;
+    const result = canonicalCodeFor(codes, state.normalizedRowsByCode);
+    $("#editItemMappingStatus").textContent = !codes.length ? "ยังไม่จับคู่สินค้า"
+      : result.error || `ผูกแล้ว ${codes.length} รายการ · ระบบใช้สต็อกรวม ${result.code} โดยอัตโนมัติ`;
   }
   function normalizedMatchName(value) {
     return String(value || "").normalize("NFKC").replace(/\([^)]*\)/g, "").replace(/[\s._\-/]+/g, "").toLowerCase();
@@ -801,7 +801,7 @@
       const code = codes[0] || "";
       const suggestion = !code ? exactMasterSuggestion(item) : null;
       const names = codes.map((value) => state.masterItemsByCode.get(value)?.name || value);
-      const current = code ? `หลัก ${names[0]}${names.length > 1 ? ` · ${names.slice(1, 3).join(" · ")}${names.length > 3 ? ` · +${names.length - 3}` : ""}` : ""}` : "ยังไม่จับคู่";
+      const current = code ? `ผูก ${names.join(" · ")}` : "ยังไม่จับคู่";
       return `<div class="mapping-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(item.unit || "จำนวน")}</small><small class="mapping-current">${escapeHtml(current)}</small>${suggestion ? `<small>ชื่อที่ตรงกัน: ${escapeHtml(suggestion.name)} · ${escapeHtml(suggestion.code)}</small>` : ""}</span><span class="mapping-actions">${suggestion ? `<button data-apply-map="${escapeHtml(item.key)}" data-map-code="${escapeHtml(suggestion.code)}" type="button">ใช้รายการแนะนำ</button>` : ""}<button data-map-edit="${escapeHtml(item.key)}" type="button">${code ? "แก้ไข" : "ค้นหา"}</button></span></div>`;
     }).join("") : `<div class="empty-state">ไม่พบรายการตามตัวกรอง</div>`;
     $$('[data-apply-map]').forEach((button) => { button.onclick = () => {
@@ -852,11 +852,14 @@
   function renderFruitCostExisting() {
     const itemId = $("#fruitCostRawItem").value;
     const month = $("#fruitCostMonth").value + "-01";
-    const rule = state.fruitCostRules.find((row) => row.received_item_id === itemId && row.effective_month === month);
     const weight = state.fruitWeights.find((row) => row.raw_item_id === itemId && row.effective_month === month);
-    $("#fruitCostYieldPercent").value = rule?.yield_ratio ? number(rule.yield_ratio) * 100 : "";
+    const item = state.fruitCostItems.find((row) => row.id === itemId);
+    const source = state.fruitYieldRows.find((row) => row.item_id === item?.code);
+    const values = source ? ["UW เนื้อ/ปั่น", "UW สกัด", "UW รวม"].filter((key) => source[key]).map((key) => `${key}: ${source[key]}`) : [];
+    $("#fruitCostYieldSource").textContent = !source ? "ยังไม่มี Yield ใน M_UW_สรุป — ต้นทุนผลไม้แปรรูปยังรอข้อมูล" :
+      `${values.join(" · ") || "ยังไม่มีค่า Yield"} · สถานะ: ${source["สถานะตรวจสอบ"] || "ไม่ระบุ"} (BigC ยังไม่เชื่อมค่านี้เข้าการคำนวณอัตโนมัติ)`;
     $("#fruitCostKgPerPiece").value = weight?.kg_per_piece ?? "";
-    $("#fruitCostSampleNote").value = rule?.yield_source_note || weight?.sample_note || "";
+    $("#fruitCostSampleNote").value = weight?.sample_note || "";
   }
   async function openFruitCostSettings() {
     $("#fruitCostError").textContent = "";
@@ -865,12 +868,17 @@
     if (!state.session) { $("#fruitCostError").textContent = "เชื่อมต่อบัญชีออนไลน์ก่อนตั้งค่าต้นทุน"; return; }
     loading("กำลังโหลดต้นทุนผลไม้");
     try {
-      const { data, error } = await state.client.schema("boy_central").rpc("get_bigc_fruit_cost_settings");
+      const [{ data, error }, sourceResult] = await Promise.all([
+        state.client.schema("boy_central").rpc("get_bigc_fruit_cost_settings"),
+        state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_UW_สรุป" })
+      ]);
       if (error) throw error;
       state.fruitCostItems = data?.items || [];
       state.fruitCostRules = data?.rules || [];
       state.fruitWeights = data?.weights || [];
+      state.fruitYieldRows = sourceResult.error ? [] : sourceResult.data?.rows || [];
       renderFruitCostItemOptions();
+      if (sourceResult.error) $("#fruitCostError").textContent = `อ่าน Yield จากข้อมูลกลางไม่ได้: ${sourceResult.error.message}`;
     } catch (error) {
       $("#fruitCostError").textContent = `โหลดการตั้งค่าต้นทุนไม่ได้: ${error.message}`;
     } finally { loading("", false); }
@@ -878,42 +886,24 @@
   async function saveFruitCost() {
     const itemId = $("#fruitCostRawItem").value;
     const kg = Number($("#fruitCostKgPerPiece").value);
-    const yieldPercent = Number($("#fruitCostYieldPercent").value);
     const month = $("#fruitCostMonth").value;
     const sampleNote = $("#fruitCostSampleNote").value.trim();
     const hasKg = Number.isFinite(kg) && kg > 0;
-    const hasYield = Number.isFinite(yieldPercent) && yieldPercent > 0 && yieldPercent <= 100;
-    if (!itemId || !month || (!hasKg && !hasYield) || !sampleNote) {
-      $("#fruitCostError").textContent = "เลือกผลไม้ เดือน กรอก Yield หรือน้ำหนักต่อลูก และระบุที่มาของตัวเลข"; return;
+    if (!itemId || !month || !hasKg || !sampleNote) {
+      $("#fruitCostError").textContent = "เลือกผลไม้ เดือน กรอกน้ำหนักต่อลูก และระบุที่มาของตัวเลข"; return;
     }
     loading("กำลังบันทึกต้นทุนผลไม้"); $("#fruitCostError").textContent = "";
     try {
-      const selected = state.fruitCostItems.find((item) => item.id === itemId);
-      const { error: ruleError } = await state.client.schema("boy_central").rpc("admin_save_bigc_interbranch_cost_rule", {
-        payload: {
-          received_item_id: itemId, raw_item_id: itemId, effective_month: `${month}-01`,
-          counted_by_piece: selected?.base_unit_code === "UNIT-013", yield_ratio: hasYield ? yieldPercent / 100 : null,
-          yield_source_note: hasYield ? sampleNote : null, note: "ผลไม้หลักตัวเดียว; รูปแบบรับของกำหนดใน BigC"
-        }
+      const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
+        payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
       });
-      if (ruleError) throw ruleError;
-      let affected = 0;
-      if (hasKg) {
-        const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
-          payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
-        });
-        if (error) throw error;
-        affected = Number(data?.workflows_requiring_reprocess || 0);
-      }
+      if (error) throw error;
+      const affected = Number(data?.workflows_requiring_reprocess || 0);
       const monthStart = `${month}-01`;
-      state.fruitCostRules = state.fruitCostRules.filter((row) => row.received_item_id !== itemId || row.effective_month !== monthStart);
-      state.fruitCostRules.push({ received_item_id: itemId, raw_item_id: itemId, effective_month: monthStart, yield_ratio: hasYield ? yieldPercent / 100 : null, yield_source_note: sampleNote });
-      if (hasKg) {
-        state.fruitWeights = state.fruitWeights.filter((row) => row.raw_item_id !== itemId || row.effective_month !== monthStart);
-        state.fruitWeights.push({ raw_item_id: itemId, effective_month: monthStart, kg_per_piece: kg, sample_note: sampleNote });
-      }
+      state.fruitWeights = state.fruitWeights.filter((row) => row.raw_item_id !== itemId || row.effective_month !== monthStart);
+      state.fruitWeights.push({ raw_item_id: itemId, effective_month: monthStart, kg_per_piece: kg, sample_note: sampleNote });
       $("#fruitCostModal").classList.add("hidden");
-      notice(affected > 0 ? `บันทึกแล้ว · ระบบคำนวณต้นทุนรายการเดิมให้อัตโนมัติ ${affected} รายการ` : "บันทึกการคำนวณต้นทุนแล้ว");
+      notice(affected > 0 ? `บันทึกแล้ว · ระบบคำนวณต้นทุนรายการเดิมให้อัตโนมัติ ${affected} รายการ` : "บันทึกน้ำหนักต่อลูกแล้ว · Yield ยังต้องเชื่อมกับข้อมูลกลาง");
     } catch (error) { $("#fruitCostError").textContent = `บันทึกไม่สำเร็จ: ${error.message}`; }
     finally { loading("", false); }
   }
@@ -926,7 +916,7 @@
     $("#settingsCategoryNav").innerHTML = [...groups.keys()].map((category, index) => `<button data-settings-category="${index}" type="button">${escapeHtml(category)}</button>`).join("");
     $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows], index) => `<section id="settings-category-${index}" class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
       const codes = masterItemCodes(item);
-      const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ · หลัก ${escapeHtml(codes[0])}${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
+      const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
       const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
@@ -1019,7 +1009,9 @@
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
     item.active = $("#editItemActive").checked;
-    Object.assign(item, withMasterItemCodes(item, state.editingMasterCodes));
+    const mapping = canonicalCodeFor(state.editingMasterCodes, state.normalizedRowsByCode);
+    if (mapping.error && state.editingMasterCodes.length) { $("#editItemError").textContent = mapping.error; return; }
+    Object.assign(item, withMasterItemCodes(item, mapping.code ? [mapping.code, ...state.editingMasterCodes] : [], mapping.code));
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
     try { await ensureMappedCatalogItems([item]); }
     catch (error) { Object.assign(item, previous); $("#editItemError").textContent = `จับคู่ไม่สำเร็จ: ${error.message}`; return; }
@@ -1125,12 +1117,6 @@
       if (!code) return;
       state.editingMasterCodes = event.target.checked
         ? [...state.editingMasterCodes, code] : state.editingMasterCodes.filter((value) => value !== code);
-      renderMasterItemOptions();
-    };
-    $("#editItemMasterList").onclick = (event) => {
-      const code = event.target.dataset.masterPrimary;
-      if (!code || !state.editingMasterCodes.includes(code)) return;
-      state.editingMasterCodes = [code, ...state.editingMasterCodes.filter((value) => value !== code)];
       renderMasterItemOptions();
     };
     $("#openFruitCostSettings").onclick = openFruitCostSettings;

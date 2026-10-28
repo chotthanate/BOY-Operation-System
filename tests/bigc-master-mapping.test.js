@@ -3,11 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { codesFor, withCodes, matchesSearch } = require('../assets/js/bigc-master-mapping.js');
+const { codesFor, withCodes, canonicalCodeFor, matchesSearch } = require('../assets/js/bigc-master-mapping.js');
 
 function appSettingsFunctions() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'assets/js/bigc-v2.js'), 'utf8');
-  const context = { location: { search: '' }, URLSearchParams, window: { addEventListener() {} }, BOYBigCMasterMapping: { codesFor, withCodes, matchesSearch } };
+  const context = { location: { search: '' }, URLSearchParams, window: { addEventListener() {} }, BOYBigCMasterMapping: { codesFor, withCodes, canonicalCodeFor, matchesSearch } };
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.__test = { settingsMenu, settingsPayload, settingsFingerprint };})();'), context);
   return context.__test;
 }
@@ -18,6 +18,18 @@ test('legacy single-item mapping becomes a one-item list without losing the prim
   assert.deepEqual(withCodes(legacy, codesFor(legacy)), {
     masterItemId: 'ITEM-100', masterItemIds: ['ITEM-100'], itemId: 'uuid-one'
   });
+});
+
+test('linked brands resolve to one central stock pool without selecting a primary brand', () => {
+  const items = new Map([
+    ['POOL', { id: 'pool-id', code: 'POOL' }],
+    ['BRAND-A', { id: 'a-id', code: 'BRAND-A', stock_target_item_id: 'pool-id' }],
+    ['BRAND-B', { id: 'b-id', code: 'BRAND-B', stock_target_item_id: 'pool-id' }],
+    ['OTHER', { id: 'other-id', code: 'OTHER' }]
+  ]);
+  assert.deepEqual(canonicalCodeFor(['BRAND-B', 'BRAND-A'], items), { code: 'POOL', error: '' });
+  assert.match(canonicalCodeFor(['BRAND-A', 'OTHER'], items).error, /ไม่ได้อยู่ในสต็อกรวมเดียวกัน/);
+  assert.deepEqual(canonicalCodeFor(['NEW'], items), { code: 'NEW', error: '' });
 });
 
 test('multiple links survive reload and keep one explicit primary item', () => {

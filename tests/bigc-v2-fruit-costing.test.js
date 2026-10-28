@@ -30,11 +30,11 @@ test('receipt lines persist both canonical master code and costing UUID', () => 
   assert.match(costingMigration, /'master_item_id',l\.master_item_id/);
 });
 
-test('admin can enter yield and optional average raw weight per piece', () => {
-  assert.match(page, /id="fruitCostYieldPercent"/);
+test('admin sees central yield as read-only and can record observed raw weight per piece', () => {
+  assert.match(page, /id="fruitCostYieldSource"/);
   assert.match(page, /id="fruitCostKgPerPiece"/);
-  assert.match(script, /admin_save_bigc_interbranch_cost_rule/);
-  assert.match(script, /yield_ratio: hasYield \? yieldPercent \/ 100 : null/);
+  assert.match(script, /target_sheet_name: "M_UW_สรุป"/);
+  assert.doesNotMatch(script, /id="fruitCostYieldPercent"/);
   assert.match(script, /admin_save_bigc_piece_weight/);
 });
 
