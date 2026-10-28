@@ -21,7 +21,7 @@
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [],
+    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
 
@@ -217,7 +217,13 @@
   }
   function cacheSettings(payload, pending = false) {
     localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(payload));
-    if (pending) localStorage.setItem(SETTINGS_PENDING_KEY, JSON.stringify(payload));
+    if (pending) {
+      const previous = readStoredJson(SETTINGS_PENDING_KEY);
+      localStorage.setItem(SETTINGS_PENDING_KEY, JSON.stringify({
+        ...payload,
+        _baseFingerprint: previous?._baseFingerprint || (state.context?.settings ? settingsFingerprint(state.context.settings) : null)
+      }));
+    }
   }
   async function uploadSettingsPayload(payload) {
     const cleanPayload = { menu_config: payload.menu_config || [], default_return_keys: payload.default_return_keys || [] };
@@ -236,7 +242,21 @@
     const pending = readStoredJson(SETTINGS_PENDING_KEY);
     if (!pending || !state.session || !navigator.onLine) return false;
     try {
+      const { data: current, error: readError } = await state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
+      if (readError) throw readError;
+      const cloudFingerprint = settingsFingerprint(current?.settings || {});
+      if (settingsFingerprint(pending) === cloudFingerprint) {
+        localStorage.removeItem(SETTINGS_PENDING_KEY);
+        state.settingsConflict = "";
+        return true;
+      }
+      if (!pending._baseFingerprint || pending._baseFingerprint !== cloudFingerprint) {
+        state.settingsConflict = "ข้อมูลตั้งค่าออนไลน์เปลี่ยนจากอีกเครื่องแล้ว ระบบเก็บฉบับในเครื่องไว้แต่ไม่ส่งทับ กรุณาตรวจรายการก่อนบันทึกใหม่";
+        if (!quiet) { setSync("การตั้งค่าต้องตรวจสอบ", "error"); notice(state.settingsConflict, true); }
+        return false;
+      }
       await uploadSettingsPayload(pending);
+      state.settingsConflict = "";
       if (!quiet) { setSync("ส่งการตั้งค่าแล้ว", "ok"); notice("ส่งการตั้งค่าที่ค้างไว้เรียบร้อย"); }
       return true;
     } catch (error) {
@@ -293,7 +313,7 @@
       applyAccessMode();
       const pending = (state.context.pending_sheet_sync || []).length;
       const settingsPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
-      setSync(settingsPending ? "การตั้งค่ารอส่ง" : pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", settingsPending || pending ? "pending" : "ok");
+      setSync(state.settingsConflict ? "การตั้งค่าต้องตรวจสอบ" : settingsPending ? "การตั้งค่ารอส่ง" : pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", state.settingsConflict ? "error" : settingsPending || pending ? "pending" : "ok");
     } catch (error) {
       const draft = readLocalDraft(); hydrateDraft(draft);
       if (!state.menu.length) state.menu = settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu());
@@ -413,7 +433,7 @@
       ? line.brand_allocations : [{ item_id: "", quantity: number(line.quantity) || 1 }];
     return `<div class="brand-allocations" data-brand-picker="${escapeHtml(key)}"><strong>ยี่ห้อที่ได้รับ</strong>${allocations.map((allocation, index) =>
       `<div class="brand-allocation-row"><select data-brand-choice="${escapeHtml(key)}" data-brand-index="${index}" aria-label="เลือกยี่ห้อที่รับ"><option value="">เลือกยี่ห้อ</option>${variants.map((variant) =>
-        `<option value="${escapeHtml(variant.id)}" ${allocation.item_id === variant.id ? "selected" : ""}>${escapeHtml(variant.name)}</option>`).join("")}</select><input data-brand-quantity="${escapeHtml(key)}" data-brand-index="${index}" type="number" inputmode="numeric" min="1" step="1" value="${number(allocation.quantity)}" aria-label="จำนวนแกลลอน"><button data-brand-remove="${escapeHtml(key)}" data-brand-index="${index}" type="button" aria-label="ลบยี่ห้อ">×</button></div>`).join("")}<button class="brand-add" data-brand-add="${escapeHtml(key)}" type="button">+ อีกยี่ห้อ</button></div>`;
+        `<option value="${escapeHtml(variant.id)}" ${allocation.item_id === variant.id ? "selected" : ""}>${escapeHtml(variant.name)}</option>`).join("")}</select><input data-brand-quantity="${escapeHtml(key)}" data-brand-index="${index}" type="number" inputmode="numeric" min="1" step="1" value="${number(allocation.quantity)}" aria-label="จำนวน${escapeHtml(item.unit || "หน่วย")}"><button data-brand-remove="${escapeHtml(key)}" data-brand-index="${index}" type="button" aria-label="ลบยี่ห้อ">×</button></div>`).join("")}<button class="brand-add" data-brand-add="${escapeHtml(key)}" type="button">+ อีกยี่ห้อ</button></div>`;
   }
 
   function renderDateDisplays() {
@@ -643,7 +663,7 @@
         }
         return !rows.length || total !== number(line.quantity);
       });
-      if (invalidBrand) { notice(`เลือกยี่ห้อและจำนวนแกลลอนให้ตรงกับที่รับจริง: ${invalidBrand.item_name}`, true); return false; }
+      if (invalidBrand) { notice(`เลือกยี่ห้อและจำนวน${findMenu(invalidBrand.line_key, invalidBrand).unit || "หน่วย"}ให้ตรงกับที่รับจริง: ${invalidBrand.item_name}`, true); return false; }
     }
     const payload = {
       workflow_type: type, business_date: type === "close_order" ? $("#orderDate").value : type === "receive" ? $("#receiveDate").value : $("#returnDate").value,
@@ -689,7 +709,7 @@
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
     showSettingsSection("");
     const hasPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
-    showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
+    showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : state.settingsConflict || "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
     renderSettings(); updateMappingSummary();
   }
   const SETTINGS_SECTIONS = {
