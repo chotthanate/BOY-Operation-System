@@ -32,6 +32,21 @@ test('linked brands resolve to one central stock pool without selecting a primar
   assert.deepEqual(canonicalCodeFor(['NEW'], items), { code: 'NEW', error: '' });
 });
 
+test('links multiple brands from the catalog when the normalized item read is incomplete', () => {
+  const catalog = new Map([
+    ['POOL', { code: 'POOL', stockTargetCode: '' }],
+    ['BRAND-A', { code: 'BRAND-A', stockTargetCode: 'POOL' }],
+    ['BRAND-B', { code: 'BRAND-B', stockTargetCode: 'POOL' }],
+    ['BRAND-C', { code: 'BRAND-C', stockTargetCode: 'POOL' }],
+    ['OTHER', { code: 'OTHER', stockTargetCode: '' }]
+  ]);
+  const partialItems = new Map([['BRAND-A', { id: 'a-id', code: 'BRAND-A', stock_target_item_id: 'pool-id' }]]);
+  assert.deepEqual(canonicalCodeFor(['BRAND-A', 'BRAND-B', 'BRAND-C'], partialItems, catalog), { code: 'POOL', error: '' });
+  assert.deepEqual(canonicalCodeFor(['POOL', 'BRAND-B'], new Map(), catalog), { code: 'POOL', error: '' });
+  assert.match(canonicalCodeFor(['BRAND-A', 'OTHER'], new Map(), catalog).error, /ไม่ได้อยู่ในสต็อกรวมเดียวกัน/);
+  assert.match(canonicalCodeFor(['BRAND-A', 'MISSING'], new Map(), catalog).error, /ข้อมูลการจับคู่สินค้ากลางไม่ครบ/);
+});
+
 test('multiple links survive reload and keep one explicit primary item', () => {
   const linked = withCodes({}, ['ITEM-100', 'ITEM-200', 'ITEM-100'], 'ITEM-200');
   assert.deepEqual(linked.masterItemIds, ['ITEM-200', 'ITEM-100']);

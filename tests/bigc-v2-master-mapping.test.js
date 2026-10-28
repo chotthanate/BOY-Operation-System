@@ -14,7 +14,7 @@ test('BigC settings select several stable master item IDs, not typed product nam
   assert.match(page, /bigc-master-mapping\.js/);
   assert.match(script, /target_sheet_name: "M_สินค้า"/);
   assert.match(script, /state\.editingMasterCodes = masterItemCodes\(item\)/);
-  assert.match(script, /canonicalCodeFor\(state\.editingMasterCodes, state\.normalizedRowsByCode\)/);
+  assert.match(script, /canonicalCodeFor\(state\.editingMasterCodes, state\.normalizedRowsByCode, state\.masterItemsByCode\)/);
   assert.doesNotMatch(script, /data-master-primary/);
   assert.match(script, /masterItemIds: masterItemCodes\(item\)/);
 });

@@ -741,7 +741,8 @@
     if (catalogResult.error) throw catalogResult.error;
     if (normalizedResult.error) throw normalizedResult.error;
     state.masterItems = (catalogResult.data?.rows || []).filter((row) => row.item_id && row["เปิดใช้งาน"] !== false)
-      .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id) }));
+      .map((row) => ({ code: String(row.item_id), name: String(row["ชื่อสินค้า"] || row.item_id),
+        stockTargetCode: String(row.stock_target_item_id || "").trim() }));
     state.normalizedItemsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row.id]));
     state.normalizedRowsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row]));
     state.masterItemsByCode = new Map(state.masterItems.map((row) => [row.code, row]));
@@ -788,7 +789,7 @@
   }
   function updateMappingStatus() {
     const codes = state.editingMasterCodes;
-    const result = canonicalCodeFor(codes, state.normalizedRowsByCode);
+    const result = canonicalCodeFor(codes, state.normalizedRowsByCode, state.masterItemsByCode);
     $("#editItemMappingStatus").textContent = !codes.length ? "ยังไม่จับคู่สินค้า"
       : result.error || `ผูกแล้ว ${codes.length} รายการ · ระบบใช้สต็อกรวม ${result.code} โดยอัตโนมัติ`;
   }
@@ -1029,7 +1030,7 @@
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
     item.active = $("#editItemActive").checked;
-    const mapping = canonicalCodeFor(state.editingMasterCodes, state.normalizedRowsByCode);
+    const mapping = canonicalCodeFor(state.editingMasterCodes, state.normalizedRowsByCode, state.masterItemsByCode);
     if (mapping.error && state.editingMasterCodes.length) { $("#editItemError").textContent = mapping.error; return; }
     Object.assign(item, withMasterItemCodes(item, mapping.code ? [mapping.code, ...state.editingMasterCodes] : [], mapping.code));
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;

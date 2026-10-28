@@ -19,18 +19,32 @@
     return { ...item, masterItemIds: ordered, masterItemId: selectedPrimary || null };
   }
 
-  function canonicalCodeFor(values, itemsByCode) {
+  function canonicalCodeFor(values, itemsByCode, catalogByCode = new Map()) {
     const codes = uniqueCodes(values);
     if (!codes.length) return { code: "", error: "" };
-    if (codes.length === 1 && !itemsByCode.has(codes[0])) return { code: codes[0], error: "" };
-    const targets = codes.map((code) => {
+    const normalizedTargets = codes.map((code) => {
       const item = itemsByCode.get(code);
       return item?.stock_target_item_id || item?.id || null;
     });
-    if (targets.some((id) => !id)) return { code: "", error: "โหลดข้อมูลสินค้ากลางไม่ครบ กรุณาเชื่อมต่อแล้วลองใหม่" };
-    if (new Set(targets).size !== 1) return { code: "", error: "สินค้าที่เลือกไม่ได้อยู่ในสต็อกรวมเดียวกัน กรุณาจัดกลุ่มในข้อมูลกลางก่อน" };
-    const target = [...itemsByCode.values()].find((item) => item.id === targets[0]);
-    return target ? { code: target.code, error: "" } : { code: "", error: "ไม่พบรายการสต็อกรวมในข้อมูลกลาง" };
+    if (normalizedTargets.every(Boolean)) {
+      if (new Set(normalizedTargets).size !== 1) return { code: "", error: "สินค้าที่เลือกไม่ได้อยู่ในสต็อกรวมเดียวกัน กรุณาจัดกลุ่มในข้อมูลกลางก่อน" };
+      const target = [...itemsByCode.values()].find((item) => item.id === normalizedTargets[0]);
+      if (target) return { code: target.code, error: "" };
+    }
+    // Catalog mappings are enough to link variants even when the normalized
+    // inventory read is incomplete in this browser. The stock write still uses
+    // the canonical item UUID resolved separately before settings are saved.
+    const catalogTargets = codes.map((code) => {
+      const catalog = catalogByCode.get(code);
+      return catalog ? String(catalog.stockTargetCode || catalog.stock_target_item_id || code).trim() : "";
+    });
+    if (catalogTargets.every(Boolean)) {
+      if (new Set(catalogTargets).size !== 1) return { code: "", error: "สินค้าที่เลือกไม่ได้อยู่ในสต็อกรวมเดียวกัน กรุณาจัดกลุ่มในข้อมูลกลางก่อน" };
+      const targetCode = catalogTargets[0];
+      if (catalogByCode.has(targetCode) || itemsByCode.has(targetCode)) return { code: targetCode, error: "" };
+    }
+    if (codes.length === 1 && !itemsByCode.has(codes[0]) && !catalogByCode.has(codes[0])) return { code: codes[0], error: "" };
+    return { code: "", error: "ข้อมูลการจับคู่สินค้ากลางไม่ครบ กรุณาโหลดรายการใหม่" };
   }
 
   function matchesSearch(item, query) {
