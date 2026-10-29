@@ -16,7 +16,7 @@
       if (String(row.item_id) === String(selectedId)) return true;
       if (search) return text(`${row["ชื่อสินค้า"]} ${row.item_id}`).includes(search);
       return showAll || (sameSubcategory ? String(row.subcategory_id) === String(subcategoryId)
-        : !categoryId || String(row.category_id) === String(categoryId));
+        : Boolean(categoryId) && String(row.category_id) === String(categoryId));
     });
     visible.sort((a, b) => {
       const rank = (row) => String(row.item_id) === String(selectedId) ? -1

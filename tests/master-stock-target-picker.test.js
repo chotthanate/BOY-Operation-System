@@ -23,6 +23,13 @@ test('search reaches all categories and an existing cross-category target remain
   assert.deepEqual(candidates(rows, { categoryId: 'fruit', subcategoryId: 'frozen', selectedId: 'BREAD' }).map(row => row.item_id), ['BREAD', 'POOL', 'OTHER']);
 });
 
+test('missing or unmatched category does not dump hundreds of unrelated targets', () => {
+  assert.deepEqual(candidates(rows, {}).map(row => row.item_id), []);
+  assert.deepEqual(candidates(rows, { categoryId: 'unknown' }).map(row => row.item_id), []);
+  assert.deepEqual(candidates(rows, { query: 'มัลเบอร์รี' }).map(row => row.item_id), ['POOL']);
+  assert.equal(candidates(rows, { showAll: true }).length, 3);
+});
+
 test('master item editor includes live stock target search and an all-categories control', () => {
   assert.match(page, /id="stockTargetSearch"/);
   assert.match(page, /id="stockTargetShowAll"/);
