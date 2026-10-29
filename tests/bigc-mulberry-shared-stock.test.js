@@ -18,6 +18,8 @@ test('three 1 kg mulberry brands are grouped as one bag stock item', () => {
 test('BigC keeps the pooled ID for transfer and requires actual brand split at receipt', () => {
   assert.match(app, /function sharedStockOptions/);
   assert.match(app, /function renderBrandAllocations/);
+  assert.match(app, /await loadMasterItems\(\)/);
+  assert.match(app, /ข้อมูลยี่ห้อของ \$\{incompleteBrands\.item_name\} โหลดไม่ครบ/);
   assert.match(app, /เลือกยี่ห้อและจำนวน\$\{findMenu\(invalidBrand\.line_key/);
 });
 

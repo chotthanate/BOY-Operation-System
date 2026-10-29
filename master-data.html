@@ -83,6 +83,14 @@
   <div class="sheet tool-dialog hidden" id="healthDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>สถานะระบบ</h2><button class="close" data-close-dialog="healthDialog" type="button" aria-label="ปิด">×</button></div><div class="tool-list" id="healthList"></div><div class="tool-list" id="pendingList"></div></section></div>
   <div class="sheet tool-dialog hidden" id="importDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><h2>ตรวจข้อมูลนำเข้า</h2><button class="close" data-close-dialog="importDialog" type="button" aria-label="ปิด">×</button></div><div class="import-summary" id="importSummary"></div><div class="preview-wrap"><table class="preview-table"><thead id="importHead"></thead><tbody id="importBody"></tbody></table></div><div class="actions"><button class="secondary" data-close-dialog="importDialog" type="button">ยกเลิก</button><button class="primary" id="confirmImport" type="button">นำเข้าข้อมูล</button></div></section></div>
   <div class="sheet tool-dialog bulk-store-dialog hidden" id="bulkStoreDialog" role="dialog" aria-modal="true"><section class="dialog"><div class="dialog-head"><div><small id="bulkEntityLabel">ข้อมูลกลาง</small><h2>กำหนดหลายรายการ</h2></div><button class="close" data-close-dialog="bulkStoreDialog" type="button" aria-label="ปิด">×</button></div><div class="bulk-store-controls"><label>กำหนดหัวข้อ<select id="bulkField"></select></label><input id="bulkStoreSearch" type="search" placeholder="ค้นหารายการ"><select id="bulkStoreCategory"><option value="">ทุกหมวดหมู่</option></select></div><p class="bulk-hint" id="bulkHint"></p><div class="bulk-store-wrap"><table class="bulk-store-table"><thead id="bulkStoreHead"></thead><tbody id="bulkStoreRows"></tbody></table></div><div class="actions bulk-store-actions"><span class="bulk-store-summary" id="bulkStoreSummary"></span><button class="secondary" data-close-dialog="bulkStoreDialog" type="button">ยกเลิก</button><button class="primary" id="saveBulkStores" type="button">บันทึกการเปลี่ยนแปลง</button></div></section></div>
+  <style>
+    .stock-target-picker{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+    .stock-target-picker input{min-width:0}
+    .stock-target-picker button{border:1px solid var(--line);border-radius:12px;background:var(--soft);color:var(--green2);padding:9px 12px;font-size:.78rem;font-weight:800}
+    .stock-target-hint{font-size:.7rem;color:var(--muted)}
+    @media(max-width:520px){.stock-target-picker{grid-template-columns:1fr}.stock-target-picker button{justify-self:start}}
+  </style>
+  <script src="assets/js/boy-stock-target-picker.js?v=20261029-1"></script>
   <script>
     const WEB_APP_URL='https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec';
     const ENTITY_GROUPS=[
@@ -228,7 +236,27 @@
       item.addEventListener('change',()=>{if(lockedBase){item.value=editing.item_id;update();return}same.checked=unit.value?unit.value===itemBaseUnit(item.value):!hasBaseLink();alternativeUnit=same.checked?'':unit.value;rate.value=same.checked?'1':'';alternativeRate='';update()});
       unit.addEventListener('change',()=>{alternativeUnit=unit.value;update()});rate.addEventListener('input',()=>{alternativeRate=rate.value;update()});update();
     }
-    function wireConditionalFields(){if(current==='itemUnits')wireItemUnitEditor();const wage=$('#form [name="รูปแบบค่าแรง"]');if(wage){const update=()=>{const monthly=wage.value==='รายเดือน';$('#form [data-field="ค่าแรงต่อวัน"]')?.classList.toggle('hidden-field',monthly);$('#form [data-field="ค่าแรงต่อเดือน"]')?.classList.toggle('hidden-field',!monthly)};wage.onchange=update;update()}const main=$('#form [name="category_id"]'),mainName=$('#form [name="ชื่อประเภทหลัก"]');if(current==='categories'&&main&&mainName){const field=mainName.closest('.field');const update=()=>field.classList.toggle('hidden-field',main.value!=='__new__');main.onchange=update;update()}if(current==='items'){const mode=$('#form [name="รูปแบบสต็อก"]'),target=$('#form [name="stock_target_item_id"]');if(mode){const legacyTracked=[true,'TRUE','true',1,'1'].includes(editing?.['ติดตามสต็อก']);if(!mode.value)mode.value=editing?(editing.stock_target_item_id?'รวมเข้ารายการอื่น':legacyTracked?'นับเป็นรายการนี้':'ไม่เก็บสต็อก'):'ไม่เก็บสต็อก';const update=()=>target?.closest('.field')?.classList.toggle('hidden-field',mode.value!=='รวมเข้ารายการอื่น');mode.onchange=update;update()}}}
+    function wireStockTargetPicker(){
+      const target=$('#form [name="stock_target_item_id"]');if(!target)return;
+      const field=target.closest('.field'),main=$('#form [name="category_id"]'),sub=$('#form [name="subcategory_id"]');
+      target.insertAdjacentHTML('beforebegin','<div class="stock-target-picker"><input type="search" id="stockTargetSearch" placeholder="ค้นหาชื่อหรือรหัสสต็อกกลางทุกหมวด" aria-label="ค้นหาสต็อกกลาง"><button type="button" id="stockTargetShowAll">แสดงทุกหมวด</button></div>');
+      target.insertAdjacentHTML('afterend','<small class="stock-target-hint" id="stockTargetHint"></small>');
+      const search=$('#stockTargetSearch'),all=$('#stockTargetShowAll'),hint=$('#stockTargetHint');let showAll=false;
+      const render=()=>{
+        const selectedId=target.value;
+        const rows=window.BOYStockTargetPicker.candidates(referenceCache.items?.rows||catalog.rows,{
+          currentId:editing?.item_id||'',selectedId,categoryId:main?.value||'',subcategoryId:sub?.value||'',query:search.value,showAll
+        });
+        target.innerHTML='<option value="">— เลือกสต็อกกลาง —</option>'+rows.map(row=>`<option value="${esc(row.item_id)}">${esc(row['ชื่อสินค้า']||row.item_id)} · ${esc(row.item_id)}</option>`).join('');
+        target.value=selectedId;
+        hint.textContent=rows.length?`พบ ${rows.length} รายการ · แสดงเฉพาะรายการที่นับสต็อกเอง${search.value?' · ค้นหาทุกหมวด':showAll?' · ทุกหมวด':' · แนะนำจากหมวดเดียวกัน'}`:'ไม่พบสต็อกกลางในหมวดนี้ ลองค้นชื่อหรือกดแสดงทุกหมวด';
+        all.textContent=showAll?'แสดงรายการแนะนำ':'แสดงทุกหมวด';
+      };
+      search.addEventListener('input',render);all.addEventListener('click',()=>{showAll=!showAll;render()});
+      main?.addEventListener('change',render);sub?.addEventListener('change',render);
+      field.querySelector('label').textContent='รวมยอดเข้าสต็อกรายการ';render();
+    }
+    function wireConditionalFields(){if(current==='itemUnits')wireItemUnitEditor();const wage=$('#form [name="รูปแบบค่าแรง"]');if(wage){const update=()=>{const monthly=wage.value==='รายเดือน';$('#form [data-field="ค่าแรงต่อวัน"]')?.classList.toggle('hidden-field',monthly);$('#form [data-field="ค่าแรงต่อเดือน"]')?.classList.toggle('hidden-field',!monthly)};wage.onchange=update;update()}const main=$('#form [name="category_id"]'),mainName=$('#form [name="ชื่อประเภทหลัก"]');if(current==='categories'&&main&&mainName){const field=mainName.closest('.field');const update=()=>field.classList.toggle('hidden-field',main.value!=='__new__');main.onchange=update;update()}if(current==='items'){const mode=$('#form [name="รูปแบบสต็อก"]'),target=$('#form [name="stock_target_item_id"]');if(mode){const legacyTracked=[true,'TRUE','true',1,'1'].includes(editing?.['ติดตามสต็อก']);if(!mode.value)mode.value=editing?(editing.stock_target_item_id?'รวมเข้ารายการอื่น':legacyTracked?'นับเป็นรายการนี้':'ไม่เก็บสต็อก'):'ไม่เก็บสต็อก';const update=()=>target?.closest('.field')?.classList.toggle('hidden-field',mode.value!=='รวมเข้ารายการอื่น');mode.onchange=update;update();wireStockTargetPicker()}}}
     function relationButton(entity,rowNumber,label='แก้ไข'){return `<button class="compact-button" type="button" data-related-entity="${entity}" data-related-row="${rowNumber||''}">${label}</button>`}
     function relationEmpty(text){return `<div class="empty-mini">${esc(text)}</div>`}
     function branchCode(row){return String(row?.['รหัสสาขา']||row?.branch_id||'').toUpperCase()}

@@ -283,7 +283,7 @@
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
       await loadAccess();
-      await loadMasterItems();
+      await loadMasterItems(true);
       const localSettings = readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY);
       const cloudHasMenu = Array.isArray(state.context.settings?.menu_config) && state.context.settings.menu_config.length > 0;
       const localHasMenu = Array.isArray(localSettings?.menu_config) && localSettings.menu_config.length > 0;
@@ -426,8 +426,13 @@
   function sharedStockOptions(item, line) {
     return state.sharedStockVariants.get(item.itemId || item.item_id || line.item_id) || [];
   }
+  function expectedBrandCount(item) {
+    const codes = masterItemCodes(item);
+    return codes.length > 1 && (item.itemId || item.item_id) ? codes.length - 1 : 0;
+  }
   function renderBrandAllocations(item, line, key) {
     const variants = sharedStockOptions(item, line);
+    if (variants.length < expectedBrandCount(item)) return `<div class="brand-allocations brand-warning" role="alert">ข้อมูลยี่ห้อโหลดไม่ครบ กด “อัปเดตข้อมูล” ก่อนรับรายการนี้</div>`;
     if (!variants.length) return "";
     const allocations = Array.isArray(line.brand_allocations) && line.brand_allocations.length
       ? line.brand_allocations : [{ item_id: "", quantity: number(line.quantity) || 1 }];
@@ -650,6 +655,11 @@
       if (invalidPiece) { notice(`จำนวนลูกของ ${invalidPiece.item_name} ต้องเป็นจำนวนเต็ม`, true); return false; }
       const missingWeight = lines.find((line) => needsActualWeight(findMenu(line.line_key, line)) && number(line.actual_weight_kg) <= 0);
       if (missingWeight) { notice(`กรอกน้ำหนักจริงของ ${missingWeight.item_name} ก่อนบันทึก`, true); return false; }
+      const incompleteBrands = lines.find((line) => {
+        const item = findMenu(line.line_key, line);
+        return sharedStockOptions(item, line).length < expectedBrandCount(item);
+      });
+      if (incompleteBrands) { notice(`ข้อมูลยี่ห้อของ ${incompleteBrands.item_name} โหลดไม่ครบ กด “อัปเดตข้อมูล” ก่อนบันทึก`, true); return false; }
       const invalidBrand = lines.find((line) => {
         const item = findMenu(line.line_key, line);
         const variants = sharedStockOptions(item, line);
@@ -732,8 +742,8 @@
     $("#settingsModal .modal-sheet").scrollTop = 0;
     if (detail) renderSettings();
   }
-  async function loadMasterItems() {
-    if (state.masterItems.length || !state.session) return;
+  async function loadMasterItems(force = false) {
+    if ((!force && state.masterItems.length) || !state.session) return;
     const [catalogResult, normalizedResult] = await Promise.all([
       state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_สินค้า" }),
       state.client.schema("boy_central").from("items").select("id,code,name,stock_target_item_id,active").eq("active", true).limit(1000)

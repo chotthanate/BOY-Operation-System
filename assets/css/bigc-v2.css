@@ -51,6 +51,7 @@ html,body{width:100%;max-width:100%;overflow-x:hidden}
 .order-card .qty-control input{width:42px;height:38px;border:0;background:transparent;color:#159354;font-size:20px;font-weight:900;pointer-events:auto}
 .item-row.swiped .item-row-inner{transform:translateX(-90px)!important}
 .brand-allocations{position:relative;z-index:2;display:grid;gap:7px;padding:0 10px 10px 42px;background:#fff}.brand-allocations>strong{font-size:11px;color:var(--muted)}.brand-allocation-row{display:grid;grid-template-columns:minmax(0,1fr) 74px 34px;gap:6px}.brand-allocation-row select,.brand-allocation-row input{min-width:0;width:100%;height:40px;padding:0 8px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:16px}.brand-allocation-row button{border:0;border-radius:10px;background:#f7ede9;color:var(--danger);font-size:20px}.brand-add{justify-self:start;border:0;background:transparent;color:var(--green);font-size:12px;font-weight:800;padding:5px 0}
+.brand-warning{color:var(--danger);font-size:12px;font-weight:800}
 .swipe-delete{touch-action:manipulation}
 
 @media(max-width:600px){
