@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC · โหมดทดลอง</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-7">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-9">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -19,7 +19,7 @@
       <span><strong>BigC · ทดลอง</strong><small id="branchModeLabel">โหมดทดลอง</small></span>
     </a>
     <div class="header-actions">
-      <a class="text-button demo-link" href="bigc-v2.html?view=admin&amp;online=1&amp;v=20261101-8">ใช้งานจริง</a>
+      <a class="text-button demo-link" href="bigc-v2.html?view=admin&amp;online=1&amp;v=20261101-9">ใช้งานจริง</a>
       <span id="syncBadge" class="sync-badge pending">กำลังโหลด</span>
       <button id="refreshButton" class="icon-button" type="button" aria-label="อัปเดตข้อมูล">↻</button>
       <button id="staffSortButton" class="icon-button" type="button" aria-label="จัดลำดับรายการ" hidden>⇅</button>
@@ -38,6 +38,7 @@
 
     <section id="panel-close" class="workflow-panel active">
       <div class="panel-date"><span>วันที่สั่งของ</span><label class="date-trigger"><strong data-date-display="orderDate">—</strong><b>▾</b><input id="orderDate" type="date" aria-label="วันที่สั่งของ"></label></div>
+      <article class="card order-history-card"><details id="orderHistoryDetails"><summary id="orderHistorySummary">ประวัติการสั่งของ</summary><div id="orderHistoryContent"></div></details></article>
       <article class="card">
         <div class="card-heading"><div><small>สำหรับวันพรุ่งนี้</small><h2>รายการสั่งของ</h2></div><button class="text-button" data-clear="order" type="button">ล้าง</button></div>
         <div class="search-row"><input id="orderSearch" type="search" placeholder="ค้นหารายการ"><span id="orderCount">0 รายการ</span></div>
@@ -78,6 +79,7 @@
 
     <p id="pageNotice" class="page-notice" role="status"></p>
   </main>
+  <div id="actionToast" class="action-toast hidden" role="status" aria-live="polite"></div>
 
   <div id="pickerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
     <div class="modal-sheet compact-sheet">
@@ -232,7 +234,7 @@
   
   
   <script src="assets/js/bigc-master-mapping.js?v=20261028-2"></script>
-  <script src="assets/js/bigc-demo-store.js?v=20261101-7"></script>
-  <script src="assets/js/bigc-v2.js?v=20261101-8"></script>
+  <script src="assets/js/bigc-demo-store.js?v=20261101-9"></script>
+  <script src="assets/js/bigc-v2.js?v=20261101-9"></script>
 </body>
 </html>

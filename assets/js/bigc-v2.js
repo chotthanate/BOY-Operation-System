@@ -23,8 +23,8 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), selectingSettings: false, deletingSettings: false,
-    order: {}, receive: {}, returns: {}, receiveHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
-    cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
+    order: {}, receive: {}, returns: {}, receiveHistory: [], orderHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
+    cloudTimer: 0, cloudDraftPromise: null, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
 
@@ -72,15 +72,15 @@
     localStorage.setItem(draftKey("returns", draft.dates.returns), JSON.stringify({ savedAt, returns: state.returns, revenue: { cash: $("#cashAmount").value, transfer: $("#transferAmount").value, thai: $("#thaiAmount").value } }));
     setSync("บันทึกในเครื่องแล้ว", "pending");
     window.clearTimeout(state.cloudTimer);
-    state.cloudTimer = window.setTimeout(() => saveCloudDraft(draft), CLOUD_DRAFT_DELAY);
+    state.cloudTimer = window.setTimeout(() => { state.cloudDraftPromise = saveCloudDraft(draft); }, CLOUD_DRAFT_DELAY);
   }
   async function saveCloudDraft(draft = currentDraft()) {
-    if (DEMO_MODE) return;
-    if (!state.session) { setSync("ต้องเชื่อม Supabase", "error"); return; }
-    if (!navigator.onLine) { setSync("ออฟไลน์ · รอส่งข้อมูล", "pending"); return; }
+    if (DEMO_MODE) return true;
+    if (!state.session) { setSync("ต้องเชื่อม Supabase", "error"); return false; }
+    if (!navigator.onLine) { setSync("ออฟไลน์ · รอส่งข้อมูล", "pending"); return false; }
     const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_draft", { payload: draft });
-    if (error) { setSync("รอส่งข้อมูล", "error"); notice(`ร่างเก็บไว้ในเครื่องแล้ว แต่ส่ง Supabase ไม่สำเร็จ: ${error.message}`, true); return; }
-    setSync("บันทึกแล้ว", "ok");
+    if (error) { setSync("รอส่งข้อมูล", "error"); notice(`ร่างเก็บไว้ในเครื่องแล้ว แต่ส่ง Supabase ไม่สำเร็จ: ${error.message}`, true); return false; }
+    setSync("บันทึกแล้ว", "ok"); return true;
   }
 
   function setSync(text, tone = "pending") {
@@ -90,6 +90,23 @@
   }
   function notice(text, isError = false) {
     const box = $("#pageNotice"); box.textContent = text || ""; box.classList.toggle("error", isError);
+  }
+  function showActionToast(message, tone = "ok") {
+    const toast = $("#actionToast");
+    toast.textContent = message;
+    toast.className = `action-toast ${tone === "ok" ? "" : tone}`;
+    window.clearTimeout(showActionToast.timer);
+    showActionToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 9000);
+  }
+  function orderSubmissionKey(date) { return `${STORAGE_PREFIX}order-submission:${date}`; }
+  function submissionIdFor(date, lines) {
+    const fingerprint = JSON.stringify(lines);
+    let saved;
+    try { saved = JSON.parse(localStorage.getItem(orderSubmissionKey(date)) || "null"); } catch (_) { /* create a fresh ID */ }
+    if (saved?.fingerprint === fingerprint && saved.id) return saved.id;
+    const id = crypto.randomUUID();
+    localStorage.setItem(orderSubmissionKey(date), JSON.stringify({ id, fingerprint }));
+    return id;
   }
   function showSettingsConnection(visible, message = "เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง") {
     const warning = $("#settingsSyncWarning");
@@ -277,8 +294,8 @@
   }
 
   async function loadPage() {
-    if (DEMO_MODE) { loadDemoPage(); return; }
-    state.receiveHistory = null;
+    if (DEMO_MODE) { loadDemoPage(); return true; }
+    state.receiveHistory = null; state.orderHistory = null;
     loading("กำลังโหลดข้อมูล"); notice("");
     try {
       await flushPendingSettings(true);
@@ -291,6 +308,8 @@
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
       const historyResult = await state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: dates.receive });
       state.receiveHistory = historyResult.error ? null : historyResult.data || [];
+      const orderHistoryResult = await state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 });
+      state.orderHistory = orderHistoryResult.error ? null : orderHistoryResult.data || [];
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
       await loadAccess();
@@ -325,10 +344,12 @@
       const pending = (state.context.pending_sheet_sync || []).length;
       const settingsPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
       setSync(state.settingsConflict ? "การตั้งค่าต้องตรวจสอบ" : settingsPending ? "การตั้งค่ารอส่ง" : pending ? `รอส่งชีต ${pending}` : "ข้อมูลพร้อม", state.settingsConflict ? "error" : settingsPending || pending ? "pending" : "ok");
+      return true;
     } catch (error) {
       const draft = readLocalDraft(); hydrateDraft(draft);
       if (!state.menu.length) state.menu = settingsMenu(readStoredJson(SETTINGS_PENDING_KEY) || readStoredJson(SETTINGS_CACHE_KEY), await loadLegacyMenu());
       renderAll(); setSync("ใช้งานในเครื่อง", "error"); notice(`โหลดฐานข้อมูลกลางไม่สำเร็จ: ${error.message}`, true);
+      return false;
     } finally { loading("", false); }
   }
 
@@ -343,9 +364,6 @@
     const close = workflows.find((row) => row.workflow_type === "close_order");
     const receive = workflows.find((row) => row.workflow_type === "receive");
     const returned = workflows.find((row) => row.workflow_type === "return");
-    if (close && !Object.keys(state.order).length) {
-      state.order = Object.fromEntries((close.lines || []).map((line) => [line.line_key, number(line.quantity)]));
-    }
     if (returned) {
       if (!Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
       if (!$("#cashAmount").value && !$("#transferAmount").value && !$("#thaiAmount").value) {
@@ -470,7 +488,7 @@
       const [year, month, day] = value.split("-"); label.textContent = `${day}/${month}/${Number(year) + 543}`;
     });
   }
-  function renderAll() { renderDateDisplays(); renderRevenue(); renderOrder(); renderReceive(); renderReturns(); updateCartBar(); }
+  function renderAll() { renderDateDisplays(); renderRevenue(); renderOrder(); renderOrderHistory(); renderReceive(); renderReturns(); updateCartBar(); }
   function renderRevenue() {
     $("#revenueTotal").textContent = money(number($("#cashAmount").value) + number($("#transferAmount").value) + number($("#thaiAmount").value));
   }
@@ -537,6 +555,26 @@
         return `<details><summary>${batch.is_legacy ? "ข้อมูลเดิม · ไม่ทราบจำนวนรอบ" : `รอบที่ ${batch.round_number} · ${escapeHtml(time)} น.`}</summary>${rows(batch.lines || [])}</details>`;
       }).join("")}</div>` : '<p class="page-notice">ยังไม่มีรายการรับในวันที่เลือก</p>';
   }
+  function renderOrderHistory() {
+    const rows = state.orderHistory;
+    if (!rows) {
+      $("#orderHistorySummary").textContent = "ประวัติการสั่งของ · โหลดไม่สำเร็จ";
+      $("#orderHistoryContent").innerHTML = '<p class="page-notice error">กดอัปเดตข้อมูลเพื่อลองอีกครั้ง</p>';
+      return;
+    }
+    $("#orderHistorySummary").textContent = `ประวัติการสั่งของ · ${rows.length} ครั้งล่าสุด`;
+    $("#orderHistoryContent").innerHTML = rows.length ? rows.map((order) => {
+      const time = order.submitted_at ? new Date(order.submitted_at).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" }) : "";
+      const count = (order.lines || []).filter((line) => number(line.quantity) > 0).length;
+      return `<div class="order-history-row"><span>${escapeHtml(formatThaiDate(order.business_date))}<small>${count} รายการ${time ? ` · ${escapeHtml(time)} น.` : ""}</small></span><button type="button" data-copy-order="${escapeHtml(order.id)}">คัดลอกซ้ำ</button></div>`;
+    }).join("") : '<p class="page-notice">ยังไม่มีประวัติการสั่งของ</p>';
+    $$('[data-copy-order]').forEach((button) => { button.onclick = async () => {
+      const order = rows.find((row) => row.id === button.dataset.copyOrder);
+      if (!order) return;
+      try { await copyOrderText(order.lines || [], order.business_date); showActionToast("คัดลอกรายการสั่งของแล้ว"); }
+      catch (_) { showActionToast("คัดลอกไม่สำเร็จ กรุณาลองอีกครั้ง", "error"); }
+    }; });
+  }
 
   function bindBrandEvents() {
     const current = (key) => {
@@ -600,13 +638,23 @@
     bindQuantityEvents();
   }
   function openOrderSummary() { renderOrderSummary(); $("#orderSummaryModal").classList.remove("hidden"); }
-  function clearOrder() { state.order = {}; saveDraft(); renderOrder(); renderOrderSummary(); }
-  async function copyOrderText() {
-    const groups = groupedMenu(); let text = `รายการสั่งของ BigC (${formatThaiDate($("#orderDate").value)})`;
-    groups.forEach((items, category) => {
-      const rows = items.filter((item) => number(state.order[item.key]) > 0).map((item) => `- ${item.displayName} x ${number(state.order[item.key])}`);
-      if (rows.length) text += `\n\n${category}\n${rows.join("\n")}`;
-    });
+  function clearOrder() { state.order = {}; localStorage.removeItem(orderSubmissionKey($("#orderDate").value)); saveDraft(); renderOrder(); renderOrderSummary(); }
+  function nextBusinessDate(date) {
+    const value = new Date(`${date}T12:00:00Z`);
+    value.setUTCDate(value.getUTCDate() + 1);
+    return value.toISOString().slice(0, 10);
+  }
+  async function copyOrderText(lines, businessDate) {
+    const groups = new Map();
+    [...lines].filter((line) => number(line.quantity) > 0)
+      .sort((a, b) => number(a.sort_order) - number(b.sort_order))
+      .forEach((line) => {
+        const category = line.category_name || "อื่นๆ";
+        if (!groups.has(category)) groups.set(category, []);
+        groups.get(category).push(`- ${line.item_name} x ${number(line.quantity)}`);
+      });
+    let text = `รายการสั่งของ BigC (${formatThaiDate(businessDate)})`;
+    groups.forEach((rows, category) => { text += `\n\n${category}\n${rows.join("\n")}`; });
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
       await navigator.clipboard.writeText(text);
@@ -692,7 +740,7 @@
     });
   }
 
-  async function submitWorkflow(type) {
+  async function submitWorkflow(type, { reload = true } = {}) {
     if (state.saving) return false;
     const lines = linesFor(type);
     if (type === "close_order" && !lines.length) { notice("ยังไม่มีรายการสั่งของ", true); return false; }
@@ -730,13 +778,19 @@
       thai_chuay_thai_amount: type === "return" ? number($("#thaiAmount").value) : 0,
       lines
     };
+    if (type === "close_order") payload.submission_id = submissionIdFor(payload.business_date, lines);
     state.saving = true; loading("กำลังบันทึกลงฐานข้อมูล"); notice("");
     try {
+      if (type === "close_order") {
+        window.clearTimeout(state.cloudTimer);
+        if (state.cloudDraftPromise) try { await state.cloudDraftPromise; } catch (_) { /* online order can still be saved */ }
+      }
       if (type === "receive") saveDraft();
       const { data, error } = DEMO_MODE ? { data: DEMO_STORE.submit(payload) }
         : await state.client.schema("boy_central").rpc(
-          type === "receive" ? "append_bigc_v2_receive" : "save_bigc_v2_workflow", { payload });
+          type === "receive" ? "append_bigc_v2_receive" : type === "close_order" ? "append_bigc_v2_order" : "save_bigc_v2_workflow", { payload });
       if (error) throw error;
+      if (data?.status !== "saved" && !DEMO_MODE) throw new Error("ฐานข้อมูลยังไม่ยืนยันการบันทึก");
       if (type === "receive") {
         const submittedKeys = new Set(lines.map((line) => line.line_key));
         Object.entries(state.receive).forEach(([key, line]) => {
@@ -745,21 +799,27 @@
         saveDraft();
         $("#receiveSourceLabel").textContent = Object.keys(state.receive).length ? "รายการรอรับ" : "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้";
         renderReceive();
-      } else saveDraft();
+      } else if (type !== "close_order") saveDraft();
+      let mirrorSynced = DEMO_MODE;
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       if (DEMO_MODE) {
         setSync("โหมดทดลอง", "pending"); notice("บันทึกทดลองแล้ว · ไม่ส่งข้อมูลจริง");
-        if (type === "close_order") $("#receiveDate").value = DEMO_STORE.nextDate(payload.business_date);
       } else try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...(data.mirror_payload || payload), workflow_id: data.workflow_id } });
         await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
+        mirrorSynced = true;
         setSync("บันทึกครบแล้ว", "ok"); notice("บันทึกเรียบร้อย");
       } catch (sheetError) {
-        await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "error", sync_error: String(sheetError.message || sheetError).slice(0, 400) });
+        try { await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "error", sync_error: String(sheetError.message || sheetError).slice(0, 400) }); } catch (_) { /* database save remains valid */ }
         setSync("รอส่ง Google Sheets", "pending"); notice("ข้อมูลอยู่ในฐานข้อมูลแล้ว แต่สำเนา Google Sheets ยังรอส่ง", false);
       }
-      await loadPage(); return true;
-    } catch (error) { setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); return false; }
+      if (reload) await loadPage();
+      return type === "close_order" ? { workflowId: data.workflow_id,
+        submissionId: payload.submission_id, businessDate: payload.business_date, lines, mirrorSynced } : true;
+    } catch (error) {
+      if (type === "close_order") saveDraft();
+      setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); return false;
+    }
     finally { state.saving = false; loading("", false); }
   }
 
@@ -1268,8 +1328,14 @@
     }
   }
 
+  function selectWorkflowTab(tab) {
+    state.activeTab = tab;
+    $$(".workflow-tabs button").forEach((row) => row.classList.toggle("active", row.dataset.tab === tab));
+    $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${tab}`));
+    updateCartBar();
+  }
   function bindStaticEvents() {
-    $$(".workflow-tabs button").forEach((button) => { button.onclick = () => { state.activeTab = button.dataset.tab; $$(".workflow-tabs button").forEach((row) => row.classList.toggle("active", row === button)); $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${state.activeTab}`)); updateCartBar(); }; });
+    $$(".workflow-tabs button").forEach((button) => { button.onclick = () => selectWorkflowTab(button.dataset.tab); });
     ["cashAmount", "transferAmount", "thaiAmount"].forEach((id) => { $("#" + id).oninput = () => { renderRevenue(); saveDraft(); }; });
     $("#orderSearch").oninput = renderOrder; $("#pickerSearch").oninput = renderPicker; $("#settingsSearch").oninput = renderSettings;
     ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).onchange = () => {
@@ -1282,7 +1348,41 @@
     $("#settingsButton").onclick = openSettings; $("#staffSortButton").onclick = openSortSettings; $("#addReceiveButton").onclick = () => openPicker("receive"); $("#addReturnButton").onclick = () => openPicker("returns");
     $("#submitReceive").onclick = () => submitWorkflow("receive"); $("#submitReturn").onclick = () => submitWorkflow("return");
     $("#openOrderSummary").onclick = openOrderSummary;
-    $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
+    $("#saveAndCopyOrder").onclick = async () => {
+      const button = $("#saveAndCopyOrder"); if (button.disabled) return;
+      button.disabled = true;
+      try {
+        const saved = await submitWorkflow("close_order", { reload: false });
+        if (!saved) { showActionToast($("#pageNotice").textContent || "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง", "error"); return; }
+        try { await copyOrderText(saved.lines, saved.businessDate); }
+        catch (_) {
+          await loadPage();
+          $("#orderSummaryModal").classList.add("hidden");
+          showActionToast("บันทึกลงฐานข้อมูลแล้ว แต่คัดลอกไม่สำเร็จ กดคัดลอกซ้ำในประวัติ", "warning");
+          return;
+        }
+        state.order = {};
+        localStorage.removeItem(orderSubmissionKey(saved.businessDate));
+        saveDraft();
+        window.clearTimeout(state.cloudTimer);
+        let clearedOnline = true;
+        if (!DEMO_MODE) try { clearedOnline = await saveCloudDraft(currentDraft("order")); }
+        catch (_) { clearedOnline = false; }
+        $("#orderSummaryModal").classList.add("hidden");
+        $("#receiveDate").value = nextBusinessDate(saved.businessDate);
+        selectWorkflowTab("receive");
+        const loaded = await loadPage();
+        const ready = loaded && state.contexts.receive?.previous_order?.id === saved.workflowId;
+        const result = DEMO_MODE ? "บันทึกและคัดลอกข้อมูลทดลองแล้ว" : ready
+          ? "บันทึกลง Supabase และคัดลอกแล้ว · รายการอยู่หน้ารับของวันพรุ่งนี้"
+          : "บันทึกลง Supabase และคัดลอกแล้ว · ยังโหลดหน้ารับของไม่สำเร็จ ตรวจประวัติการสั่งของ";
+        const message = [result,
+          !DEMO_MODE && !saved.mirrorSynced ? "Google Sheets รอส่ง" : "",
+          !DEMO_MODE && !clearedOnline ? "ร่างในเครื่องเคลียร์แล้ว แต่ซิงก์ร่างออนไลน์ไม่สำเร็จ" : ""].filter(Boolean).join(" · ");
+        notice(message, !ready && !DEMO_MODE);
+        showActionToast(message, (ready || DEMO_MODE) && saved.mirrorSynced && clearedOnline ? "ok" : "warning");
+      } finally { button.disabled = false; }
+    };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     if ($("#editItemStockBigc")) $("#editItemStockBigc").onchange = (event) => {
@@ -1371,6 +1471,7 @@
     ]);
     seedReceiveFromPrevious(state.contexts.receive.previous_order,state.contexts.receive.workflows.filter(w=>w.workflow_type==="receive"));
     state.receiveHistory = DEMO_STORE.history($("#receiveDate").value);
+    state.orderHistory = DEMO_STORE.orderHistory();
     renderAll(); setSync("โหมดทดลอง","pending");
   }
   if (DEMO_MODE) {

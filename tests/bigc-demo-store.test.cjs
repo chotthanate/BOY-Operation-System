@@ -15,7 +15,7 @@ function demo(){
 test('sample ordering supplies tomorrow receipts without reading or changing live queues',()=>{
  const {store,values}=demo();
  const menu=store.menu();
- store.submit({workflow_type:'close_order',business_date:'2026-11-01',
+ store.submit({workflow_type:'close_order',business_date:'2026-11-01',submission_id:randomUUID(),
   lines:[{line_key:menu[0].key,item_name:menu[0].displayName,quantity:2}]});
  const next=store.context('2026-11-02');
  assert.equal(next.previous_order.lines[0].quantity,2);
@@ -38,7 +38,26 @@ test('demo keeps two receive rounds, skips retries, and scopes history by date',
 test('demo reset removes only demo data and leaves all live keys unchanged',()=>{
  const {store,values}=demo();
  values.set('boy-bigc-demo:draft:order:2026-11-01','draft');
- store.submit({workflow_type:'close_order',business_date:'2026-11-01',lines:[]});
+ store.submit({workflow_type:'close_order',business_date:'2026-11-01',submission_id:randomUUID(),
+  lines:[{line_key:'demo-orange',item_name:'ส้ม',quantity:1}]});
  store.reset();
  assert.deepEqual([...values.entries()],[['boy-bigc-v2-settings-pending','live-pending'],['boy-bigc-v2-draft:receive:2026-11-01','live-receive']]);
+});
+test('same-day orders append without losing receiving lines, and retries do not duplicate them',()=>{
+ const {store}=demo();
+ const firstId=randomUUID(),secondId=randomUUID();
+ const first={workflow_type:'close_order',business_date:'2026-11-01',submission_id:firstId,
+  lines:[{line_key:'demo-orange',item_name:'ส้ม',quantity:2,sort_order:0}]};
+ const second={...first,submission_id:secondId,
+  lines:[{line_key:'demo-orange',item_name:'ส้ม',quantity:3,sort_order:0},
+    {line_key:'demo-cup',item_name:'แก้ว',quantity:1,sort_order:1}]};
+ store.submit(first);
+ const secondSaved=store.submit(second);
+ store.submit(second);
+ const previous=store.context('2026-11-02').previous_order;
+ assert.equal(previous.lines.find(line=>line.line_key==='demo-orange').quantity,5);
+ assert.equal(previous.lines.find(line=>line.line_key==='demo-cup').quantity,1);
+ assert.equal(store.orderHistory().length,2);
+ assert.equal(store.orderHistory()[0].lines[0].quantity,3);
+ assert.equal(secondSaved.mirror_payload.lines.find(line=>line.line_key==='demo-orange').quantity,5);
 });

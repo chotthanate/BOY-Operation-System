@@ -79,7 +79,7 @@ test('submit removes only accepted checked lines and mirrors the cumulative back
   qa.state.client={schema:()=>({rpc:async(name,{payload}={})=>{
     calls.push({name,payload});
     return name==='append_bigc_v2_receive'
-      ? {data:{workflow_id:'saved',mirror_payload:{workflow_type:'receive',lines:[{quantity:10}]}}}
+      ? {data:{status:'saved',workflow_id:'saved',mirror_payload:{workflow_type:'receive',lines:[{quantity:10}]}}}
       : {data:{}};
   }})};
   assert.equal(await qa.submitWorkflow('receive'),true);

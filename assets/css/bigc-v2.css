@@ -204,4 +204,11 @@ body[data-demo="true"] .app-shell{padding-top:8px}
 .receipt-history-row>span{min-width:0;overflow-wrap:anywhere}.receipt-history-row>strong{text-align:right;flex-shrink:0}
 .receipt-history-row small{display:block;font-size:10px;color:var(--muted);margin-top:3px}
 .receipt-rounds{margin-top:12px}.receipt-rounds details{border-top:1px solid var(--line);padding:4px 0}
+.order-history-card{padding:8px 14px}.order-history-card summary{cursor:pointer;min-height:40px;align-content:center;font-size:13px;font-weight:850;color:var(--green)}
+.order-history-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.order-history-row span{min-width:0;font-size:13px;font-weight:800}.order-history-row small{display:block;color:var(--muted);font-size:11px;font-weight:500;margin-top:2px}
+.order-history-row button{flex:none;min-height:40px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--green);font-size:12px;font-weight:850}
+.order-history-card #orderHistoryContent{max-height:340px;overflow-y:auto}
+.action-toast{position:fixed;z-index:210;top:76px;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 28px));padding:12px 16px;border-radius:12px;background:#153b32;color:#fff;box-shadow:0 12px 34px rgba(0,0,0,.2);font-size:13px;font-weight:750;text-align:center}
+.action-toast.warning{background:#76510a}.action-toast.error{background:#a83f32}.action-toast.hidden{display:none}
 @media(max-width:600px){.branch-header{gap:5px;padding-left:10px;padding-right:10px}.header-actions{gap:4px}.demo-link{padding:8px 6px}.branch-brand{gap:6px}.branch-brand strong{font-size:12px}.sync-badge{padding:6px;font-size:10px}}

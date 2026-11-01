@@ -15,7 +15,8 @@
   function createStore(storage = localStorage) {
     let data;
     try { data=JSON.parse(storage.getItem(STORAGE_KEY)||"null"); } catch (_) {}
-    if (!data || data.version!==1) data={version:1,menu:sampleMenu,workflows:{},batches:{}};
+    if (!data || data.version!==1) data={version:1,menu:sampleMenu,workflows:{},batches:{},submissions:[]};
+    if (!Array.isArray(data.submissions)) data.submissions=[];
     const persist=()=>storage.setItem(STORAGE_KEY,JSON.stringify(data));
     const nextDate=(date,days=1)=>{
       const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);
@@ -32,6 +33,21 @@
       const type=payload.workflow_type,date=payload.business_date,key=date+":"+type;
       const previous=data.workflows[key];
       const lines=clone(payload.lines||[]);
+      if(type==="close_order"){
+        if(!payload.submission_id||!lines.length)throw new Error("order submission required");
+        const submitted=data.submissions.find(row=>row.id===payload.submission_id);
+        if(submitted)return {status:"saved",workflow_id:submitted.workflow_id,mirror_payload:clone(submitted.mirror_payload),already_saved:true};
+        const byKey=new Map((previous?.lines||[]).map(row=>[row.line_key,clone(row)]));
+        lines.forEach(row=>{
+          const old=byKey.get(row.line_key);
+          byKey.set(row.line_key,old?{...old,quantity:Number(old.quantity)+Number(row.quantity)}:row);
+        });
+        data.workflows[key]={...clone(payload),id:key,lines:[...byKey.values()],submitted_at:new Date().toISOString()};
+        data.submissions.push({id:payload.submission_id,workflow_id:key,business_date:date,
+          submitted_at:new Date().toISOString(),lines,mirror_payload:clone(data.workflows[key])});
+        persist();
+        return {status:"saved",workflow_id:key,mirror_payload:clone(data.workflows[key])};
+      }
       let accepted=lines;
       if(type==="receive"){
         const old=previous?.lines||[];
@@ -49,14 +65,15 @@
         data.workflows[key]={...clone(payload),id:key,lines:[...old,...accepted]};
       }else data.workflows[key]={...clone(payload),id:key};
       persist();
-      return {workflow_id:key,mirror_payload:clone(data.workflows[key])};
+      return {status:"saved",workflow_id:key,mirror_payload:clone(data.workflows[key])};
     }
     return {menu:()=>clone(data.menu),context,submit,nextDate,
       history:date=>clone(data.batches[date]||[]),
+      orderHistory:()=>clone(data.submissions).reverse().sort((a,b)=>b.submitted_at.localeCompare(a.submitted_at)).slice(0,30),
       reset:()=>{
         const keys=[];for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith("boy-bigc-demo:"))keys.push(key)}
         keys.forEach(key=>storage.removeItem(key));
-        data={version:1,menu:clone(sampleMenu),workflows:{},batches:{}};
+        data={version:1,menu:clone(sampleMenu),workflows:{},batches:{},submissions:[]};
       }};
   }
   globalThis.BOYBigCDemo={createStore};
