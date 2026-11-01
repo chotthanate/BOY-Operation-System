@@ -979,15 +979,13 @@
       const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
-      const deleteControl = mode === "items" ? `<button data-delete-item="${escapeHtml(item.key)}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button>` : "";
       const selecting = mode === "items" && state.selectingSettings;
       const selection = selecting ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
-      return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
+      return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button></span></div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
-    $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
     $$("[data-select-settings-item]").forEach((input) => { input.onchange = () => {
       if (input.checked) state.selectedSettingsKeys.add(input.dataset.selectSettingsItem);
       else state.selectedSettingsKeys.delete(input.dataset.selectSettingsItem);
@@ -1087,17 +1085,14 @@
     $("#editItemModal").classList.add("hidden"); renderSettings();
     if (!$("#mappingModal").classList.contains("hidden")) renderMappingList();
   }
-  async function deleteMenuItem(key) {
-    return deleteMenuItems([key]);
-  }
   async function deleteMenuItems(keys) {
-    if (state.deletingSettings || isStaffView() || !state.access?.canManage) return;
+    if (!state.selectingSettings || state.settingsSection !== "items" || state.deletingSettings || isStaffView() || !state.access?.canManage) return;
     const keySet = new Set(keys);
     const items = state.menu.filter((item) => keySet.has(item.key));
     if (!items.length) return;
     const names = items.slice(0, 8).map((item) => `• ${item.displayName}`).join("\n");
     const more = items.length > 8 ? `\nและอีก ${items.length - 8} รายการ` : "";
-    if (!confirm(`ลบสินค้า ${items.length} รายการออกจากรายการ BigC?\n\n${names}${more}`)) return;
+    if (!confirm(`ยืนยันลบสินค้า ${items.length} รายการหรือไม่?\n\n${names}${more}`)) return;
     state.deletingSettings = true;
     updateSettingsSelection();
     const previousMenu = [...state.menu];
