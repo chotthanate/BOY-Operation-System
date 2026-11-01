@@ -1158,6 +1158,7 @@
     $$('[data-sort-key]').forEach((button) => { button.onclick = () => state.sortMode === "categories" ? moveCategory(button.dataset.sortKey, Number(button.dataset.sortStep)) : moveItem(button.dataset.sortKey, Number(button.dataset.sortStep)); });
   }
   function openSortSettings() {
+    $("#sortSaveStatus").textContent = "";
     state.sortSnapshot = state.menu.map((item) => ({ ...item }));
     state.sortMode = "categories"; state.sortCategory = categoryNames()[0] || "";
     $("#sortTitle").textContent = isStaffView() ? "จัดลำดับในเครื่องนี้" : "จัดลำดับ";
@@ -1165,16 +1166,37 @@
     $("#sortModal").classList.remove("hidden"); renderSortList();
   }
   async function saveSortOrder() {
+    const button = $("#saveSortOrder");
+    if (button.disabled) return;
+    button.disabled = true;
+    const feedback = $("#sortSaveStatus");
+    feedback.classList.remove("error");
+    feedback.textContent = "กำลังบันทึกลำดับ";
     normalizeMenuOrder();
-    if (isStaffView()) {
-      localStorage.setItem(STAFF_SORT_KEY, JSON.stringify(state.menu.map((item) => item.key)));
-      state.sortSnapshot = null;
-      $("#sortModal").classList.add("hidden"); renderAll(); notice("บันทึกลำดับสำหรับเครื่องนี้แล้ว"); return;
+    try {
+      const staff = isStaffView();
+      let status = "synced";
+      if (staff) {
+        localStorage.setItem(STAFF_SORT_KEY, JSON.stringify(state.menu.map((item) => item.key)));
+        renderAll();
+      } else {
+        status = await persistSettings("บันทึกลำดับแล้ว");
+      }
+      if (!status) throw new Error("กรุณาลองอีกครั้ง");
+      // Closing later discards only moves made after this save.
+      state.sortSnapshot = state.menu.map((item) => ({ ...item }));
+      const sheet = $("#sortModal .modal-sheet");
+      const scrollTop = sheet.scrollTop;
+      renderSortList();
+      sheet.scrollTop = scrollTop;
+      feedback.textContent = staff ? "บันทึกลำดับสำหรับเครื่องนี้แล้ว"
+        : status === "synced" ? "บันทึกลำดับแล้ว" : "บันทึกลำดับในเครื่องแล้ว · รอส่งออนไลน์";
+    } catch (error) {
+      feedback.textContent = `บันทึกไม่สำเร็จ: ${error.message}`;
+      feedback.classList.add("error");
+    } finally {
+      button.disabled = false;
     }
-    const status = await persistSettings("บันทึกลำดับแล้ว");
-    state.sortSnapshot = null;
-    $("#sortModal").classList.add("hidden");
-    if (status === "synced") $("#settingsModal").classList.add("hidden");
   }
 
   function bindStaticEvents() {
