@@ -1,11 +1,14 @@
 (() => {
   "use strict";
+  const DEMO_MODE = document.body.dataset.demo === "true";
+  const DEMO_STORE = DEMO_MODE ? globalThis.BOYBigCDemo.createStore() : null;
+  const STORAGE_PREFIX = DEMO_MODE ? "boy-bigc-demo:" : "boy-bigc-v2-";
   const BRANCH_CODE = "BIGC-CENTRAL-PATTAYA";
   const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
   const CLOUD_DRAFT_DELAY = 8000;
-  const SETTINGS_CACHE_KEY = "boy-bigc-v2-settings-cache";
-  const SETTINGS_PENDING_KEY = "boy-bigc-v2-settings-pending";
-  const STAFF_SORT_KEY = "boy-bigc-v2-staff-sort-v1";
+  const SETTINGS_CACHE_KEY = STORAGE_PREFIX + "settings-cache";
+  const SETTINGS_PENDING_KEY = STORAGE_PREFIX + "settings-pending";
+  const STAFF_SORT_KEY = STORAGE_PREFIX + "staff-sort-v1";
   const REQUESTED_VIEW = new URLSearchParams(location.search).get("view") === "staff" ? "staff" : "admin";
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -20,7 +23,7 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), selectingSettings: false, deletingSettings: false,
-    order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
+    order: {}, receive: {}, returns: {}, receiveHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
@@ -32,7 +35,7 @@
     return `item-${(hash >>> 0).toString(16)}`;
   }
 
-  function draftKey(type, date) { return `boy-bigc-v2-draft:${type}:${date}`; }
+  function draftKey(type, date) { return `${STORAGE_PREFIX}draft:${type}:${date}`; }
   function blankDraft() { return { savedAt: 0, dates: { order: today(), receive: today(), returns: today() }, revenue: { cash: "", transfer: "", thai: "" }, order: {}, receive: {}, returns: {} }; }
   function readLocalDraft() {
     const dates = { order: $("#orderDate").value || today(), receive: $("#receiveDate").value || today(), returns: $("#returnDate").value || today() };
@@ -72,6 +75,7 @@
     state.cloudTimer = window.setTimeout(() => saveCloudDraft(draft), CLOUD_DRAFT_DELAY);
   }
   async function saveCloudDraft(draft = currentDraft()) {
+    if (DEMO_MODE) return;
     if (!state.session) { setSync("ต้องเชื่อม Supabase", "error"); return; }
     if (!navigator.onLine) { setSync("ออฟไลน์ · รอส่งข้อมูล", "pending"); return; }
     const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_draft", { payload: draft });
@@ -96,6 +100,7 @@
   function loading(text, active = true) { $("#loadingText").textContent = text; $("#loadingOverlay").classList.toggle("hidden", !active); }
 
   async function sheetApi(action, payload = {}) {
+    if (DEMO_MODE) throw new Error("โหมดทดลองไม่ส่งข้อมูลออนไลน์");
     const response = await fetch(WEB_APP_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }) });
     const data = await response.json();
     if (!response.ok || !["success", "Success"].includes(data.status)) throw new Error(data.message || "Google Sheets ตอบกลับผิดปกติ");
@@ -270,6 +275,8 @@
   }
 
   async function loadPage() {
+    if (DEMO_MODE) { loadDemoPage(); return; }
+    state.receiveHistory = null;
     loading("กำลังโหลดข้อมูล"); notice("");
     try {
       await flushPendingSettings(true);
@@ -280,6 +287,8 @@
         const { data, error } = await request; if (error) throw error; return [date, data || {}];
       })));
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
+      const historyResult = await state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: dates.receive });
+      state.receiveHistory = historyResult.error ? null : historyResult.data || [];
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
       await loadAccess();
@@ -500,6 +509,31 @@
     $("#receiveProgress").textContent = `${checked} / ${entries.length} รายการ`;
     $("#receiveProgressBar").style.width = `${entries.length ? checked / entries.length * 100 : 0}%`;
     bindQuantityEvents(); bindActualWeightEvents(); bindBrandEvents(); bindRowEvents();
+    renderReceiveHistory();
+  }
+  function renderReceiveHistory() {
+    const batches = state.receiveHistory;
+    if (!batches) {
+      $("#receiveHistorySummary").textContent = "ประวัติรับของยังโหลดไม่สำเร็จ";
+      $("#receiveHistoryContent").innerHTML = '<p class="page-notice error">กดอัปเดตข้อมูลเพื่อลองอีกครั้ง</p>';
+      return;
+    }
+    const rounds = batches.filter((batch) => !batch.is_legacy).length;
+    const legacy = batches.some((batch) => batch.is_legacy);
+    const totals = new Map();
+    batches.forEach((batch) => (batch.lines || []).forEach((line) => {
+      const key = JSON.stringify([line.item_name,line.unit_name||""]);
+      const row = totals.get(key) || {name:line.item_name,unit:line.unit_name||"",quantity:0,weight:0};
+      row.quantity += number(line.quantity); row.weight += number(line.actual_weight_kg);
+      totals.set(key,row);
+    }));
+    $("#receiveHistorySummary").textContent = `รับแล้ว ${rounds} รอบ${legacy ? " + ข้อมูลเดิม" : ""} · ${totals.size} รายการ`;
+    const rows = lines => lines.map((line) => `<div class="receipt-history-row"><span>${escapeHtml(line.name || line.item_name)}</span><strong>${number(line.quantity).toLocaleString("th-TH")} ${escapeHtml(line.unit || line.unit_name || "")}${number(line.weight || line.actual_weight_kg) ? `<small>น้ำหนัก ${number(line.weight || line.actual_weight_kg).toLocaleString("th-TH")} กก.</small>` : ""}</strong></div>`).join("");
+    $("#receiveHistoryContent").innerHTML = batches.length
+      ? `<h3>รวมที่รับวันนี้</h3>${rows([...totals.values()])}<div class="receipt-rounds">${batches.map((batch) => {
+        const time = batch.received_at ? new Date(batch.received_at).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}) : "";
+        return `<details><summary>${batch.is_legacy ? "ข้อมูลเดิม · ไม่ทราบจำนวนรอบ" : `รอบที่ ${batch.round_number} · ${escapeHtml(time)} น.`}</summary>${rows(batch.lines || [])}</details>`;
+      }).join("")}</div>` : '<p class="page-notice">ยังไม่มีรายการรับในวันที่เลือก</p>';
   }
 
   function bindBrandEvents() {
@@ -697,8 +731,9 @@
     state.saving = true; loading("กำลังบันทึกลงฐานข้อมูล"); notice("");
     try {
       if (type === "receive") saveDraft();
-      const { data, error } = await state.client.schema("boy_central").rpc(
-        type === "receive" ? "append_bigc_v2_receive" : "save_bigc_v2_workflow", { payload });
+      const { data, error } = DEMO_MODE ? { data: DEMO_STORE.submit(payload) }
+        : await state.client.schema("boy_central").rpc(
+          type === "receive" ? "append_bigc_v2_receive" : "save_bigc_v2_workflow", { payload });
       if (error) throw error;
       if (type === "receive") {
         const submittedKeys = new Set(lines.map((line) => line.line_key));
@@ -710,7 +745,10 @@
         renderReceive();
       } else saveDraft();
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
-      try {
+      if (DEMO_MODE) {
+        setSync("โหมดทดลอง", "pending"); notice("บันทึกทดลองแล้ว · ไม่ส่งข้อมูลจริง");
+        if (type === "close_order") $("#receiveDate").value = DEMO_STORE.nextDate(payload.business_date);
+      } else try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...(data.mirror_payload || payload), workflow_id: data.workflow_id } });
         await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
         setSync("บันทึกครบแล้ว", "ok"); notice("บันทึกเรียบร้อย");
@@ -1011,6 +1049,7 @@
     updateSettingsSelection();
   }
   async function persistSettings(successText) {
+    if (DEMO_MODE) { notice("โหมดทดลองไม่บันทึกการตั้งค่าจริง"); return false; }
     loading("กำลังบันทึกการตั้งค่า"); notice("");
     const payload = settingsPayload();
     cacheSettings(payload, true);
@@ -1300,7 +1339,34 @@
     await loadPage();
   }
 
-  window.addEventListener("boy-auth-ready", (event) => start(event.detail));
-  if (window.BOY_AUTH_CONTEXT) start(window.BOY_AUTH_CONTEXT);
+  function loadDemoPage() {
+    state.menu = DEMO_STORE.menu();
+    state.contexts = {
+      order:DEMO_STORE.context($("#orderDate").value),
+      receive:DEMO_STORE.context($("#receiveDate").value),
+      returns:DEMO_STORE.context($("#returnDate").value)
+    };
+    state.context = state.contexts.order; state.branch = state.context.branch;
+    hydrateDraft(readLocalDraft());
+    hydrateSubmitted([
+      ...state.contexts.order.workflows.filter(w=>w.workflow_type==="close_order"),
+      ...state.contexts.returns.workflows.filter(w=>w.workflow_type==="return")
+    ]);
+    seedReceiveFromPrevious(state.contexts.receive.previous_order,state.contexts.receive.workflows.filter(w=>w.workflow_type==="receive"));
+    state.receiveHistory = DEMO_STORE.history($("#receiveDate").value);
+    renderAll(); setSync("โหมดทดลอง","pending");
+  }
+  if (DEMO_MODE) {
+    state.started = true; state.access = {canManage:false};
+    ["orderDate","receiveDate","returnDate"].forEach(id=>$("#"+id).value=today());
+    bindStaticEvents(); loadDemoPage();
+    $("#resetDemoButton").onclick = () => {
+      if (!confirm("ล้างข้อมูลทดลองทั้งหมด?")) return;
+      window.clearTimeout(state.cloudTimer); DEMO_STORE.reset(); location.reload();
+    };
+  } else {
+    window.addEventListener("boy-auth-ready", (event) => start(event.detail));
+    if (window.BOY_AUTH_CONTEXT) start(window.BOY_AUTH_CONTEXT);
+  }
 })();
 

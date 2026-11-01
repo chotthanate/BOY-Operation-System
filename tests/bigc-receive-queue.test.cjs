@@ -14,7 +14,7 @@ function app() {
   const storage = new Map();
   const context = {URLSearchParams, Intl, Date, crypto:{randomUUID},console,
     location:{search:'?view=admin'},navigator:{onLine:true},
-    document:{querySelector:node,querySelectorAll:()=>[]},
+    document:{body:{dataset:{}},querySelector:node,querySelectorAll:()=>[]},
     localStorage:{setItem:(k,v)=>storage.set(k,v),getItem:k=>storage.get(k)||null},
     setTimeout:()=>0,clearTimeout:()=>{},
     BOYBigCMasterMapping:{codesFor:()=>[],withCodes:x=>x}};

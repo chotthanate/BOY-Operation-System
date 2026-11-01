@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#e5ab00">
+  <title>BigC · โหมดทดลอง</title>
+  <link rel="stylesheet" href="assets/css/store-chrome.css">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-7">
+  <style>
+    .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
+  </style>
+  
+</head>
+<body data-demo="true">
+  <header class="branch-header">
+    <a class="branch-brand" href="bigc-demo.html" aria-label="โหมดทดลอง">
+      <span class="branch-mark">BC</span>
+      <span><strong>BigC · ทดลอง</strong><small id="branchModeLabel">โหมดทดลอง</small></span>
+    </a>
+    <div class="header-actions">
+      <a class="text-button demo-link" href="bigc-v2.html?view=admin&amp;online=1&amp;v=20261101-7">ใช้งานจริง</a>
+      <span id="syncBadge" class="sync-badge pending">กำลังโหลด</span>
+      <button id="refreshButton" class="icon-button" type="button" aria-label="อัปเดตข้อมูล">↻</button>
+      <button id="staffSortButton" class="icon-button" type="button" aria-label="จัดลำดับรายการ" hidden>⇅</button>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="ตั้งค่ารายการ" hidden>⚙</button>
+      
+    </div>
+  </header>
+
+  <div class="demo-banner"><span><strong>โหมดทดลอง · ข้อมูลตัวอย่าง</strong>ทดลองสั่งและรับของได้ ไม่ส่งเข้าฐานข้อมูลหรือ Sheets จริง</span><button id="resetDemoButton" class="secondary-button" type="button">ล้างข้อมูลทดลอง</button></div>
+  <main class="app-shell">
+    <nav class="workflow-tabs" aria-label="งานประจำวัน">
+      <button class="active" data-tab="close" type="button"><span>1</span>สั่งของ</button>
+      <button data-tab="receive" type="button"><span>2</span>รับของ</button>
+      <button data-tab="return" type="button"><span>3</span>สรุปยอด/คืนของ</button>
+    </nav>
+
+    <section id="panel-close" class="workflow-panel active">
+      <div class="panel-date"><span>วันที่สั่งของ</span><label class="date-trigger"><strong data-date-display="orderDate">—</strong><b>▾</b><input id="orderDate" type="date" aria-label="วันที่สั่งของ"></label></div>
+      <article class="card">
+        <div class="card-heading"><div><small>สำหรับวันพรุ่งนี้</small><h2>รายการสั่งของ</h2></div><button class="text-button" data-clear="order" type="button">ล้าง</button></div>
+        <div class="search-row"><input id="orderSearch" type="search" placeholder="ค้นหารายการ"><span id="orderCount">0 รายการ</span></div>
+        <nav id="orderCategoryNav" class="category-nav" aria-label="เลือกหมวดสินค้า"></nav>
+        <div id="orderList" class="item-list"></div>
+      </article>
+    </section>
+
+    <section id="panel-receive" class="workflow-panel">
+      <div class="panel-date"><span>วันที่รับของ</span><label class="date-trigger"><strong data-date-display="receiveDate">—</strong><b>▾</b><input id="receiveDate" type="date" aria-label="วันที่รับของ"></label></div>
+      <article class="card">
+        <div class="card-heading"><div><small id="receiveSourceLabel">รายการรอรับตามใบสั่ง</small><h1>รับของเข้าร้าน</h1></div><button id="addReceiveButton" class="text-button" type="button">+ เพิ่ม</button></div>
+        <div class="progress-line"><span id="receiveProgress">0 / 0 รายการ</span><div><i id="receiveProgressBar"></i></div></div>
+        <div id="receiveList" class="item-list receive-list"></div>
+      </article>
+      <button id="submitReceive" class="primary-action" type="button">บันทึกรับของ</button>
+      <article class="card receipt-history-card">
+        <details id="receiveHistoryDetails"><summary id="receiveHistorySummary">รับแล้ว 0 รอบ · 0 รายการ</summary><div id="receiveHistoryContent"></div></details>
+      </article>
+    </section>
+
+    <section id="panel-return" class="workflow-panel">
+      <div class="panel-date"><span>วันที่สรุปยอด</span><label class="date-trigger"><strong data-date-display="returnDate">—</strong><b>▾</b><input id="returnDate" type="date" aria-label="วันที่สรุปยอด"></label></div>
+      <article class="card revenue-card">
+        <div class="card-heading"><div><small>รายรับประจำวัน</small><h1>สรุปยอดขาย</h1></div><strong id="revenueTotal">0.00</strong></div>
+        <div class="revenue-grid">
+          <label>เงินสด<input id="cashAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label>เงินโอน<input id="transferAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label>ไทยช่วยไทย<input id="thaiAmount" inputmode="decimal" type="number" min="0" step="0.01" placeholder="0.00"></label>
+        </div>
+      </article>
+      <article class="card">
+        <div class="card-heading"><div><small>รายการประจำขึ้นให้อัตโนมัติ</small><h1>คืนของ</h1></div><button id="addReturnButton" class="text-button" type="button">+ เพิ่ม</button></div>
+        <div id="returnList" class="item-list"></div>
+      </article>
+      <button id="submitReturn" class="primary-action" type="button">บันทึกสรุปยอดและคืนของ</button>
+    </section>
+
+    <p id="pageNotice" class="page-notice" role="status"></p>
+  </main>
+
+  <div id="pickerModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="modal-sheet compact-sheet">
+      <header><h2 id="pickerTitle">เพิ่มรายการ</h2><button data-close-modal="pickerModal" type="button">×</button></header>
+      <input id="pickerSearch" type="search" placeholder="ค้นหารายการ">
+      <div id="pickerList" class="picker-list"></div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal page-surface hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-sheet settings-sheet">
+      <header class="settings-header"><div class="settings-heading"><button id="settingsBack" class="settings-back hidden" type="button" aria-label="กลับเมนูตั้งค่า">‹</button><div><small>BigC</small><h2 id="settingsTitle">ตั้งค่า</h2></div></div><button data-close-modal="settingsModal" type="button" aria-label="กลับหน้าหลัก">← กลับ</button></header>
+      <div id="settingsSyncWarning" class="settings-sync-warning" hidden>
+        <span><strong>ยังไม่ได้ส่งขึ้น Supabase</strong><small id="settingsSyncMessage">เชื่อมต่อบัญชีออนไลน์เพื่อให้การตั้งค่าไม่หายและใช้ได้ทุกเครื่อง</small></span>
+        <a id="settingsReconnect" href="burger.html?next=bigc-v2.html&amp;online=1">เชื่อมต่อและส่งข้อมูล</a>
+      </div>
+      <div id="settingsHome" class="settings-home">
+        <p class="settings-intro">เลือกหัวข้อที่ต้องการจัดการ</p>
+        <div class="settings-menu-grid">
+          <button class="settings-menu-card" data-settings-section="items" type="button"><span class="settings-menu-icon">▦</span><span><strong>รายการสินค้า</strong><small>เพิ่ม แก้ไข ลบ และเลือกแสดงในหน้าสั่งของ</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="units" type="button"><span class="settings-menu-icon">⚖</span><span><strong>หน่วยและการรับของ</strong><small>หน่วยที่รับจริง และชั่งตอนรับ/คืน</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="costing" type="button"><span class="settings-menu-icon">◈</span><span><strong>วิธีคิดต้นทุน</strong><small>ประเภทการรับและข้อมูลผลไม้จากฐานข้อมูลกลาง</small></span><b>›</b></button>
+          <button id="openMappingManager" class="settings-menu-card" type="button"><span class="settings-menu-icon">↔</span><span><strong>จับคู่สินค้ากลาง</strong><small id="mappingSummary">กำลังตรวจสอบ</small></span><b>›</b></button>
+          <button class="settings-menu-card" data-settings-section="returns" type="button"><span class="settings-menu-icon">↩</span><span><strong>รายการคืนของประจำ</strong><small>เลือกของที่ขึ้นหน้าคืนอัตโนมัติ</small></span><b>›</b></button>
+          <button id="openSortSettings" class="settings-menu-card" type="button"><span class="settings-menu-icon">⇅</span><span><strong>จัดลำดับ</strong><small>เรียงหมวดหมู่และรายการในหน้าสั่งของ</small></span><b>›</b></button>
+        </div>
+        <div class="staff-link-panel">
+          <span><strong>ลิงก์สำหรับพนักงาน</strong><small>ใช้งานและจัดลำดับได้ แต่แก้รายการไม่ได้</small></span>
+          <div><button id="copyStaffLink" type="button">คัดลอก</button><a id="openStaffLink" href="bigc-v2.html?view=staff&amp;online=1" target="_blank" rel="noopener">เปิด</a></div>
+        </div>
+      </div>
+      <div id="settingsDetail" class="settings-detail hidden">
+        <p id="settingsSectionDescription" class="settings-intro"></p>
+        <button id="openFruitCostSettings" class="secondary-button fruit-cost-open hidden" type="button">ดู Yield ข้อมูลกลาง / ตั้งค่าน้ำหนักผลไม้ต่อลูก</button>
+        <div class="settings-pinned-controls">
+        <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><div class="settings-toolbar-actions"><button id="toggleSettingsSelection" class="secondary-button hidden" type="button" aria-expanded="false" aria-controls="settingsBulkActions">เลือก</button><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div></div>
+        <div id="settingsBulkActions" class="settings-bulk-actions hidden">
+          <label><input id="selectVisibleSettings" type="checkbox">เลือกทั้งหมดที่แสดง</label>
+          <span id="settingsSelectedCount" role="status" aria-live="polite">เลือก 0 รายการ</span>
+          <button id="clearSettingsSelection" class="secondary-button" type="button" disabled>ยกเลิกเลือก</button>
+          <button id="deleteSelectedItems" class="secondary-button" type="button" disabled>ลบที่เลือก</button>
+        </div>
+        <nav id="settingsCategoryNav" class="settings-category-nav" aria-label="ไปยังหมวดสินค้า"></nav>
+        </div>
+        <div id="settingsList" class="settings-list"></div>
+        <div class="settings-save-bar"><button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mappingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mappingTitle">
+    <div class="modal-sheet mapping-sheet">
+      <header><div><small>BigC · ข้อมูลกลาง</small><h2 id="mappingTitle">จับคู่สินค้า</h2></div><button data-close-modal="mappingModal" type="button">×</button></header>
+      <div class="mapping-summary-row"><strong id="mappingProgress">0 / 0 รายการ</strong><button id="applyExactMappings" class="text-button" type="button">แนะนำชื่อที่ตรงกัน</button></div>
+      <div class="mapping-toolbar">
+        <input id="mappingSearch" type="search" placeholder="ค้นหารายการ BigC">
+        <select id="mappingFilter" aria-label="กรองสถานะการจับคู่"><option value="unmapped">ยังไม่จับคู่</option><option value="mapped">จับคู่แล้ว</option><option value="all">ทั้งหมด</option></select>
+      </div>
+      <div id="mappingList" class="mapping-list"></div>
+      <button id="saveMappings" class="primary-action" type="button">บันทึกการจับคู่</button>
+    </div>
+  </div>
+
+  <div id="fruitCostModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fruitCostTitle">
+    <div class="modal-sheet edit-item-sheet">
+      <header><div><small>BigC · ผู้ดูแล</small><h2 id="fruitCostTitle">ต้นทุนผลไม้</h2></div><button data-close-modal="fruitCostModal" type="button">×</button></header>
+      <div class="edit-item-fields">
+        <label>ผลไม้หลัก<select id="fruitCostRawItem"></select></label>
+        <div class="fruit-yield-source"><strong>Yield จากข้อมูลกลาง (อ่านอย่างเดียว)</strong><p id="fruitCostYieldSource">เลือกผลไม้เพื่อดูค่าที่บันทึกใน M_UW_สรุป</p><small>ตัวเลขที่ยังไม่ผ่านการตรวจหรือยังไม่มีค่า จะไม่ใช้คำนวณต้นทุนอัตโนมัติ</small></div>
+        <label>น้ำหนักเฉลี่ยก่อนปอกต่อ 1 ลูก (กก.)<input id="fruitCostKgPerPiece" type="number" min="0.001" step="0.001" inputmode="decimal" placeholder="กรอกเฉพาะรายการที่รับเป็นลูก"></label>
+        <label>ใช้ตั้งแต่เดือน<input id="fruitCostMonth" type="month"></label>
+        <label>ที่มาของน้ำหนักต่อลูก<input id="fruitCostSampleNote" type="text" placeholder="เช่น ชั่งตัวอย่าง 10 ลูก"></label>
+      </div>
+      <p id="fruitCostError" class="modal-error" role="status"></p>
+      <button id="saveFruitCost" class="primary-action" type="button">บันทึกน้ำหนักต่อลูก</button>
+    </div>
+  </div>
+
+  <div id="addItemModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="addItemTitle">
+    <div class="modal-sheet edit-item-sheet">
+      <header><div><small>ตั้งค่ารายการ</small><h2 id="addItemTitle">เพิ่มรายการ</h2></div><button data-close-modal="addItemModal" type="button">×</button></header>
+      <div class="edit-item-fields">
+        <label>ชื่อรายการ<input id="newItemName" type="text" autocomplete="off"></label>
+        <label>ประเภท<input id="newItemCategory" type="text" list="categoryOptions" autocomplete="off"></label>
+        <label>หน่วย<input id="newItemUnit" type="text" autocomplete="off"></label>
+        <datalist id="categoryOptions"></datalist>
+      </div>
+      <p id="addItemError" class="modal-error"></p>
+      <button id="addMenuItem" class="primary-action" type="button">เพิ่มรายการ</button>
+    </div>
+  </div>
+
+  <div id="sortModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sortTitle">
+    <div class="modal-sheet sort-sheet">
+      <header><div><small>หน้าสั่งของ</small><h2 id="sortTitle">จัดลำดับ</h2></div><button data-close-modal="sortModal" type="button">×</button></header>
+      <div class="sort-tabs" role="tablist">
+        <button class="active" data-sort-mode="categories" type="button">หมวดหมู่</button>
+        <button data-sort-mode="items" type="button">รายการ</button>
+      </div>
+      <label id="sortCategoryField" class="sort-category-field hidden">เลือกหมวดหมู่<select id="sortCategorySelect"></select></label>
+      <div id="sortList" class="sort-list"></div>
+      <p id="sortSaveStatus" class="page-notice" role="status" aria-live="polite"></p>
+      <button id="saveSortOrder" class="primary-action" type="button">บันทึกลำดับ</button>
+    </div>
+  </div>
+
+  <div id="editItemModal" class="modal page-surface edit-page-surface hidden" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
+    <div class="modal-sheet edit-item-sheet">
+      <header><div><small>ตั้งค่ารายการ</small><h2 id="editItemTitle">แก้ไขรายการ</h2></div><button data-close-modal="editItemModal" type="button" aria-label="กลับหน้ารายการสินค้า">← กลับ</button></header>
+      <div class="edit-item-fields">
+        <label>ชื่อรายการ<input id="editItemName" type="text"></label>
+        <label>หน่วย<input id="editItemUnit" type="text"></label>
+        <label>หมวดหมู่<select id="editItemCategory" aria-label="เลือกหมวดหมู่สินค้า"></select></label>
+        <label id="editItemNewCategoryField" class="hidden">ชื่อหมวดหมู่ใหม่<input id="editItemNewCategory" type="text" autocomplete="off" placeholder="เช่น ผลไม้กระปุก/ผลไม้อบแห้ง"></label>
+        <label>ประเภทการรับและคิดต้นทุน<select id="editItemHandlingType">
+          <option value="standard">ทั่วไป</option>
+          <option value="whole_fruit">ผลไม้ทั้งลูก (ชั่งก่อนปอก)</option>
+          <option value="prepared">ปอกพร้อมใช้ (น้ำหนักหลังปอก)</option>
+          <option value="juiced">น้ำคั้น (น้ำหนักหลังคั้น)</option>
+          <option value="consignment">สินค้าฝากขาย</option>
+        </select></label>
+        <label class="setting-check"><input id="editItemActive" type="checkbox">แสดงในหน้าสั่งของ</label>
+        <label>ค้นหาสินค้าข้อมูลกลาง<input id="editItemMappingSearch" type="search" placeholder="พิมพ์ชื่อหรือรหัสสินค้า"></label>
+        <div class="mapping-field"><strong>สินค้ากลางที่ผูก · ระบบเลือกรายการสต็อกรวมให้อัตโนมัติ</strong><div id="editItemMasterList" class="master-choice-list" role="group" aria-label="สินค้ากลางที่ผูก"></div></div>
+        <p id="editItemMappingStatus" class="page-notice"></p>
+      </div>
+      <p id="editItemError" class="modal-error"></p>
+      <button id="saveEditedItem" class="primary-action" type="button">บันทึกการแก้ไข</button>
+    </div>
+  </div>
+
+  <div id="orderSummaryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="orderSummaryTitle">
+    <div class="modal-sheet summary-sheet">
+      <header><div><small>รายการที่เลือก</small><h2 id="orderSummaryTitle">สรุปรายการสั่งของ</h2></div><button data-close-modal="orderSummaryModal" type="button">×</button></header>
+      <div id="orderSummaryList" class="summary-list"></div>
+      <button id="saveAndCopyOrder" class="primary-action" type="button">บันทึกและคัดลอกข้อความ</button>
+      <button id="clearOrderFromSummary" class="danger-action" type="button">ล้างตะกร้า</button>
+    </div>
+  </div>
+
+  <div id="orderCartBar" class="order-cart-bar">
+    <span><small>จำนวนรวม</small><strong id="orderTotalQty">0</strong></span>
+    <button id="openOrderSummary" type="button">ดูสรุป / บันทึก</button>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay hidden"><div><span></span><strong id="loadingText">กำลังบันทึก</strong></div></div>
+
+  
+  
+  
+  
+  
+  
+  <script src="assets/js/bigc-master-mapping.js?v=20261028-2"></script>
+  <script src="assets/js/bigc-demo-store.js?v=20261101-7"></script>
+  <script src="assets/js/bigc-v2.js?v=20261101-7"></script>
+</body>
+</html>

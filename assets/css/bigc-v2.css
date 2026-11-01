@@ -192,3 +192,16 @@ body.staff-view #settingsButton{display:none!important}
 .settings-pinned-controls .settings-toolbar input{min-width:0;width:100%}
 .settings-detail .setting-category-group{scroll-margin-top:190px}
 .settings-detail:has(.settings-bulk-actions:not(.hidden)) .setting-category-group{scroll-margin-top:320px}
+.demo-link{text-decoration:none;font-size:11px;white-space:nowrap}
+.header-actions .icon-button[hidden]{display:none}
+body[data-demo="true"]{padding-top:72px}
+body[data-demo="true"] .app-shell{padding-top:8px}
+.demo-banner{max-width:920px;margin:8px auto;padding:10px 16px;border:1px solid #e5c361;border-radius:12px;background:#fff3c4;display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px}
+.demo-banner span{flex:1;min-width:180px}.demo-banner strong{display:block}.demo-banner button{min-height:40px}
+.receipt-history-card summary{cursor:pointer;min-height:44px;align-content:center;font-size:13px;font-weight:850;color:var(--green)}
+.receipt-history-card h3{font-size:13px;margin:12px 0 6px}
+.receipt-history-row{display:flex;align-items:start;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.receipt-history-row>span{min-width:0;overflow-wrap:anywhere}.receipt-history-row>strong{text-align:right;flex-shrink:0}
+.receipt-history-row small{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+.receipt-rounds{margin-top:12px}.receipt-rounds details{border-top:1px solid var(--line);padding:4px 0}
+@media(max-width:600px){.branch-header{gap:5px;padding-left:10px;padding-right:10px}.header-actions{gap:4px}.demo-link{padding:8px 6px}.branch-brand{gap:6px}.branch-brand strong{font-size:12px}.sync-badge{padding:6px;font-size:10px}}

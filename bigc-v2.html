@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-4">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-7">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -19,6 +19,7 @@
       <span><strong>BigC พัทยากลาง</strong><small id="branchModeLabel">BOY Operation</small></span>
     </a>
     <div class="header-actions">
+      <a class="text-button demo-link" href="bigc-demo.html?v=20261101-7">ทดลอง</a>
       <span id="syncBadge" class="sync-badge pending">กำลังโหลด</span>
       <button id="refreshButton" class="icon-button" type="button" aria-label="อัปเดตข้อมูล">↻</button>
       <button id="staffSortButton" class="icon-button" type="button" aria-label="จัดลำดับรายการ" hidden>⇅</button>
@@ -52,6 +53,9 @@
         <div id="receiveList" class="item-list receive-list"></div>
       </article>
       <button id="submitReceive" class="primary-action" type="button">บันทึกรับของ</button>
+      <article class="card receipt-history-card">
+        <details id="receiveHistoryDetails"><summary id="receiveHistorySummary">รับแล้ว 0 รอบ · 0 รายการ</summary><div id="receiveHistoryContent"></div></details>
+      </article>
     </section>
 
     <section id="panel-return" class="workflow-panel">
@@ -225,7 +229,7 @@
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261025-1"></script>
   <script src="assets/js/bigc-master-mapping.js?v=20261028-2"></script>
-  <script src="assets/js/bigc-v2.js?v=20261101-6"></script>
+  <script src="assets/js/bigc-v2.js?v=20261101-7"></script>
 </body>
 </html>
 
