@@ -301,13 +301,13 @@
         revenue: Number(returnCloud.savedAt || 0) > Number(localDraft.savedAtByType?.returns || 0) ? returnCloud.revenue || blankDraft().revenue : localDraft.revenue
       };
       hydrateDraft(draft);
-      const submitted = hydrateSubmitted([
+      hydrateSubmitted([
         ...(state.contexts.order.workflows || []).filter((row) => row.workflow_type === "close_order"),
         ...(state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"),
         ...(state.contexts.returns.workflows || []).filter((row) => row.workflow_type === "return")
       ]);
-      if (!submitted.receive) seedReceiveFromPrevious(state.contexts.receive.previous_order);
-      else $("#receiveSourceLabel").textContent = "รับของวันนี้เรียบร้อยแล้ว";
+      seedReceiveFromPrevious(state.contexts.receive.previous_order,
+        (state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"));
       seedDefaultReturns();
       renderAll();
       applyAccessMode();
@@ -335,7 +335,6 @@
     if (close && !Object.keys(state.order).length) {
       state.order = Object.fromEntries((close.lines || []).map((line) => [line.line_key, number(line.quantity)]));
     }
-    if (receive) clearCompletedReceiveDraft($("#receiveDate").value);
     if (returned) {
       if (!Object.keys(state.returns).length) state.returns = Object.fromEntries((returned.lines || []).map((line) => [line.line_key, { ...line }]));
       if (!$("#cashAmount").value && !$("#transferAmount").value && !$("#thaiAmount").value) {
@@ -344,15 +343,27 @@
     }
     return { close: Boolean(close), receive: Boolean(receive), returned: Boolean(returned) };
   }
-  function clearCompletedReceiveDraft(date) {
-    state.receive = {};
-    window.clearTimeout(state.cloudTimer);
-    localStorage.setItem(draftKey("receive", date), JSON.stringify({ savedAt: Date.now(), receive: {}, completed: true }));
-  }
-  function seedReceiveFromPrevious(previous) {
-    if (Object.keys(state.receive).length || !previous?.lines?.length) return;
-    previous.lines.forEach((line) => { const item = findMenu(line.line_key, line); state.receive[line.line_key] = { ...line, input_mode: item.inputMode, source_line_key: line.line_key, checked: false }; });
-    $("#receiveSourceLabel").textContent = `จากรายการวันที่ ${previous.business_date}`;
+  function newReceiptKey() { return `receipt-${crypto.randomUUID()}`; }
+  function seedReceiveFromPrevious(previous, receivedWorkflows = []) {
+    const received = receivedWorkflows.flatMap((workflow) => workflow.lines || []);
+    const completedKeys = new Set(received.map((line) => line.line_key));
+    const completedSources = new Set(received.map((line) => line.source_line_key
+      || (line.line_key?.startsWith("receipt-") ? "" : line.line_key)).filter(Boolean));
+    Object.entries(state.receive).forEach(([key, line]) => {
+      if (completedKeys.has(line.receipt_key)
+        || (line.source_line_key && completedSources.has(line.source_line_key))
+        || (!line.receipt_key && completedSources.has(key))) delete state.receive[key];
+      else line.receipt_key ||= newReceiptKey();
+    });
+    (previous?.lines || []).forEach((line) => {
+      if (state.receive[line.line_key] || completedSources.has(line.line_key)) return;
+      const item = findMenu(line.line_key, line);
+      state.receive[line.line_key] = { ...line, input_mode: item.inputMode,
+        source_line_key: line.line_key, receipt_key: newReceiptKey(), checked: false };
+    });
+    $("#receiveSourceLabel").textContent = Object.keys(state.receive).length
+      ? previous?.business_date ? `จากรายการสั่งวันที่ ${previous.business_date}` : "รายการรอรับ"
+      : received.length ? "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้" : "รายการรอรับ";
   }
   function seedDefaultReturns() {
     if (Object.keys(state.returns).length) return;
@@ -485,7 +496,7 @@
       const item = findMenu(key, line); if (line.checked) checked += 1;
       const type = receiveHandlingType(item); const kind = handlingLabel(type);
       return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${kind ? `<span class="receive-kind">${escapeHtml(kind)}</span>` : ""}${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div>${line.checked ? renderBrandAllocations(item, line, key) : ""}</div>`;
-    }).join("") : `<div class="empty-state">ยังไม่มีรายการจากเมื่อคืน<br>กด “+ เพิ่ม” เพื่อเพิ่มเอง</div>`;
+    }).join("") : `<div class="empty-state">ไม่มีรายการรอรับ<br>กด “+ เพิ่ม” เมื่อมีของเข้าระหว่างวัน</div>`;
     $("#receiveProgress").textContent = `${checked} / ${entries.length} รายการ`;
     $("#receiveProgressBar").style.width = `${entries.length ? checked / entries.length * 100 : 0}%`;
     bindQuantityEvents(); bindActualWeightEvents(); bindBrandEvents(); bindRowEvents();
@@ -635,7 +646,7 @@
     return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => {
       const item = findMenu(key, line); const handlingType = line.handling_type || receiveHandlingType(item);
       return {
-        ...line, line_key: key, item_id: line.item_id || item.itemId || item.item_id || null,
+        ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: line.item_id || item.itemId || item.item_id || null,
         input_mode: isPieceEstimatedFruit(item) && type === "receive" ? "quantity" : line.input_mode,
         actual_weight_kg: isPieceEstimatedFruit(item) && type === "receive" ? null : line.actual_weight_kg,
         handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType),
@@ -685,16 +696,22 @@
     };
     state.saving = true; loading("กำลังบันทึกลงฐานข้อมูล"); notice("");
     try {
-      const { data, error } = await state.client.schema("boy_central").rpc("save_bigc_v2_workflow", { payload });
+      if (type === "receive") saveDraft();
+      const { data, error } = await state.client.schema("boy_central").rpc(
+        type === "receive" ? "append_bigc_v2_receive" : "save_bigc_v2_workflow", { payload });
       if (error) throw error;
       if (type === "receive") {
-        clearCompletedReceiveDraft(payload.business_date);
-        $("#receiveSourceLabel").textContent = "รับของวันนี้เรียบร้อยแล้ว";
+        const submittedKeys = new Set(lines.map((line) => line.line_key));
+        Object.entries(state.receive).forEach(([key, line]) => {
+          if (submittedKeys.has(line.receipt_key)) delete state.receive[key];
+        });
+        saveDraft();
+        $("#receiveSourceLabel").textContent = Object.keys(state.receive).length ? "รายการรอรับ" : "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้";
         renderReceive();
       } else saveDraft();
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       try {
-        await sheetApi("bigcV2MirrorWorkflow", { payload: { ...payload, workflow_id: data.workflow_id } });
+        await sheetApi("bigcV2MirrorWorkflow", { payload: { ...(data.mirror_payload || payload), workflow_id: data.workflow_id } });
         await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
         setSync("บันทึกครบแล้ว", "ok"); notice("บันทึกเรียบร้อย");
       } catch (sheetError) {
@@ -711,7 +728,7 @@
     const query = $("#pickerSearch").value.trim().toLowerCase(); const selected = targetObject(state.pickerTarget);
     const items = state.menu.filter((item) => item.active && !selected[item.key] && (!query || `${item.displayName} ${item.category}`.toLowerCase().includes(query)));
     $("#pickerList").innerHTML = items.length ? items.map((item) => `<button class="picker-item" data-pick="${item.key}" type="button"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.category)}</small></span><b>＋</b></button>`).join("") : `<div class="empty-state">ไม่พบรายการ</div>`;
-    $$('[data-pick]').forEach((button) => { button.onclick = () => { const item = state.menu.find((row) => row.key === button.dataset.pick); selected[item.key] = { ...lineFromMenu(item), checked: state.pickerTarget === "receive" }; saveDraft(); $("#pickerModal").classList.add("hidden"); state.pickerTarget === "receive" ? renderReceive() : renderReturns(); }; });
+    $$('[data-pick]').forEach((button) => { button.onclick = () => { const item = state.menu.find((row) => row.key === button.dataset.pick); selected[item.key] = { ...lineFromMenu(item), ...(state.pickerTarget === "receive" ? { receipt_key: newReceiptKey() } : {}), checked: state.pickerTarget === "receive" }; saveDraft(); $("#pickerModal").classList.add("hidden"); state.pickerTarget === "receive" ? renderReceive() : renderReturns(); }; });
   }
 
   function openSettings() {
