@@ -240,3 +240,6 @@ html,body{overflow-x:clip}
   body[data-order-card-size="large"] .order-card .qty-control button{width:36px;height:36px;flex-basis:36px}
   body[data-order-card-size="large"] .order-card .qty-control input{width:34px;height:36px;font-size:18px}
 }
+.settings-menu-card[data-manage-only][hidden],.settings-save-bar[hidden]{display:none}
+.settings-detail .setting-row-readonly{grid-template-columns:minmax(0,1fr) auto}
+.branch-brand[aria-disabled="true"]{cursor:default}

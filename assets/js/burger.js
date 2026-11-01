@@ -1473,8 +1473,9 @@
   }
 
   async function ensureProfile(session) {
-    const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("display_name,company_role").eq("user_id", session.user.id).maybeSingle();
+    const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("display_name,company_role,employee_code,active").eq("user_id", session.user.id).maybeSingle();
     if (profileError) throw profileError;
+    if (profile?.active === false) throw new Error("บัญชีนี้ถูกปิดการใช้งาน");
     if (profile) return profile;
 
     const fallbackName = session.user.user_metadata?.display_name || session.user.email?.split("@")[0] || "ผู้ดูแล BOY";
@@ -1515,6 +1516,11 @@
     state.profile = profile;
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
+    if (profile.employee_code === "BIGC-SHARED-STAFF") {
+      window.BOY_LOCAL_ACCESS?.clear();
+      location.replace(next && /^bigc-v2\.html(?:[?#].*)?$/.test(next) ? next : "bigc-v2.html?online=1");
+      return;
+    }
     if (next && /^(tawana|bigc|bigc-v2|bigc-order|burger|dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
@@ -1725,11 +1731,7 @@
     button.disabled = true; button.textContent = "กำลังตรวจรหัส";
     const localPinConfigured = window.BOY_LOCAL_ACCESS?.configured();
     const localPinValid = localPinConfigured ? await window.BOY_LOCAL_ACCESS.verifyPin(pin) : false;
-    if (localPinConfigured && !localPinValid) {
-      button.disabled = false; button.textContent = "เข้าใช้งาน"; input.value = "";
-      $("#loginError").textContent = "รหัสไม่ถูกต้อง ลองอีกครั้ง"; input.focus(); return;
-    }
-    const { data, error } = await client.auth.signInWithPassword({ email: config.ownerLoginEmail, password: pin });
+    const { data, error } = await window.BOY_PIN_AUTH.signIn(client, config, pin);
     button.disabled = false; button.textContent = "เข้าใช้งาน";
     if (error) {
       if (localPinValid && !forceOnlineLogin) { await enterLocalApp(); return; }
@@ -1738,7 +1740,9 @@
       $("#loginError").textContent = invalidPin ? "รหัสไม่ถูกต้อง ลองอีกครั้ง" : "ระบบออนไลน์ยังไม่พร้อม กรุณาลองใหม่ภายหลัง";
       input.focus(); return;
     }
-    if (!localPinValid) await window.BOY_LOCAL_ACCESS?.verifyPin(pin);
+    if (data.session?.user?.email === config.staffLoginEmail) window.BOY_LOCAL_ACCESS?.clear();
+    else if (!localPinValid) await window.BOY_LOCAL_ACCESS?.verifyPin(pin);
+    input.value = "";
     await enterApp(data.session);
   });
   window.addEventListener("offline", updateSyncStatus);

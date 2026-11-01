@@ -218,6 +218,17 @@
     $("#staffSortButton").hidden = !staff;
     $("#branchModeLabel").textContent = staff ? "เวอร์ชันพนักงาน" : "BOY Operation · เวอร์ชันเต็ม";
     $("#openStaffLink").href = staffLink();
+    $$(".home-link").forEach(link => { link.hidden = staff; });
+    const brand = $(".branch-brand");
+    if (brand) {
+      if (!brand.dataset.ownerHref) brand.dataset.ownerHref = brand.getAttribute("href") || "index.html";
+      if (staff) {
+        brand.removeAttribute("href"); brand.setAttribute("aria-disabled","true"); brand.setAttribute("tabindex","-1");
+      } else {
+        brand.setAttribute("href",brand.dataset.ownerHref); brand.removeAttribute("aria-disabled"); brand.removeAttribute("tabindex");
+      }
+    }
+    if (staff && !DEMO_MODE) window.BOY_LOCAL_ACCESS?.clear();
   }
   function settingsPayload(menu = state.menu) {
     return {
@@ -263,6 +274,7 @@
     return data.settings;
   }
   async function flushPendingSettings(quiet = false) {
+    if (state.access && (!state.access.canManage || isStaffView())) return false;
     const pending = readStoredJson(SETTINGS_PENDING_KEY);
     if (!pending || !state.session || !navigator.onLine) return false;
     try {
@@ -951,6 +963,8 @@
   function openSettings() {
     const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
     $$(".manager-settings").forEach((section) => { section.hidden = !manage; });
+    $$("[data-manage-only]").forEach((section) => { section.hidden = !manage; });
+    $("#itemsSettingsHint").textContent = manage ? "เพิ่ม แก้ไข ลบ และเลือกแสดงในหน้าสั่งของ" : "ดูรายการสินค้า";
     $("#logoutSettingsButton").hidden = DEMO_MODE;
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
     showSettingsSection("");
@@ -965,7 +979,8 @@
     returns: ["รายการคืนของประจำ", "เลือกของที่ต้องการให้ขึ้นหน้าคืนโดยอัตโนมัติ"]
   };
   function showSettingsSection(section) {
-    if (section && (DEMO_MODE || isStaffView() || !state.access?.canManage)) return;
+    const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
+    if (section && !manage && !["items","returns"].includes(section)) return;
     state.selectedSettingsKeys.clear();
     state.selectingSettings = false;
     state.settingsSection = SETTINGS_SECTIONS[section] ? section : "";
@@ -974,9 +989,11 @@
     $("#settingsDetail").classList.toggle("hidden", !detail);
     $("#settingsBack").classList.toggle("hidden", !detail);
     $("#settingsTitle").textContent = detail ? SETTINGS_SECTIONS[section][0] : "ตั้งค่า";
-    $("#settingsSectionDescription").textContent = detail ? SETTINGS_SECTIONS[section][1] : "";
-    $("#openAddItem").classList.toggle("hidden", section !== "items");
+    $("#settingsSectionDescription").textContent = detail && (manage || section !== "items") ? SETTINGS_SECTIONS[section][1] : "";
+    $("#settingsSectionDescription").hidden = !$("#settingsSectionDescription").textContent;
+    $("#openAddItem").classList.toggle("hidden", section !== "items" || !manage);
     $("#openFruitCostSettings").classList.toggle("hidden", section !== "costing");
+    $(".settings-save-bar").hidden = !manage && section !== "returns";
     $("#settingsSearch").value = "";
     $("#settingsModal .modal-sheet").scrollTop = 0;
     if (detail) renderSettings();
@@ -1187,8 +1204,9 @@
     const visible = visibleSettingsItems();
     const count = state.selectedSettingsKeys.size;
     const selectedVisible = visible.filter((item) => state.selectedSettingsKeys.has(item.key)).length;
-    const selecting = state.settingsSection === "items" && state.selectingSettings;
-    $("#toggleSettingsSelection").classList.toggle("hidden", state.settingsSection !== "items");
+    const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
+    const selecting = manage && state.settingsSection === "items" && state.selectingSettings;
+    $("#toggleSettingsSelection").classList.toggle("hidden", state.settingsSection !== "items" || !manage);
     $("#toggleSettingsSelection").textContent = selecting ? "ยกเลิก" : "เลือก";
     $("#toggleSettingsSelection").setAttribute("aria-expanded", String(selecting));
     $("#toggleSettingsSelection").disabled = state.deletingSettings;
@@ -1209,17 +1227,19 @@
     const groups = new Map();
     items.forEach((item) => { const category = item.category || "อื่นๆ"; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(item); });
     const mode = state.settingsSection;
+    const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
     $("#settingsCategoryNav").innerHTML = [...groups.keys()].map((category, index) => `<button data-settings-category="${index}" type="button">${escapeHtml(category)}</button>`).join("");
     $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows], index) => `<section id="settings-category-${index}" class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
       const codes = masterItemCodes(item);
       const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
       const stockLabel = item.stockAtBigc ? item.deductTawanaStock ? " · นับ BigC/ตัดทาวน่า" : " · นับสต็อก BigC" : "";
-      const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${stockLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
+      const detail = !manage ? `${item.unit || "ไม่ระบุหน่วย"}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${stockLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
-      const selecting = mode === "items" && state.selectingSettings;
+      const selecting = manage && mode === "items" && state.selectingSettings;
       const selection = selecting ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
-      return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button></span></div>`;
+      const actions = manage ? `<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button></span>` : "";
+      return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}${manage ? "" : " setting-row-readonly"}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}${actions}</div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
@@ -1233,6 +1253,21 @@
   }
   async function persistSettings(successText) {
     if (DEMO_MODE) { notice("โหมดทดลองไม่บันทึกการตั้งค่าจริง"); return false; }
+    if (isStaffView() || !state.access?.canManage) {
+      if (state.settingsSection !== "returns") { notice("บัญชีนี้ไม่มีสิทธิ์แก้รายการสินค้า", true); return false; }
+      if (!state.session || !navigator.onLine) { notice("เชื่อมต่อออนไลน์ก่อนบันทึกรายการคืนประจำ", true); return false; }
+      loading("กำลังบันทึกรายการคืนประจำ");
+      try {
+        const {data,error} = await state.client.schema("boy_central").rpc("save_bigc_v2_default_returns", {
+          payload:{default_return_keys:state.menu.filter(item=>item.defaultReturn).map(item=>item.key)}
+        });
+        if (error) throw error;
+        state.menu = applyStaffSort(settingsMenu(data,state.menu));
+        cacheSettings(data,false); addMissingDefaultReturns(); renderAll(); saveDraft();
+        notice(successText); return "synced";
+      } catch (error) { notice(`บันทึกรายการคืนไม่สำเร็จ: ${error.message}`,true); return false; }
+      finally { loading("",false); }
+    }
     loading("กำลังบันทึกการตั้งค่า"); notice("");
     const payload = settingsPayload();
     cacheSettings(payload, true);
@@ -1266,12 +1301,14 @@
     if (status === "synced") $("#settingsModal").classList.add("hidden");
   }
   function openAddItem() {
+    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
     $("#newItemName").value = ""; $("#newItemCategory").value = categoryNames()[0] || ""; $("#newItemUnit").value = "";
     $("#addItemError").textContent = "";
     $("#categoryOptions").innerHTML = categoryNames().map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
     $("#addItemModal").classList.remove("hidden");
   }
   async function addMenuItem() {
+    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
     const name = $("#newItemName").value.trim(); const category = $("#newItemCategory").value.trim(); const unit = $("#newItemUnit").value.trim();
     if (!name || !category) { $("#addItemError").textContent = "กรุณากรอกชื่อรายการและประเภท"; return; }
     const key = keyFor(name, unit); if (state.menu.some((item) => item.displayName === (unit ? `${name} (${unit})` : name))) { $("#addItemError").textContent = "มีรายการนี้แล้ว"; return; }
@@ -1281,6 +1318,7 @@
     $("#addItemModal").classList.add("hidden"); renderSettings();
   }
   async function openEditItem(key, focusMapping = false) {
+    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || "";
     const category = item.category || "อื่นๆ";
@@ -1307,6 +1345,7 @@
     }
   }
   async function saveEditedItem() {
+    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
     const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim();
     const category = $("#editItemCategory").value === "__new__" ? $("#editItemNewCategory").value.trim() : $("#editItemCategory").value.trim();
@@ -1571,6 +1610,7 @@
     };
     $("#settingsBack").onclick = () => showSettingsSection("");
     $("#toggleSettingsSelection").onclick = () => {
+      if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
       if (state.deletingSettings) return;
       state.selectingSettings = !state.selectingSettings;
       state.selectedSettingsKeys.clear();

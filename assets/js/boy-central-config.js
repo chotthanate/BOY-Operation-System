@@ -3,5 +3,6 @@ window.BOY_CENTRAL_CONFIG = window.BOY_CENTRAL_CONFIG || {
   publishableKey: "sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo",
   usageUrl: "https://supabase.com/dashboard/org/fhqcxlhxyysinsiadrqb/usage",
   ownerLoginEmail: "chotthanate@gmail.com",
-  ownerUserId: "72533678-4ff6-4552-ac29-d27733aac7cb"
+  ownerUserId: "72533678-4ff6-4552-ac29-d27733aac7cb",
+  staffLoginEmail: "bigc-staff@boy-operation-system.local"
 };

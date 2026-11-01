@@ -29,9 +29,15 @@
   client.auth.getSession().then(async ({ data, error }) => {
     if (!error && data.session) {
       const requiredRole = document.body?.dataset.requiredRole;
-      if (requiredRole) {
-        const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("company_role,active").eq("user_id", data.session.user.id).maybeSingle();
-        if (profileError || !profile?.active || profile.company_role !== requiredRole) { block("บัญชีนี้ไม่มีสิทธิ์แก้ข้อมูลกลาง"); return; }
+      const page = location.pathname.split("/").pop() || "index.html";
+      if (requiredRole || page !== "bigc-v2.html") {
+        const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("company_role,active,employee_code").eq("user_id", data.session.user.id).maybeSingle();
+        if (profileError || !profile?.active) { block("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน"); return; }
+        if (profile.employee_code === "BIGC-SHARED-STAFF" && page !== "bigc-v2.html") {
+          window.BOY_LOCAL_ACCESS?.clear();
+          location.replace("bigc-v2.html?online=1"); return;
+        }
+        if (requiredRole && profile.company_role !== requiredRole) { block("บัญชีนี้ไม่มีสิทธิ์แก้ข้อมูลกลาง"); return; }
         data.session.profile = profile;
       }
       ready(data.session);
