@@ -187,3 +187,8 @@ body.staff-view #settingsButton{display:none!important}
 .settings-toolbar-actions{display:flex;gap:6px}
 .settings-toolbar-actions .hidden{display:none}
 @media(max-width:600px){.settings-toolbar-actions .secondary-button{padding:0 10px;font-size:12px}}
+.settings-pinned-controls{position:sticky;top:62px;z-index:7;margin:0 -16px;padding:8px 16px 0;background:#fff;border-bottom:1px solid var(--line)}
+.settings-pinned-controls .settings-category-nav{position:static;margin-top:6px;margin-bottom:0;backdrop-filter:none}
+.settings-pinned-controls .settings-toolbar input{min-width:0;width:100%}
+.settings-detail .setting-category-group{scroll-margin-top:190px}
+.settings-detail:has(.settings-bulk-actions:not(.hidden)) .setting-category-group{scroll-margin-top:320px}

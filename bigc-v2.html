@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#e5ab00">
   <title>BigC พัทยากลาง | BOY Operation รุ่นใหม่</title>
   <link rel="stylesheet" href="assets/css/store-chrome.css">
-  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-3">
+  <link rel="stylesheet" href="assets/css/bigc-v2.css?v=20261101-4">
   <style>
     .receive-measurements{display:grid;gap:6px;justify-items:end}.receive-measurement{display:grid;grid-template-columns:auto 94px;align-items:center;gap:6px}.receive-measurement span{font-size:10px;font-weight:800;color:var(--muted)}.receive-measurement input{width:94px;height:40px;border:1px solid #eadfae;border-radius:10px;padding:0 9px;text-align:right;font-weight:800}.receive-kind{display:inline-block;margin-right:5px;padding:2px 6px;border-radius:999px;background:#f1f3ef;color:var(--green);font-size:9px;font-weight:900}.cost-status{margin-top:4px!important;color:var(--accent-strong)!important}.cost-status.pending{color:var(--muted)!important}.edit-item-fields select{width:100%;min-height:46px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}@media(max-width:600px){.receive-row-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}.receive-measurement{grid-template-columns:1fr}.receive-measurement span{text-align:right}.receive-measurement input{width:90px}}
   </style>
@@ -107,6 +107,7 @@
       <div id="settingsDetail" class="settings-detail hidden">
         <p id="settingsSectionDescription" class="settings-intro"></p>
         <button id="openFruitCostSettings" class="secondary-button fruit-cost-open hidden" type="button">ดู Yield ข้อมูลกลาง / ตั้งค่าน้ำหนักผลไม้ต่อลูก</button>
+        <div class="settings-pinned-controls">
         <div class="settings-toolbar"><input id="settingsSearch" type="search" placeholder="ค้นหารายการตั้งค่า"><div class="settings-toolbar-actions"><button id="toggleSettingsSelection" class="secondary-button hidden" type="button" aria-expanded="false" aria-controls="settingsBulkActions">เลือก</button><button id="openAddItem" class="secondary-button" type="button">+ เพิ่ม</button></div></div>
         <div id="settingsBulkActions" class="settings-bulk-actions hidden">
           <label><input id="selectVisibleSettings" type="checkbox">เลือกทั้งหมดที่แสดง</label>
@@ -115,6 +116,7 @@
           <button id="deleteSelectedItems" class="secondary-button" type="button" disabled>ลบที่เลือก</button>
         </div>
         <nav id="settingsCategoryNav" class="settings-category-nav" aria-label="ไปยังหมวดสินค้า"></nav>
+        </div>
         <div id="settingsList" class="settings-list"></div>
         <div class="settings-save-bar"><button id="saveSettings" class="primary-action" type="button">บันทึกการตั้งค่า</button></div>
       </div>
