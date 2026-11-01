@@ -23,7 +23,8 @@
   if (!requireOnline && allowLocalAccess()) return;
   if (!window.supabase || !config.url || !config.publishableKey) { block("ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ"); return; }
   const client = window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+      ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) }
   });
   client.auth.getSession().then(async ({ data, error }) => {
     if (!error && data.session) {

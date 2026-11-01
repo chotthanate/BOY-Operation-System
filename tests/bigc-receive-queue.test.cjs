@@ -8,13 +8,13 @@ const { randomUUID } = require('node:crypto');
 function app() {
   const nodes = new Map();
   const node = id => {
-    if (!nodes.has(id)) nodes.set(id, {value:'2026-11-01',textContent:'',classList:{add(){},remove(){},toggle(){}}});
+    if (!nodes.has(id)) nodes.set(id, {value:'2026-11-01',textContent:'',style:{},getBoundingClientRect:()=>({height:0}),classList:{add(){},remove(){},toggle(){}}});
     return nodes.get(id);
   };
   const storage = new Map();
   const context = {URLSearchParams, Intl, Date, crypto:{randomUUID},console,
     location:{search:'?view=admin'},navigator:{onLine:true},
-    document:{body:{dataset:{}},querySelector:node,querySelectorAll:()=>[]},
+    document:{body:{dataset:{}},documentElement:{style:{setProperty(){}}},querySelector:node,querySelectorAll:()=>[]},
     localStorage:{setItem:(k,v)=>storage.set(k,v),getItem:k=>storage.get(k)||null},
     setTimeout:()=>0,clearTimeout:()=>{},
     BOYBigCMasterMapping:{codesFor:()=>[],withCodes:x=>x}};
@@ -146,6 +146,48 @@ test('submit removes only accepted checked lines and mirrors the cumulative back
   assert.deepEqual(Object.keys(qa.state.receive),['b']);
   assert.equal(qa.mirrors[0].lines[0].quantity,10);
   assert.ok(qa.draftSaves>0);
+});
+
+test('three slips with 6 + 5 + 8 lines disappear only after all 19 lines are saved',async()=>{
+  const {qa,node}=app();
+  const rounds=[6,5,8].map((count,index)=>({id:'slip-'+index,workflow_id:'daily-order',
+    business_date:'2026-10-31',submitted_at:'2026-10-31T18:00:00Z',
+    lines:Array.from({length:count},(_,i)=>({line_key:'product-'+i,item_name:'สินค้า '+i,
+      unit_name:'ชิ้น',quantity:i+1,input_mode:'quantity'}))}));
+  qa.state.receiveRounds=rounds;
+  qa.seedReceiveFromRounds(rounds);
+  assert.equal(Object.keys(qa.state.receive).length,19);
+  qa.renderReceive();
+  assert.equal((node('#receiveList').innerHTML.match(/data-receive-round=/g)||[]).length,3);
+  let posted;
+  qa.state.client={schema:()=>({rpc:async(name,{payload}={})=>{
+    if(name==='append_bigc_v2_receive'){posted=payload;return {data:{status:'saved',workflow_id:'saved',mirror_payload:payload}}}
+    return {data:{}};
+  }})};
+  // Receive just the six rows in the first slip.
+  Object.values(qa.state.receive).forEach(line=>{line.checked=line.source_round_id==='slip-0'});
+  assert.equal(await qa.submitWorkflow('receive'),true);
+  assert.equal(posted.lines.length,6);
+  const received=[...posted.lines];
+  assert.equal(Object.keys(qa.state.receive).length,13);
+  qa.seedReceiveFromRounds(rounds,[{lines:received}]);qa.renderReceive();
+  assert.equal((node('#receiveList').innerHTML.match(/data-receive-round=/g)||[]).length,2);
+  // Save the remaining thirteen, then reload from all recorded receipts.
+  Object.values(qa.state.receive).forEach(line=>{line.checked=true});
+  assert.equal(await qa.submitWorkflow('receive'),true);
+  received.push(...posted.lines);
+  assert.equal(received.length,19);
+  qa.seedReceiveFromRounds(rounds,[{lines:received}]);qa.renderReceive();
+  assert.equal(Object.keys(qa.state.receive).length,0);
+  assert.equal((node('#receiveList').innerHTML.match(/data-receive-round=/g)||[]).length,0);
+  assert.match(node('#receiveList').innerHTML,/ไม่มีรายการรอรับ/);
+  // All nineteen may also be checked and submitted in one call.
+  qa.state.receive={};qa.seedReceiveFromRounds(rounds);
+  Object.values(qa.state.receive).forEach(line=>{line.checked=true});
+  assert.equal(await qa.submitWorkflow('receive'),true);
+  assert.equal(posted.lines.length,19);
+  qa.seedReceiveFromRounds(rounds,[{lines:posted.lines}]);qa.renderReceive();
+  assert.equal(Object.keys(qa.state.receive).length,0);
 });
 
 test('failure retains draft and receipt ID for retry',async()=>{

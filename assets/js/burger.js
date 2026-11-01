@@ -8,7 +8,8 @@
   const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", ...(window.BOY_BRANCH_CONFIG || {}) };
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+      ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) }
   }) : null;
   const money = new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" });
   const number = new Intl.NumberFormat("th-TH", { maximumFractionDigits: 3 });

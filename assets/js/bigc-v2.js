@@ -214,7 +214,7 @@
   function applyAccessMode() {
     const staff = isStaffView();
     document.body.classList.toggle("staff-view", staff);
-    $("#settingsButton").hidden = staff || !state.access?.canManage;
+    $("#settingsButton").hidden = false;
     $("#staffSortButton").hidden = !staff;
     $("#branchModeLabel").textContent = staff ? "เวอร์ชันพนักงาน" : "BOY Operation · เวอร์ชันเต็ม";
     $("#openStaffLink").href = staffLink();
@@ -949,11 +949,13 @@
   }
 
   function openSettings() {
-    if (isStaffView() || !state.access?.canManage) { notice("บัญชีนี้ใช้รายการได้ แต่ไม่มีสิทธิ์แก้การตั้งค่า", true); return; }
+    const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
+    $$(".manager-settings").forEach((section) => { section.hidden = !manage; });
+    $("#logoutSettingsButton").hidden = DEMO_MODE;
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
     showSettingsSection("");
     const hasPending = Boolean(readStoredJson(SETTINGS_PENDING_KEY));
-    showSettingsConnection(!state.session || hasPending, !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : state.settingsConflict || "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
+    showSettingsConnection(manage && (!state.session || hasPending), !state.session ? "เข้าสู่ระบบออนไลน์ก่อนบันทึก เพื่อให้รายการใช้ได้ทุกเครื่อง" : state.settingsConflict || "มีการตั้งค่าที่เก็บไว้ในเครื่องและยังรอส่งขึ้น Supabase");
     renderSettings(); updateMappingSummary();
   }
   const SETTINGS_SECTIONS = {
@@ -963,6 +965,7 @@
     returns: ["รายการคืนของประจำ", "เลือกของที่ต้องการให้ขึ้นหน้าคืนโดยอัตโนมัติ"]
   };
   function showSettingsSection(section) {
+    if (section && (DEMO_MODE || isStaffView() || !state.access?.canManage)) return;
     state.selectedSettingsKeys.clear();
     state.selectingSettings = false;
     state.settingsSection = SETTINGS_SECTIONS[section] ? section : "";
@@ -1451,7 +1454,53 @@
     $$(".workflow-panel").forEach((panel) => panel.classList.toggle("active", panel.id === `panel-${tab}`));
     updateCartBar();
   }
+  function initializePersonalSettings() {
+    let size = "small";
+    try { if (localStorage.getItem(STORAGE_PREFIX + "order-card-size") === "large") size = "large"; } catch (_) {}
+    function applySize(value) {
+      document.body.dataset.orderCardSize = value;
+      $$('[name="orderCardSize"]').forEach(input => { input.checked = input.value === value; });
+    }
+    applySize(size);
+    $$('[name="orderCardSize"]').forEach(input => { input.onchange = () => {
+      if (!input.checked) return;
+      applySize(input.value);
+      try { localStorage.setItem(STORAGE_PREFIX + "order-card-size", input.value); }
+      catch (_) { showActionToast("เปลี่ยนขนาดแล้ว แต่เครื่องนี้ยังจำการตั้งค่าไม่ได้", "warning"); }
+    }; });
+    const updateStickyMetrics = () => {
+      const height = selector => $(selector)?.getBoundingClientRect().height || 0;
+      const header = height(".branch-header"), tabs = height(".workflow-tabs");
+      document.documentElement.style.setProperty("--branch-header-height", header + "px");
+      document.documentElement.style.setProperty("--order-controls-top", (header + tabs) + "px");
+      document.documentElement.style.setProperty("--order-scroll-offset", (header + tabs + height(".order-pinned-controls") + 12) + "px");
+    };
+    if (globalThis.ResizeObserver) {
+      const observer = new ResizeObserver(updateStickyMetrics);
+      [".branch-header", ".workflow-tabs", ".order-pinned-controls"].forEach(selector => { if ($(selector)) observer.observe($(selector)); });
+    }
+    window.addEventListener("resize", updateStickyMetrics);
+    updateStickyMetrics();
+  }
+  async function logoutFromSettings() {
+    if (DEMO_MODE || state.saving) return;
+    const button = $("#logoutSettingsButton");
+    button.disabled = true;
+    window.clearTimeout(state.cloudTimer);
+    try {
+      if (state.cloudDraftPromise) try { await state.cloudDraftPromise; } catch (_) {}
+      try { await state.client?.auth.signOut({ scope: "local" }); } catch (_) {}
+      await window.BOY_SESSION_STORAGE.clearProject(window.BOY_CENTRAL_CONFIG.url);
+      window.BOY_LOCAL_ACCESS?.clear();
+      state.session = null;
+      location.replace("burger.html?next=" + encodeURIComponent("bigc-v2.html" + location.search));
+    } catch (_) {
+      showActionToast("ยังออกจากระบบไม่สำเร็จ กรุณาลองอีกครั้ง", "error");
+      button.disabled = false;
+    }
+  }
   function bindStaticEvents() {
+    $("#logoutSettingsButton").onclick = logoutFromSettings;
     $$(".workflow-tabs button").forEach((button) => { button.onclick = () => selectWorkflowTab(button.dataset.tab); });
     ["cashAmount", "transferAmount", "thaiAmount"].forEach((id) => { $("#" + id).oninput = () => { renderRevenue(); saveDraft(); }; });
     $("#orderSearch").oninput = renderOrder; $("#pickerSearch").oninput = renderPicker; $("#settingsSearch").oninput = renderSettings;
@@ -1573,7 +1622,10 @@
     state.authContext = authContext || null;
     ["orderDate", "receiveDate", "returnDate"].forEach((id) => { $("#" + id).value = today(); }); renderDateDisplays(); bindStaticEvents();
     const config = window.BOY_CENTRAL_CONFIG || {};
-    state.client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
+    state.client = window.supabase.createClient(config.url, config.publishableKey, { auth: {
+      persistSession: true, autoRefreshToken: true,
+      ...(window.BOY_SESSION_STORAGE ? { storage: window.BOY_SESSION_STORAGE.storage } : {})
+    } });
     const { data } = await state.client.auth.getSession(); state.session = data.session;
     if (!state.session && authContext?.localAccess) {
       await loadAccess();
@@ -1606,8 +1658,10 @@
     state.orderHistory = DEMO_STORE.orderHistory();
     renderAll(); setSync("โหมดทดลอง","pending");
   }
+  initializePersonalSettings();
   if (DEMO_MODE) {
     state.started = true; state.access = {canManage:false};
+    $("#settingsButton").hidden = false;
     ["orderDate","receiveDate","returnDate"].forEach(id=>$("#"+id).value=today());
     bindStaticEvents(); loadDemoPage();
     $("#resetDemoButton").onclick = () => {
