@@ -767,22 +767,33 @@
     }).join("");
   }
 
+  const receiptPoll = { lastAttempt: 0, failures: 0 };
   async function loadPendingReceipts({ quiet = false } = {}) {
     if (!state.branch || state.receiptLoading) return;
+    if (navigator.onLine === false) return;
+    if (quiet && Date.now() - receiptPoll.lastAttempt < Math.min(30 * 60_000, 5 * 60_000 * 2 ** Math.min(receiptPoll.failures, 3))) return;
     if (!centralAvailable()) {
       if (!quiet) $("#pendingReceiptList").innerHTML = '<div class="empty-state">ต้องเชื่อมต่อ Supabase เพื่อดูรายการรอรับล่าสุด</div>';
       return;
     }
     state.receiptLoading = true;
+    receiptPoll.lastAttempt = Date.now();
     if (!quiet && !state.pendingReceipts.length) $("#pendingReceiptList").innerHTML = '<div class="empty-state">กำลังโหลดรายการรอรับ</div>';
-    const { data, error } = await client.schema("boy_central").rpc("get_branch_pending_receipts", { branch_code: branchApp.branchCode });
-    state.receiptLoading = false;
-    if (error) { if (!quiet) toast(`โหลดรายการรอรับไม่สำเร็จ: ${error.message}`); return; }
-    const previousReceipts = state.pendingReceipts;
-    state.pendingReceipts = Array.isArray(data) ? data : [];
-    renderPendingReceipts();
-    const receivedElsewhere = previousReceipts.some((receipt) => !state.pendingReceipts.some((row) => row.receipt_id === receipt.receipt_id));
-    if (receivedElsewhere) loadStock();
+    try {
+      const { data, error } = await client.schema("boy_central").rpc("get_branch_pending_receipts", { branch_code: branchApp.branchCode });
+      if (error) throw error;
+      receiptPoll.failures = 0;
+      const previousReceipts = state.pendingReceipts;
+      state.pendingReceipts = Array.isArray(data) ? data : [];
+      renderPendingReceipts();
+      const receivedElsewhere = previousReceipts.some((receipt) => !state.pendingReceipts.some((row) => row.receipt_id === receipt.receipt_id));
+      if (receivedElsewhere) loadStock();
+    } catch (error) {
+      receiptPoll.failures++;
+      if (!quiet) toast(`โหลดรายการรอรับไม่สำเร็จ: ${error.message}`);
+    } finally {
+      state.receiptLoading = false;
+    }
   }
 
   async function receivePendingReceipt(receiptId, button) {
@@ -1248,32 +1259,32 @@
     if (!centralAvailable()) { toast("Dashboard กลางจะกลับมาเมื่อ BOY Central พร้อม"); return; }
     const period = `${$("#dashboardMonth").value}-01`;
     const [year, month] = $("#dashboardMonth").value.split("-").map(Number);
-    const nextPeriod = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-    const [summaryResult, ordersResult] = await Promise.all([
-      client.schema("boy_central").from("v_monthly_branch_summary").select("income,expense,net_profit").eq("branch_id", state.branch.id).eq("month_start", period).maybeSingle(),
-      client.schema("boy_central").from("pos_orders").select("id,sales_channel,payment_method,total_amount,payment_status,pos_order_lines(item_name,quantity,line_total)").eq("branch_id", state.branch.id).gte("ordered_at", `${period}T00:00:00+07:00`).lt("ordered_at", `${nextPeriod}T00:00:00+07:00`)
-    ]);
-    if (summaryResult.error || ordersResult.error) { toast(summaryResult.error?.message || ordersResult.error?.message); return; }
-    const summary = summaryResult.data || { income: 0, expense: 0, net_profit: 0 };
+    const lastDay = new Date(year, month, 0).getDate();
+    const { data, error } = await client.schema('boy_central').rpc('get_branch_dashboard', {
+      target_branch_code: branchApp.branchCode, date_from: period,
+      date_to: `${year}-${String(month).padStart(2, '0')}-${lastDay}`,
+    });
+    if (error) { toast(error.message); return; }
+    const totals = data?.totals || {};
+    const summary = { income: totals.revenue || 0, expense: totals.expenses || 0 };
     const income = Number(summary.income || 0);
     const net = income - Number(summary.expense || 0);
-    const posOrders = (ordersResult.data || []).filter((row) => row.payment_status === "completed");
-    const voidOrders = (ordersResult.data || []).filter((row) => row.payment_status === "voided");
-    const saleOrders = posOrders.length;
-    const posSales = posOrders.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
+    const voidOrders = { length: Number(totals.voidOrders || 0) };
+    const saleOrders = Number(totals.orders || 0);
+    const posSales = Number(totals.revenue || 0);
     $("#metricGrid").innerHTML = `<article class="metric accent"><small>ยอดขายสุทธิ</small><strong>${money.format(income)}</strong></article><article class="metric"><small>รายจ่าย</small><strong>${money.format(summary.expense || 0)}</strong></article><article class="metric"><small>คงเหลือก่อนต้นทุน</small><strong>${money.format(net)}</strong></article><article class="metric"><small>ออเดอร์</small><strong>${number.format(saleOrders)}</strong></article><article class="metric"><small>เฉลี่ยต่อบิล</small><strong>${money.format(saleOrders ? posSales / saleOrders : 0)}</strong></article><article class="metric"><small>ยกเลิก</small><strong>${number.format(voidOrders.length)} บิล</strong></article>`;
     const channelMap = new Map();
-    posOrders.forEach((row) => {
-      const channel = ({ CASH: "เงินสด", cash: "เงินสด", TRANSFER: "เงินโอน", transfer: "เงินโอน", THAI_CHUAY_THAI: "ไทยช่วยไทย", thai_chuay_thai: "ไทยช่วยไทย" })[row.payment_method] || row.payment_method || "อื่นๆ";
-      channelMap.set(channel, (channelMap.get(channel) || 0) + Number(row.total_amount || 0));
+    (data?.payments || []).forEach((row) => {
+      const channel = ({ cash: 'เงินสด', transfer: 'เงินโอน', government: 'ไทยช่วยไทย' })[row.method] || 'อื่นๆ';
+      channelMap.set(channel, (channelMap.get(channel) || 0) + Number(row.amount || 0));
     });
     const channels = [...channelMap.entries()].map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total);
     const max = Math.max(...channels.map((row) => row.total), 1);
     $("#channelBreakdown").innerHTML = channels.length ? channels.map((row) => `<div class="breakdown-row"><span>${escapeHtml(row.name)}</span><span class="breakdown-bar"><span style="width:${Math.max(3, row.total / max * 100)}%"></span></span><strong>${money.format(row.total)}</strong></div>`).join("") : '<div class="empty-state">ยังไม่มีข้อมูลเดือนนี้</div>';
     const productMap = new Map();
-    posOrders.flatMap((order) => order.pos_order_lines || []).forEach((line) => {
+    (data?.products || []).forEach((line) => {
       const current = productMap.get(line.item_name) || { quantity: 0, total: 0 };
-      current.quantity += Number(line.quantity || 0); current.total += Number(line.line_total || 0);
+      current.quantity += Number(line.quantity || 0); current.total += Number(line.revenue || 0);
       productMap.set(line.item_name, current);
     });
     const products = [...productMap.entries()].map(([name, value]) => ({ name, ...value })).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
@@ -1758,6 +1769,6 @@
   });
   window.setInterval(() => {
     if (document.visibilityState === "visible" && state.session) loadPendingReceipts({ quiet: true });
-  }, 15000);
+  }, 5 * 60 * 1000);
   init();
 })();
