@@ -21,7 +21,7 @@ function app() {
   context.window=context;context.addEventListener=()=>{};
   const source=fs.readFileSync(path.join(__dirname,'../assets/js/bigc-v2.js'),'utf8');
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, `
-    window.qa = {state, seedReceiveFromPrevious, hydrateSubmitted, submitWorkflow, linesFor};
+    window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive};
     renderReceive = () => {}; renderAll = () => {}; loadPage = async () => {};
     window.qa.mirrors = []; sheetApi = async (action,data) => {window.qa.mirrors.push(data.payload)};
     saveDraft = () => {window.qa.draftSaves=(window.qa.draftSaves||0)+1};
@@ -68,6 +68,35 @@ test('legacy completed receipts do not reappear as new pending orders',()=>{
   qa.state.receive.a={quantity:2,checked:true};
   qa.seedReceiveFromPrevious(order,[{lines:[{line_key:'a',quantity:2}]}]);
   assert.deepEqual(Object.keys(qa.state.receive),['b']);
+});
+
+test('two order slips for one morning retain separate quantities and checked drafts',()=>{
+  const {qa,order}=app();
+  const newer={id:randomUUID(),workflow_id:randomUUID(),business_date:'2026-11-01',submitted_at:'2026-11-01T18:30:00Z',
+    lines:[{line_key:'a',item_name:'a',quantity:3,input_mode:'quantity'}]};
+  const older={...order,id:randomUUID(),workflow_id:order.id,submitted_at:'2026-11-01T17:30:00Z',legacy:true};
+  qa.state.receive.a={quantity:5,checked:true,source_line_key:'a',receipt_key:'receipt-'+randomUUID()};
+  qa.seedReceiveFromRounds([newer,older]);
+  assert.equal(qa.state.receive[`${older.id}:a`].quantity,5);
+  assert.equal(qa.state.receive[`${older.id}:a`].checked,true);
+  assert.equal(qa.state.receive[`${newer.id}:a`].quantity,3);
+  assert.equal(qa.state.receive[`${newer.id}:a`].checked,false);
+  assert.equal(qa.state.receive.a,undefined);
+  assert.equal(qa.state.receiveTopRoundId,newer.id);
+  assert.equal(qa.state.receiveExpanded.has(newer.id),true);
+  assert.equal(qa.state.receiveExpanded.has(older.id),false);
+  assert.equal(qa.linesFor('receive')[0].source_line_key,`${older.id}:a`);
+});
+
+test('receiving one slip does not remove the same item from another slip',()=>{
+  const {qa}=app();
+  const first={id:randomUUID(),workflow_id:randomUUID(),business_date:'2026-11-01',lines:[{line_key:'a',item_name:'a',quantity:2}]};
+  const second={...first,id:randomUUID(),lines:[{line_key:'a',item_name:'a',quantity:4}]};
+  qa.seedReceiveFromRounds([second,first]);
+  const source=`${first.id}:a`,receiptKey=qa.state.receive[source].receipt_key;
+  qa.seedReceiveFromRounds([second,first],[{lines:[{line_key:receiptKey,source_line_key:source,quantity:2}]}]);
+  assert.equal(qa.state.receive[source],undefined);
+  assert.equal(qa.state.receive[`${second.id}:a`].quantity,4);
 });
 
 test('submit removes only accepted checked lines and mirrors the cumulative backend total',async()=>{

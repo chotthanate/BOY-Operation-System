@@ -23,7 +23,7 @@
   };
   const state = {
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), selectingSettings: false, deletingSettings: false,
-    order: {}, receive: {}, returns: {}, receiveHistory: [], orderHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
+    order: {}, receive: {}, returns: {}, receiveHistory: [], receiveRounds: [], receiveExpanded: new Set(), receiveTopRoundId: "", orderHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, cloudDraftPromise: null, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
   };
@@ -295,7 +295,7 @@
 
   async function loadPage() {
     if (DEMO_MODE) { loadDemoPage(); return true; }
-    state.receiveHistory = null; state.orderHistory = null;
+    state.receiveHistory = null; state.receiveRounds = null; state.orderHistory = null;
     loading("กำลังโหลดข้อมูล"); notice("");
     try {
       await flushPendingSettings(true);
@@ -306,9 +306,14 @@
         const { data, error } = await request; if (error) throw error; return [date, data || {}];
       })));
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
-      const historyResult = await state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: dates.receive });
+      const [historyResult, roundsResult, orderHistoryResult] = await Promise.all([
+        state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: dates.receive }),
+        state.client.schema("boy_central").rpc("get_bigc_v2_receive_order_rounds", { target_date: dates.receive }),
+        state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 })
+      ]);
       state.receiveHistory = historyResult.error ? null : historyResult.data || [];
-      const orderHistoryResult = await state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 });
+      if (roundsResult.error) throw roundsResult.error;
+      state.receiveRounds = roundsResult.data || [];
       state.orderHistory = orderHistoryResult.error ? null : orderHistoryResult.data || [];
       state.context = state.activeTab === "receive" ? state.contexts.receive : state.activeTab === "return" ? state.contexts.returns : state.contexts.order;
       state.branch = state.context.branch;
@@ -336,7 +341,7 @@
         ...(state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"),
         ...(state.contexts.returns.workflows || []).filter((row) => row.workflow_type === "return")
       ]);
-      seedReceiveFromPrevious(state.contexts.receive.previous_order,
+      seedReceiveFromRounds(state.receiveRounds,
         (state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"));
       seedDefaultReturns();
       renderAll();
@@ -393,6 +398,39 @@
     $("#receiveSourceLabel").textContent = Object.keys(state.receive).length
       ? previous?.business_date ? `จากรายการสั่งวันที่ ${previous.business_date}` : "รายการรอรับ"
       : received.length ? "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้" : "รายการรอรับ";
+  }
+  function seedReceiveFromRounds(rounds, receivedWorkflows = []) {
+    const received = receivedWorkflows.flatMap((workflow) => workflow.lines || []);
+    const completedKeys = new Set(received.map((line) => line.line_key));
+    const completedSources = new Set(received.map((line) => line.source_line_key
+      || (line.line_key?.startsWith("receipt-") ? "" : line.line_key)).filter(Boolean));
+    Object.entries(state.receive).forEach(([key, line]) => {
+      if (completedKeys.has(line.receipt_key) || (line.source_line_key && completedSources.has(line.source_line_key))) delete state.receive[key];
+      else line.receipt_key ||= newReceiptKey();
+    });
+    [...rounds].reverse().forEach((round) => (round.lines || []).forEach((line) => {
+      const sourceKey = `${round.id}:${line.line_key}`;
+      if (completedSources.has(sourceKey) || (round.legacy && completedSources.has(line.line_key))) {
+        delete state.receive[sourceKey];
+        if (round.legacy) delete state.receive[line.line_key];
+        return;
+      }
+      const oldByName = state.receive[line.line_key];
+      const oldDraft = state.receive[sourceKey] || (oldByName?.source_line_key === line.line_key ? oldByName : null);
+      if (oldDraft === state.receive[line.line_key]) delete state.receive[line.line_key];
+      const item = findMenu(line.line_key, line);
+      state.receive[sourceKey] = { ...line, ...oldDraft, source_round_id: round.id,
+        source_workflow_id: round.workflow_id, source_line_key: sourceKey,
+        receipt_key: oldDraft?.receipt_key || newReceiptKey(),
+        input_mode: oldDraft?.input_mode || item.inputMode, checked: oldDraft?.checked === true };
+    }));
+    const top = rounds[0]?.id || "";
+    if (state.receiveTopRoundId !== top) {
+      state.receiveTopRoundId = top;
+      state.receiveExpanded = new Set(top ? [top] : []);
+    }
+    $("#receiveSourceLabel").textContent = rounds.length ? `${rounds.length} ใบสั่งของ` :
+      received.length ? "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้" : "รายการรอรับ";
   }
   function seedDefaultReturns() {
     if (Object.keys(state.returns).length) return;
@@ -457,11 +495,11 @@
     return "";
   }
   function receiveControls(item, line, key) {
-    if (isPieceEstimatedFruit(item)) return inputControl({ ...item, inputMode: "quantity" }, line.quantity, "receive");
-    if (!needsActualWeight(item)) return inputControl(item, line.quantity, "receive");
+    if (isPieceEstimatedFruit(item)) return inputControl({ ...item, key, inputMode: "quantity" }, line.quantity, "receive");
+    if (!needsActualWeight(item)) return inputControl({ ...item, key }, line.quantity, "receive");
     const weight = finiteNumber(line.actual_weight_kg);
     const quantityControl = isWeightQuantity(item) ? "" : `<label class="receive-measurement"><span>จำนวนที่รับ (${escapeHtml(item.unit || "หน่วย")})</span><input data-qty-target="receive" data-key="${key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(line.quantity) || ""}" aria-label="จำนวนที่รับ"></label>`;
-    return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="number" min="0" step="0.001" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
+    return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="text" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
   }
   function sharedStockOptions(item, line) {
     return state.sharedStockVariants.get(item.itemId || item.item_id || line.item_id) || [];
@@ -501,7 +539,7 @@
     return groups;
   }
   function inputControl(item, value, target) {
-    if (!target.startsWith("order") && item.inputMode === "weight") return `<div class="weight-control"><input data-qty-target="${target}" data-key="${item.key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(value) || ""}" placeholder="${escapeHtml(item.unit || "น้ำหนัก")}"></div>`;
+    if (!target.startsWith("order") && item.inputMode === "weight") return `<div class="weight-control"><input data-qty-target="${target}" data-key="${item.key}" inputmode="decimal" type="text" value="${number(value) || ""}" placeholder="${escapeHtml(item.unit || "น้ำหนัก")}"></div>`;
     return `<div class="qty-control"><button data-step="-1" data-qty-target="${target}" data-key="${item.key}" type="button" aria-label="ลดจำนวน">−</button><input data-qty-target="${target}" data-key="${item.key}" inputmode="numeric" type="number" min="0" step="1" value="${number(value)}" aria-label="จำนวน"><button data-step="1" data-qty-target="${target}" data-key="${item.key}" type="button" aria-label="เพิ่มจำนวน">+</button></div>`;
   }
   function renderOrder() {
@@ -518,16 +556,32 @@
     $$('[data-category-target]').forEach((button) => { button.onclick = () => $("#" + button.dataset.categoryTarget)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $("#orderCount").textContent = `${selected} รายการ`; bindQuantityEvents(); bindOrderCards(); updateCartBar();
   }
-  function findMenu(key, line) { return state.menu.find((item) => item.key === key) || { key, displayName: line.item_name, name: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", handlingType: line.handling_type || "", costingBasis: line.costing_basis || "", itemId: line.item_id || null, sortOrder: line.sort_order || 0 }; }
+  function findMenu(key, line) { return state.menu.find((item) => item.key === key || item.key === line?.line_key) || { key, displayName: line.item_name, name: line.item_name, category: line.category_name || "อื่นๆ", unit: line.unit_name || "", inputMode: line.input_mode || "quantity", handlingType: line.handling_type || "", costingBasis: line.costing_basis || "", itemId: line.item_id || null, sortOrder: line.sort_order || 0 }; }
   function renderReceive() {
     const entries = Object.entries(state.receive); let checked = 0;
-    $("#receiveList").innerHTML = entries.length ? entries.map(([key, line]) => {
+    const renderRow = ([key, line]) => {
       const item = findMenu(key, line); if (line.checked) checked += 1;
-      const type = receiveHandlingType(item); const kind = handlingLabel(type);
-      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${key}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${key}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${key}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${kind ? `<span class="receive-kind">${escapeHtml(kind)}</span>` : ""}${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div>${line.checked ? renderBrandAllocations(item, line, key) : ""}</div>`;
-    }).join("") : `<div class="empty-state">ไม่มีรายการรอรับ<br>กด “+ เพิ่ม” เมื่อมีของเข้าระหว่างวัน</div>`;
+      return `<div class="item-row ${line.checked ? "" : "unchecked"}" data-swipe-key="${escapeHtml(key)}" data-swipe-target="receive"><button class="swipe-delete" data-remove-target="receive" data-key="${escapeHtml(key)}" type="button">ไม่ได้รับ</button><div class="item-row-inner receive-row-inner"><label class="receive-check"><input data-receive-check="${escapeHtml(key)}" type="checkbox" ${line.checked ? "checked" : ""}><span class="item-copy"><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(item.unit || "จำนวน")}</small>${costStatusHtml(line)}</span></label>${receiveControls(item, line, key)}</div>${line.checked ? renderBrandAllocations(item, line, key) : ""}</div>`;
+    };
+    const roundIds = new Set((state.receiveRounds || []).map((round) => round.id));
+    const ordered = (state.receiveRounds || []).map((round) => ({ round,
+      rows: entries.filter(([, line]) => line.source_round_id === round.id) })).filter(({ rows }) => rows.length);
+    const manual = entries.filter(([, line]) => !line.source_round_id || !roundIds.has(line.source_round_id));
+    if (state.receiveRounds?.length) $("#receiveSourceLabel").textContent = ordered.length
+      ? `${ordered.length} ใบสั่งของ` : manual.length ? "รายการเพิ่มเอง" : "รับรายการครบแล้ว · เพิ่มรายการระหว่างวันได้";
+    const cards = ordered.map(({ round, rows }, index) => {
+      const time = round.submitted_at ? new Date(round.submitted_at).toLocaleTimeString("th-TH", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" }) : "";
+      const title = `สั่ง ${formatThaiDate(round.business_date)}${time ? ` · ${time} น.` : ""}`;
+      return `<details class="receive-order-card" data-receive-round="${escapeHtml(round.id)}" ${state.receiveExpanded.has(round.id) || (!state.receiveTopRoundId && index === 0) ? "open" : ""}><summary><strong>${escapeHtml(title)}</strong><span>${rows.length} รายการ</span></summary><div class="receive-order-lines">${rows.map(renderRow).join("")}</div></details>`;
+    });
+    if (manual.length) cards.push(`<section class="receive-manual-card"><h3>รายการเพิ่มเอง</h3><div class="receive-order-lines">${manual.map(renderRow).join("")}</div></section>`);
+    $("#receiveList").innerHTML = cards.length ? cards.join("") : `<div class="empty-state">ไม่มีรายการรอรับ<br>กด “+ เพิ่ม” เมื่อมีของเข้าระหว่างวัน</div>`;
     $("#receiveProgress").textContent = `${checked} / ${entries.length} รายการ`;
     $("#receiveProgressBar").style.width = `${entries.length ? checked / entries.length * 100 : 0}%`;
+    $$('[data-receive-round]').forEach((card) => { card.ontoggle = () => {
+      if (card.open) state.receiveExpanded.add(card.dataset.receiveRound);
+      else state.receiveExpanded.delete(card.dataset.receiveRound);
+    }; });
     bindQuantityEvents(); bindActualWeightEvents(); bindBrandEvents(); bindRowEvents();
     renderReceiveHistory();
   }
@@ -644,6 +698,16 @@
     value.setUTCDate(value.getUTCDate() + 1);
     return value.toISOString().slice(0, 10);
   }
+  function receiveDateForOrder(orderDate) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", hourCycle: "h23"
+    }).formatToParts(new Date()).map((part) => [part.type, part.value]));
+    const localDate = `${parts.year}-${parts.month}-${parts.day}`;
+    const nextMorning = Number(parts.hour) < 6 ? localDate : nextBusinessDate(localDate);
+    const planned = nextBusinessDate(orderDate);
+    return planned < nextMorning ? planned : nextMorning;
+  }
   async function copyOrderText(lines, businessDate) {
     const groups = new Map();
     [...lines].filter((line) => number(line.quantity) > 0)
@@ -740,7 +804,7 @@
     });
   }
 
-  async function submitWorkflow(type, { reload = true } = {}) {
+  async function submitWorkflow(type, { reload = true, deferMirror = false } = {}) {
     if (state.saving) return false;
     const lines = linesFor(type);
     if (type === "close_order" && !lines.length) { notice("ยังไม่มีรายการสั่งของ", true); return false; }
@@ -804,6 +868,8 @@
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       if (DEMO_MODE) {
         setSync("โหมดทดลอง", "pending"); notice("บันทึกทดลองแล้ว · ไม่ส่งข้อมูลจริง");
+      } else if (deferMirror && type === "close_order") {
+        setSync("บันทึก Supabase แล้ว · กำลังส่งชีต", "pending");
       } else try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...(data.mirror_payload || payload), workflow_id: data.workflow_id } });
         await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
@@ -815,12 +881,56 @@
       }
       if (reload) await loadPage();
       return type === "close_order" ? { workflowId: data.workflow_id,
-        submissionId: payload.submission_id, businessDate: payload.business_date, lines, mirrorSynced } : true;
+        submissionId: payload.submission_id, businessDate: payload.business_date, lines,
+        mirrorPayload: data.mirror_payload || payload, mirrorSynced } : true;
     } catch (error) {
       if (type === "close_order") saveDraft();
       setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); return false;
     }
     finally { state.saving = false; loading("", false); }
+  }
+
+  async function mirrorSavedOrder(saved, { copied = true } = {}) {
+    if (DEMO_MODE) return true;
+    try {
+      await sheetApi("bigcV2MirrorWorkflow", { payload: { ...saved.mirrorPayload, workflow_id: saved.workflowId } });
+      const { error } = await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", {
+        target_workflow_id: saved.workflowId, sync_status: "synced", sync_error: null
+      });
+      if (error) throw error;
+      setSync("บันทึกครบแล้ว", "ok");
+      showActionToast(copied ? "บันทึก Supabase คัดลอกข้อความ และส่งสำเนา Google Sheets แล้ว" :
+        "บันทึก Supabase และส่งสำเนา Google Sheets แล้ว · คัดลอกซ้ำในประวัติ", copied ? "ok" : "warning");
+      return true;
+    } catch (error) {
+      try { await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", {
+        target_workflow_id: saved.workflowId, sync_status: "error",
+        sync_error: String(error.message || error).slice(0, 400)
+      }); } catch (_) { /* database save remains valid */ }
+      setSync("รอส่ง Google Sheets", "pending");
+      showActionToast(`บันทึก Supabase แล้ว แต่สำเนา Google Sheets ยังไม่สำเร็จ${copied ? "" : " · คัดลอกซ้ำในประวัติ"}`, "warning");
+      return false;
+    }
+  }
+
+  async function refreshReceiveAfterOrder(receiveDate, submissionId) {
+    if (DEMO_MODE) { loadDemoPage(); return state.receiveRounds.some((round) => round.id === submissionId); }
+    const [contextResult, roundsResult, historyResult, orderHistoryResult] = await Promise.all([
+      state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: receiveDate }),
+      state.client.schema("boy_central").rpc("get_bigc_v2_receive_order_rounds", { target_date: receiveDate }),
+      state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: receiveDate }),
+      state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 })
+    ]);
+    if (contextResult.error || roundsResult.error) throw contextResult.error || roundsResult.error;
+    state.contexts.receive = contextResult.data || {};
+    state.context = state.contexts.receive;
+    state.receiveRounds = roundsResult.data || [];
+    state.receiveHistory = historyResult.error ? null : historyResult.data || [];
+    state.orderHistory = orderHistoryResult.error ? null : orderHistoryResult.data || [];
+    seedReceiveFromRounds(state.receiveRounds,
+      (state.contexts.receive.workflows || []).filter((row) => row.workflow_type === "receive"));
+    renderReceive(); renderOrderHistory();
+    return state.receiveRounds.some((round) => round.id === submissionId);
   }
 
   function openPicker(target) { state.pickerTarget = target; $("#pickerSearch").value = ""; $("#pickerModal").classList.remove("hidden"); renderPicker(); }
@@ -1352,35 +1462,49 @@
       const button = $("#saveAndCopyOrder"); if (button.disabled) return;
       button.disabled = true;
       try {
-        const saved = await submitWorkflow("close_order", { reload: false });
+        const saved = await submitWorkflow("close_order", { reload: false, deferMirror: true });
         if (!saved) { showActionToast($("#pageNotice").textContent || "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง", "error"); return; }
+        state.orderHistory = [{ id: saved.submissionId, business_date: saved.businessDate,
+          submitted_at: new Date().toISOString(), lines: saved.lines },
+        ...(state.orderHistory || []).filter((row) => row.id !== saved.submissionId)].slice(0, 30);
+        renderOrderHistory();
+        let copied = true;
         try { await copyOrderText(saved.lines, saved.businessDate); }
-        catch (_) {
-          await loadPage();
-          $("#orderSummaryModal").classList.add("hidden");
-          showActionToast("บันทึกลงฐานข้อมูลแล้ว แต่คัดลอกไม่สำเร็จ กดคัดลอกซ้ำในประวัติ", "warning");
-          return;
-        }
+        catch (_) { copied = false; }
         state.order = {};
         localStorage.removeItem(orderSubmissionKey(saved.businessDate));
         saveDraft();
         window.clearTimeout(state.cloudTimer);
-        let clearedOnline = true;
-        if (!DEMO_MODE) try { clearedOnline = await saveCloudDraft(currentDraft("order")); }
-        catch (_) { clearedOnline = false; }
+        if (!DEMO_MODE) void saveCloudDraft(currentDraft("order")).catch(() => {
+          setSync("ร่างออนไลน์ยังไม่อัปเดต", "pending");
+        });
         $("#orderSummaryModal").classList.add("hidden");
-        $("#receiveDate").value = nextBusinessDate(saved.businessDate);
+        const receiveDate = receiveDateForOrder(saved.businessDate);
+        const dateChanged = $("#receiveDate").value !== receiveDate;
+        $("#receiveDate").value = receiveDate;
+        if (dateChanged) state.receive = readLocalDraft().receive;
+        renderDateDisplays(); renderOrder();
         selectWorkflowTab("receive");
-        const loaded = await loadPage();
-        const ready = loaded && state.contexts.receive?.previous_order?.id === saved.workflowId;
-        const result = DEMO_MODE ? "บันทึกและคัดลอกข้อมูลทดลองแล้ว" : ready
-          ? "บันทึกลง Supabase และคัดลอกแล้ว · รายการอยู่หน้ารับของวันพรุ่งนี้"
-          : "บันทึกลง Supabase และคัดลอกแล้ว · ยังโหลดหน้ารับของไม่สำเร็จ ตรวจประวัติการสั่งของ";
-        const message = [result,
-          !DEMO_MODE && !saved.mirrorSynced ? "Google Sheets รอส่ง" : "",
-          !DEMO_MODE && !clearedOnline ? "ร่างในเครื่องเคลียร์แล้ว แต่ซิงก์ร่างออนไลน์ไม่สำเร็จ" : ""].filter(Boolean).join(" · ");
-        notice(message, !ready && !DEMO_MODE);
-        showActionToast(message, (ready || DEMO_MODE) && saved.mirrorSynced && clearedOnline ? "ok" : "warning");
+        if (!DEMO_MODE) {
+          const newRound = { id: saved.submissionId, workflow_id: saved.workflowId,
+            business_date: saved.businessDate, submitted_at: new Date().toISOString(), lines: saved.lines };
+          state.receiveRounds = [newRound, ...((dateChanged ? [] : state.receiveRounds) || [])
+            .filter((round) => round.id !== saved.submissionId)];
+          seedReceiveFromRounds(state.receiveRounds, dateChanged ? [] :
+            (state.contexts.receive?.workflows || []).filter((row) => row.workflow_type === "receive"));
+          renderReceive();
+        }
+        showActionToast(copied
+          ? DEMO_MODE ? "บันทึกและคัดลอกข้อมูลทดลองแล้ว" : "บันทึก Supabase และคัดลอกแล้ว · กำลังส่งสำเนา Google Sheets"
+          : "บันทึกแล้ว แต่คัดลอกไม่สำเร็จ · คัดลอกซ้ำในประวัติ", copied ? "ok" : "warning");
+        const mirrorPromise = mirrorSavedOrder(saved, { copied });
+        try {
+          const ready = await refreshReceiveAfterOrder(receiveDate, saved.submissionId);
+          if (!ready) showActionToast("บันทึกแล้ว แต่ยังไม่พบใบสั่งในหน้ารับของ · ตรวจประวัติการสั่งของ", "warning");
+        } catch (error) {
+          showActionToast(`บันทึกแล้ว แต่โหลดหน้ารับของไม่สำเร็จ: ${error.message}`, "warning");
+        }
+        void mirrorPromise;
       } finally { button.disabled = false; }
     };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
@@ -1469,7 +1593,8 @@
       ...state.contexts.order.workflows.filter(w=>w.workflow_type==="close_order"),
       ...state.contexts.returns.workflows.filter(w=>w.workflow_type==="return")
     ]);
-    seedReceiveFromPrevious(state.contexts.receive.previous_order,state.contexts.receive.workflows.filter(w=>w.workflow_type==="receive"));
+    state.receiveRounds = DEMO_STORE.receiveOrderRounds($("#receiveDate").value);
+    seedReceiveFromRounds(state.receiveRounds,state.contexts.receive.workflows.filter(w=>w.workflow_type==="receive"));
     state.receiveHistory = DEMO_STORE.history($("#receiveDate").value);
     state.orderHistory = DEMO_STORE.orderHistory();
     renderAll(); setSync("โหมดทดลอง","pending");

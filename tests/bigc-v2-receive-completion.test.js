@@ -17,9 +17,15 @@ test('order summary uses circular quantity buttons', () => {
 });
 
 test('a completed receipt clears its local draft and is not seeded again', () => {
-  assert.match(script, /seedReceiveFromPrevious\(state\.contexts\.receive\.previous_order,/);
-  assert.match(script, /completedSources\.has\(line\.line_key\)/);
+  assert.match(script, /seedReceiveFromRounds\(state\.receiveRounds,/);
+  assert.match(script, /completedSources\.has\(sourceKey\)/);
   assert.match(script, /if \(submittedKeys\.has\(line\.receipt_key\)\) delete state\.receive\[key\]/);
+});
+
+test('copy failure still finalizes the saved order and opens its receive slip', () => {
+  assert.match(script, /try \{ await copyOrderText\(saved\.lines, saved\.businessDate\); \}\s*catch \(_\) \{ copied = false; \}\s*state\.order = \{\};/);
+  assert.match(script, /mirrorSavedOrder\(saved, \{ copied \}\)/);
+  assert.match(script, /refreshReceiveAfterOrder\(receiveDate, saved\.submissionId\)/);
 });
 
 test('settings are separated by category and iPhone fields do not trigger focus zoom', () => {

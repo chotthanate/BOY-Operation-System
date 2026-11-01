@@ -22,6 +22,14 @@
       const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);
       return d.toISOString().slice(0,10);
     };
+    const receiveDateFor=(row)=>{
+      const parts=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",hourCycle:"h23"})
+        .formatToParts(new Date(row.submitted_at)).map(part=>[part.type,part.value]));
+      const localDate=`${parts.year}-${parts.month}-${parts.day}`;
+      const nextMorning=Number(parts.hour)<6?localDate:nextDate(localDate);
+      const planned=nextDate(row.business_date);
+      return planned<nextMorning?planned:nextMorning;
+    };
     const context=date=>({
       branch:{id:"demo",name:"BigC · ทดลอง",code:"DEMO"},
       business_date:date,settings:{menu_config:clone(data.menu)},
@@ -70,6 +78,13 @@
     return {menu:()=>clone(data.menu),context,submit,nextDate,
       history:date=>clone(data.batches[date]||[]),
       orderHistory:()=>clone(data.submissions).reverse().sort((a,b)=>b.submitted_at.localeCompare(a.submitted_at)).slice(0,30),
+      receiveOrderRounds:date=>clone([
+        ...data.submissions.filter(row=>receiveDateFor(row)===date).map(row=>({...row,legacy:false})),
+        ...Object.values(data.workflows).filter(row=>row.workflow_type==="close_order"
+          && nextDate(row.business_date)===date && !data.submissions.some(s=>s.workflow_id===row.id))
+          .map(row=>({id:row.id,workflow_id:row.id,business_date:row.business_date,
+            submitted_at:row.submitted_at,lines:row.lines,legacy:true}))
+      ].sort((a,b)=>b.submitted_at.localeCompare(a.submitted_at))),
       reset:()=>{
         const keys=[];for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith("boy-bigc-demo:"))keys.push(key)}
         keys.forEach(key=>storage.removeItem(key));

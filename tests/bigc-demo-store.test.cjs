@@ -8,9 +8,9 @@ function demo(){
  const values=new Map([['boy-bigc-v2-settings-pending','live-pending'],['boy-bigc-v2-draft:receive:2026-11-01','live-receive']]);
  const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k),
   key:i=>[...values.keys()][i],get length(){return values.size}};
- const context={crypto:{randomUUID},Date,localStorage:storage};
+ const context={crypto:{randomUUID},Date,Intl,localStorage:storage};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/js/bigc-demo-store.js'),'utf8'),context);
- return {store:context.BOYBigCDemo.createStore(storage),values};
+ return {store:context.BOYBigCDemo.createStore(storage),values,createStore:()=>context.BOYBigCDemo.createStore(storage)};
 }
 test('sample ordering supplies tomorrow receipts without reading or changing live queues',()=>{
  const {store,values}=demo();
@@ -60,4 +60,22 @@ test('same-day orders append without losing receiving lines, and retries do not 
  assert.equal(store.orderHistory().length,2);
  assert.equal(store.orderHistory()[0].lines[0].quantity,3);
  assert.equal(secondSaved.mirror_payload.lines.find(line=>line.line_key==='demo-orange').quantity,5);
+});
+test('morning receive shows each saved slip separately, including after-midnight orders',()=>{
+ const {store,values,createStore}=demo();
+ const menu=store.menu();
+ const firstId=randomUUID(),secondId=randomUUID();
+ const order={workflow_type:'close_order',business_date:'2026-11-01',
+  lines:[{line_key:menu[0].key,item_name:menu[0].displayName,quantity:2}]};
+ store.submit({...order,submission_id:firstId});
+ store.submit({...order,business_date:'2026-11-02',submission_id:secondId});
+ const data=JSON.parse(values.get('boy-bigc-demo:data'));
+ data.submissions.find(row=>row.id===firstId).submitted_at='2026-11-01T13:00:00Z';
+ data.submissions.find(row=>row.id===secondId).submitted_at='2026-11-01T18:25:00Z';
+ values.set('boy-bigc-demo:data',JSON.stringify(data));
+ const rounds=createStore().receiveOrderRounds('2026-11-02');
+ assert.equal(rounds.length,2);
+ assert.deepEqual(Array.from(rounds,row=>row.id),[secondId,firstId]);
+ assert.equal(rounds[0].lines[0].quantity,2);
+ assert.equal(rounds[1].lines[0].quantity,2);
 });
