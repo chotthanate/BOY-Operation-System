@@ -149,7 +149,8 @@
       inputMode: item.inputMode === "weight" ? "weight" : "quantity",
       active: item.active !== false, defaultReturn: defaultKeys.has(item.key), sortOrder: Number(item.sortOrder ?? index),
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
-      itemId: item.itemId || item.item_id || null
+      itemId: item.itemId || item.item_id || null,
+      stockAtBigc: item.stockAtBigc === true, deductTawanaStock: item.deductTawanaStock === true
     }, masterItemCodes(item), item.masterItemId || item.master_item_id || "")).sort((left, right) => left.sortOrder - right.sortOrder);
   }
 
@@ -216,6 +217,7 @@
       handlingType: item.handlingType || item.handling_type || "", costingBasis: item.costingBasis || item.costing_basis || "",
       itemId: item.itemId || item.item_id || null, masterItemId: item.masterItemId || item.master_item_id || null,
       masterItemIds: masterItemCodes(item),
+      stockAtBigc: item.stockAtBigc === true, deductTawanaStock: item.deductTawanaStock === true,
       active: item.active !== false, sortOrder: Number(item.sortOrder ?? index)
     })).sort((left, right) => left.sortOrder - right.sortOrder || left.key.localeCompare(right.key));
     return JSON.stringify({ menu: normalized, returns: [...(payload?.default_return_keys || [])].sort() });
@@ -1031,7 +1033,8 @@
     $("#settingsList").innerHTML = [...groups.entries()].map(([category, rows], index) => `<section id="settings-category-${index}" class="setting-category-group"><h3><span>${escapeHtml(category)}</span><small>${rows.length} รายการ</small></h3>${rows.map((item) => {
       const codes = masterItemCodes(item);
       const mappingLabel = codes.length ? `ผูกสินค้า ${codes.length} รายการ${item.itemId ? "" : " · รอรหัสเชื่อม"}` : "ยังไม่จับคู่สินค้า";
-      const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
+      const stockLabel = item.stockAtBigc ? item.deductTawanaStock ? " · นับ BigC/ตัดทาวน่า" : " · นับสต็อก BigC" : "";
+      const detail = mode === "items" ? `${item.unit || "ไม่ระบุหน่วย"} · ${mappingLabel}${stockLabel}${item.active === false ? " · ไม่แสดงในหน้าสั่ง" : ""}` : mode === "costing" ? `${handlingSettingLabel(item)} · ${mappingLabel}` : `${item.unit || "ไม่ระบุหน่วย"} · ${handlingSettingLabel(item)}`;
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
       const selecting = mode === "items" && state.selectingSettings;
@@ -1108,6 +1111,9 @@
     $("#editItemNewCategoryField").classList.add("hidden");
     $("#editItemHandlingType").value = receiveHandlingType(item);
     $("#editItemActive").checked = item.active !== false;
+    $("#editItemStockBigc").checked = item.stockAtBigc === true;
+    $("#editItemStockTawana").checked = item.deductTawanaStock === true;
+    $("#editItemStockTawanaField").classList.toggle("hidden", item.stockAtBigc !== true);
     $("#editItemMappingSearch").value = focusMapping ? (item.name || item.displayName || "") : "";
     state.editingMasterCodes = masterItemCodes(item);
     $("#editItemMappingStatus").textContent = "กำลังโหลดสินค้าข้อมูลกลาง…";
@@ -1130,10 +1136,17 @@
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
     item.active = $("#editItemActive").checked;
+    item.stockAtBigc = $("#editItemStockBigc").checked;
+    item.deductTawanaStock = item.stockAtBigc && $("#editItemStockTawana").checked;
     const mapping = canonicalCodeFor(state.editingMasterCodes, state.normalizedRowsByCode, state.masterItemsByCode);
     if (mapping.error && state.editingMasterCodes.length) { $("#editItemError").textContent = mapping.error; return; }
     Object.assign(item, withMasterItemCodes(item, mapping.code ? [mapping.code, ...state.editingMasterCodes] : [], mapping.code));
     item.itemId = item.masterItemId ? state.normalizedItemsByCode.get(item.masterItemId) || null : null;
+    if (item.stockAtBigc && !item.itemId) {
+      Object.assign(item, previous);
+      $("#editItemError").textContent = "กรุณาจับคู่สินค้ากลางก่อนเปิดนับสต็อก";
+      return;
+    }
     try { await ensureMappedCatalogItems([item]); }
     catch (error) { Object.assign(item, previous); $("#editItemError").textContent = `จับคู่ไม่สำเร็จ: ${error.message}`; return; }
     if (!await persistSettings("แก้ไขรายการแล้ว")) { Object.assign(item, previous); $("#editItemError").textContent = "บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง"; return; }
@@ -1272,6 +1285,10 @@
     $("#saveAndCopyOrder").onclick = async () => { if (!await submitWorkflow("close_order")) return; try { await copyOrderText(); notice("บันทึกและคัดลอกรายการแล้ว"); } catch (_) { notice("บันทึกแล้ว แต่คัดลอกข้อความไม่สำเร็จ", true); } $("#orderSummaryModal").classList.add("hidden"); };
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
+    if ($("#editItemStockBigc")) $("#editItemStockBigc").onchange = (event) => {
+      $("#editItemStockTawanaField")?.classList.toggle("hidden", !event.target.checked);
+      if (!event.target.checked && $("#editItemStockTawana")) $("#editItemStockTawana").checked = false;
+    };
     $("#settingsBack").onclick = () => showSettingsSection("");
     $("#toggleSettingsSelection").onclick = () => {
       if (state.deletingSettings) return;
@@ -1369,4 +1386,3 @@
     if (window.BOY_AUTH_CONTEXT) start(window.BOY_AUTH_CONTEXT);
   }
 })();
-

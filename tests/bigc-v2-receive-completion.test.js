@@ -17,9 +17,9 @@ test('order summary uses circular quantity buttons', () => {
 });
 
 test('a completed receipt clears its local draft and is not seeded again', () => {
-  assert.match(script, /if \(!submitted\.receive\) seedReceiveFromPrevious/);
-  assert.match(script, /if \(receive\) clearCompletedReceiveDraft/);
-  assert.match(script, /if \(type === "receive"\) \{\s*clearCompletedReceiveDraft\(payload\.business_date\)/);
+  assert.match(script, /seedReceiveFromPrevious\(state\.contexts\.receive\.previous_order,/);
+  assert.match(script, /completedSources\.has\(line\.line_key\)/);
+  assert.match(script, /if \(submittedKeys\.has\(line\.receipt_key\)\) delete state\.receive\[key\]/);
 });
 
 test('settings are separated by category and iPhone fields do not trigger focus zoom', () => {
