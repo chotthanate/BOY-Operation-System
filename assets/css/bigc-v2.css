@@ -184,3 +184,6 @@ body.staff-view #settingsButton{display:none!important}
 .settings-detail .setting-row.setting-row-selectable{grid-template-columns:44px minmax(0,1fr) auto}
 .setting-row-selectable>span{min-width:0}
 .setting-select{display:grid;place-items:center;min-width:44px;min-height:44px;cursor:pointer}
+.settings-toolbar-actions{display:flex;gap:6px}
+.settings-toolbar-actions .hidden{display:none}
+@media(max-width:600px){.settings-toolbar-actions .secondary-button{padding:0 10px;font-size:12px}}

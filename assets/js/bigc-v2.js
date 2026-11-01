@@ -19,7 +19,7 @@
     return `${byType.year}-${byType.month}-${byType.day}`;
   };
   const state = {
-    client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), deletingSettings: false,
+    client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), selectingSettings: false, deletingSettings: false,
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
@@ -730,6 +730,7 @@
   };
   function showSettingsSection(section) {
     state.selectedSettingsKeys.clear();
+    state.selectingSettings = false;
     state.settingsSection = SETTINGS_SECTIONS[section] ? section : "";
     const detail = Boolean(state.settingsSection);
     $("#settingsHome").classList.toggle("hidden", detail);
@@ -949,7 +950,12 @@
     const visible = visibleSettingsItems();
     const count = state.selectedSettingsKeys.size;
     const selectedVisible = visible.filter((item) => state.selectedSettingsKeys.has(item.key)).length;
-    $("#settingsBulkActions").classList.toggle("hidden", state.settingsSection !== "items");
+    const selecting = state.settingsSection === "items" && state.selectingSettings;
+    $("#toggleSettingsSelection").classList.toggle("hidden", state.settingsSection !== "items");
+    $("#toggleSettingsSelection").textContent = selecting ? "ยกเลิก" : "เลือก";
+    $("#toggleSettingsSelection").setAttribute("aria-expanded", String(selecting));
+    $("#toggleSettingsSelection").disabled = state.deletingSettings;
+    $("#settingsBulkActions").classList.toggle("hidden", !selecting);
     $("#settingsSelectedCount").textContent = `เลือก ${count} รายการ`;
     $("#selectVisibleSettings").checked = visible.length > 0 && selectedVisible === visible.length;
     $("#selectVisibleSettings").indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
@@ -974,8 +980,9 @@
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
       const deleteControl = mode === "items" ? `<button data-delete-item="${escapeHtml(item.key)}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button>` : "";
-      const selection = mode === "items" ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
-      return `<div class="setting-row${mode === "items" ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
+      const selecting = mode === "items" && state.selectingSettings;
+      const selection = selecting ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
+      return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
@@ -1193,6 +1200,12 @@
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     $("#settingsBack").onclick = () => showSettingsSection("");
+    $("#toggleSettingsSelection").onclick = () => {
+      if (state.deletingSettings) return;
+      state.selectingSettings = !state.selectingSettings;
+      state.selectedSettingsKeys.clear();
+      renderSettings();
+    };
     $("#selectVisibleSettings").onchange = (event) => {
       visibleSettingsItems().forEach((item) => {
         if (event.target.checked) state.selectedSettingsKeys.add(item.key);
