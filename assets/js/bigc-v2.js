@@ -449,7 +449,11 @@
     };
   }
 
+  function isFrozenFruit(item) { return /ผลไม้แช่แข็ง/.test(item.category || ""); }
+  function isWeighedFruitCategory(item) { return /(?:^|\s)ผลไม้(?:\s*\(ใส่กล่อง\))?$/.test(item.category || ""); }
   function receiveHandlingType(item) {
+    if (!isWeighedFruitCategory(item)) return item.handlingType === "consignment"
+      || /ฝากขาย|น้ำส้ม\s*\(ขวด\)/.test(`${item.displayName || ""} ${item.name || ""}`) ? "consignment" : "standard";
     if (item.handlingType) return item.handlingType;
     const text = `${item.category || ""} ${item.displayName || ""} ${item.name || ""}`.toLowerCase();
     if (/ฝากขาย/.test(text) || /น้ำส้ม\s*\(ขวด\)/.test(text)) return "consignment";
@@ -458,6 +462,7 @@
     return "standard";
   }
   function receiveCostingBasis(item, handlingType = receiveHandlingType(item)) {
+    if (!isWeighedFruitCategory(item)) return handlingType === "consignment" ? "consignment" : "backend";
     if (isPieceEstimatedFruit(item) && handlingType === "whole_fruit") return "estimated_raw_piece";
     if (item.costingBasis) return item.costingBasis;
     return handlingType === "consignment" ? "consignment" : handlingType === "standard" ? "backend" : handlingType === "whole_fruit" ? "actual_raw_weight_kg" : "backend_yield_from_actual_weight";
@@ -465,7 +470,7 @@
   function isPieceEstimatedFruit(item) {
     return receiveHandlingType(item) === "whole_fruit" && item.unit === "ลูก" && /แตงโม|สับปะรด/.test(`${item.name || ""} ${item.displayName || ""}`);
   }
-  function needsActualWeight(item) { return !isPieceEstimatedFruit(item) && ["whole_fruit", "prepared", "juiced"].includes(receiveHandlingType(item)); }
+  function needsActualWeight(item) { return isWeighedFruitCategory(item) && !isPieceEstimatedFruit(item) && ["whole_fruit", "prepared", "juiced"].includes(receiveHandlingType(item)); }
   function isWeightQuantity(item) { return item.inputMode === "weight"; }
   function handlingLabel(type) {
     if (type === "prepared") return "ปอก/พร้อมใช้";
@@ -496,7 +501,7 @@
   }
   function receiveControls(item, line, key) {
     if (isPieceEstimatedFruit(item)) return inputControl({ ...item, key, inputMode: "quantity" }, line.quantity, "receive");
-    if (!needsActualWeight(item)) return inputControl({ ...item, key }, line.quantity, "receive");
+    if (!needsActualWeight(item)) return inputControl({ ...item, key, inputMode: isFrozenFruit(item) ? "quantity" : item.inputMode }, line.quantity, "receive");
     const weight = finiteNumber(line.actual_weight_kg);
     const quantityControl = isWeightQuantity(item) ? "" : `<label class="receive-measurement"><span>จำนวนที่รับ (${escapeHtml(item.unit || "หน่วย")})</span><input data-qty-target="receive" data-key="${key}" inputmode="decimal" type="number" min="0" step="0.01" value="${number(line.quantity) || ""}" aria-label="จำนวนที่รับ"></label>`;
     return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="text" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
@@ -792,13 +797,15 @@
     if (type === "close_order") return state.menu.filter((item) => number(state.order[item.key]) > 0).map((item) => ({ ...lineFromMenu(item, state.order[item.key], "quantity"), received: true }));
     const source = type === "receive" ? state.receive : state.returns;
     return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => {
-      const item = findMenu(key, line); const handlingType = line.handling_type || receiveHandlingType(item);
+      const item = findMenu(key, line); const handlingType = type === "receive"
+        ? receiveHandlingType(item) : line.handling_type || receiveHandlingType(item);
       return {
         ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: line.item_id || item.itemId || item.item_id || null,
-        input_mode: isPieceEstimatedFruit(item) && type === "receive" ? "quantity" : line.input_mode,
-        actual_weight_kg: isPieceEstimatedFruit(item) && type === "receive" ? null : line.actual_weight_kg,
+        input_mode: type === "receive" && (isPieceEstimatedFruit(item) || isFrozenFruit(item)) ? "quantity" : line.input_mode,
+        actual_weight_kg: type === "receive" && !needsActualWeight(item) ? null : line.actual_weight_kg,
         handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType),
-        measurement_basis: isPieceEstimatedFruit(item) && type === "receive" ? "estimated_raw" : line.measurement_basis,
+        measurement_basis: type === "receive" ? isPieceEstimatedFruit(item) ? "estimated_raw"
+          : needsActualWeight(item) ? line.measurement_basis : null : line.measurement_basis,
         received: type === "receive" ? Boolean(line.checked) : true
       };
     });

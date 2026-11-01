@@ -21,7 +21,8 @@ function app() {
   context.window=context;context.addEventListener=()=>{};
   const source=fs.readFileSync(path.join(__dirname,'../assets/js/bigc-v2.js'),'utf8');
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, `
-    window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive};
+    window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive,
+      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls};
     renderReceive = () => {}; renderAll = () => {}; loadPage = async () => {};
     window.qa.mirrors = []; sheetApi = async (action,data) => {window.qa.mirrors.push(data.payload)};
     saveDraft = () => {window.qa.draftSaves=(window.qa.draftSaves||0)+1};
@@ -34,6 +35,33 @@ function app() {
   qa.state.contexts={receive:{previous_order:order}};
   return {qa,node,order};
 }
+
+test('only fresh and prepared fruit require actual weight; frozen bags use bag count and standard cost',()=>{
+  const {qa}=app();
+  const frozen={key:'frozen',displayName:'มัลเบอร์รี่ แช่แข็ง (ถุง)',category:'❄️ ผลไม้แช่แข็ง',unit:'ถุง',
+    inputMode:'quantity',handlingType:'whole_fruit',costingBasis:'actual_raw_weight_kg'};
+  const dried={key:'dried',displayName:'ผลไม้อบแห้ง (กระปุก)',category:'🥫 ผลไม้อบแห้งกระปุก',unit:'กระปุก',
+    inputMode:'quantity',handlingType:'whole_fruit'};
+  const fresh={key:'fresh',displayName:'แครอท',category:'🍉 ผลไม้',unit:'',inputMode:'quantity',handlingType:'whole_fruit'};
+  const prepared={key:'prepared',displayName:'แตงโม (กล่อง)',category:'🍉 ผลไม้ (ใส่กล่อง)',unit:'กล่อง',
+    inputMode:'weight',handlingType:'prepared'};
+  qa.state.menu=[frozen,dried,fresh,prepared];
+  assert.equal(qa.needsActualWeight(frozen),false);
+  assert.equal(qa.needsActualWeight(dried),false);
+  assert.equal(qa.receiveHandlingType(frozen),'standard');
+  assert.equal(qa.receiveHandlingType(dried),'standard');
+  assert.equal(qa.receiveCostingBasis(frozen),'backend');
+  assert.doesNotMatch(qa.receiveControls(frozen,{quantity:2,actual_weight_kg:1.5},'frozen'),/น้ำหนักจริง/);
+  assert.equal(qa.needsActualWeight(fresh),true);
+  assert.equal(qa.needsActualWeight(prepared),true);
+  qa.state.receive.frozen={line_key:'frozen',item_name:frozen.displayName,quantity:2,checked:true,
+    receipt_key:'receipt-'+randomUUID(),handling_type:'whole_fruit',costing_basis:'actual_raw_weight_kg',actual_weight_kg:1.5};
+  const line=qa.linesFor('receive')[0];
+  assert.equal(line.quantity,2);
+  assert.equal(line.actual_weight_kg,null);
+  assert.equal(line.handling_type,'standard');
+  assert.equal(line.costing_basis,'backend');
+});
 
 test('ordered lines seed automatically alongside manual drafts, retaining edits and stable receipt keys',()=>{
   const {qa,order}=app();
