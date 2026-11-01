@@ -19,7 +19,7 @@
     return `${byType.year}-${byType.month}-${byType.day}`;
   };
   const state = {
-    client: null, session: null, branch: null, context: null, contexts: {}, menu: [],
+    client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), deletingSettings: false,
     order: {}, receive: {}, returns: {}, activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
     fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
@@ -729,6 +729,7 @@
     returns: ["รายการคืนของประจำ", "เลือกของที่ต้องการให้ขึ้นหน้าคืนโดยอัตโนมัติ"]
   };
   function showSettingsSection(section) {
+    state.selectedSettingsKeys.clear();
     state.settingsSection = SETTINGS_SECTIONS[section] ? section : "";
     const detail = Boolean(state.settingsSection);
     $("#settingsHome").classList.toggle("hidden", detail);
@@ -938,9 +939,30 @@
     } catch (error) { $("#fruitCostError").textContent = `บันทึกไม่สำเร็จ: ${error.message}`; }
     finally { loading("", false); }
   }
-  function renderSettings() {
+  function visibleSettingsItems() {
     const query = $("#settingsSearch").value.trim().toLowerCase();
-    const items = state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
+    return state.menu.filter((item) => !query || `${item.displayName} ${item.category}`.toLowerCase().includes(query));
+  }
+  function updateSettingsSelection() {
+    const keys = new Set(state.menu.map((item) => item.key));
+    state.selectedSettingsKeys.forEach((key) => { if (!keys.has(key)) state.selectedSettingsKeys.delete(key); });
+    const visible = visibleSettingsItems();
+    const count = state.selectedSettingsKeys.size;
+    const selectedVisible = visible.filter((item) => state.selectedSettingsKeys.has(item.key)).length;
+    $("#settingsBulkActions").classList.toggle("hidden", state.settingsSection !== "items");
+    $("#settingsSelectedCount").textContent = `เลือก ${count} รายการ`;
+    $("#selectVisibleSettings").checked = visible.length > 0 && selectedVisible === visible.length;
+    $("#selectVisibleSettings").indeterminate = selectedVisible > 0 && selectedVisible < visible.length;
+    $("#selectVisibleSettings").disabled = !visible.length || state.deletingSettings;
+    $("#deleteSelectedItems").disabled = !count || state.deletingSettings;
+    $("#clearSettingsSelection").disabled = !count || state.deletingSettings;
+    $$("[data-select-settings-item]").forEach((input) => {
+      input.checked = state.selectedSettingsKeys.has(input.dataset.selectSettingsItem);
+      input.disabled = state.deletingSettings;
+    });
+  }
+  function renderSettings() {
+    const items = visibleSettingsItems();
     const groups = new Map();
     items.forEach((item) => { const category = item.category || "อื่นๆ"; if (!groups.has(category)) groups.set(category, []); groups.get(category).push(item); });
     const mode = state.settingsSection;
@@ -952,12 +974,19 @@
       const weightControl = mode === "units" ? `<label class="setting-check"><input data-setting="inputMode" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.inputMode === "weight" && !isPieceEstimatedFruit(item) ? "checked" : ""} ${isPieceEstimatedFruit(item) ? "disabled" : ""} aria-label="ชั่งตอนรับหรือคืน"><small>${isPieceEstimatedFruit(item) ? "นับลูก" : "ชั่ง"}</small></label>` : "";
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
       const deleteControl = mode === "items" ? `<button data-delete-item="${escapeHtml(item.key)}" type="button" aria-label="ลบ ${escapeHtml(item.displayName)}">ลบ</button>` : "";
-      return `<div class="setting-row"><span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
+      const selection = mode === "items" ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
+      return `<div class="setting-row${mode === "items" ? " setting-row-selectable" : ""}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button>${deleteControl}</span></div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
     $$('[data-setting]').forEach((input) => { input.onchange = () => { const item = state.menu.find((row) => row.key === input.dataset.key); if (input.dataset.setting === "inputMode") item.inputMode = input.checked ? "weight" : "quantity"; else item[input.dataset.setting] = input.checked; }; });
     $$('[data-edit-item]').forEach((button) => { button.onclick = () => openEditItem(button.dataset.editItem); });
     $$('[data-delete-item]').forEach((button) => { button.onclick = () => deleteMenuItem(button.dataset.deleteItem); });
+    $$("[data-select-settings-item]").forEach((input) => { input.onchange = () => {
+      if (input.checked) state.selectedSettingsKeys.add(input.dataset.selectSettingsItem);
+      else state.selectedSettingsKeys.delete(input.dataset.selectSettingsItem);
+      updateSettingsSelection();
+    }; });
+    updateSettingsSelection();
   }
   async function persistSettings(successText) {
     loading("กำลังบันทึกการตั้งค่า"); notice("");
@@ -1052,10 +1081,39 @@
     if (!$("#mappingModal").classList.contains("hidden")) renderMappingList();
   }
   async function deleteMenuItem(key) {
-    const item = state.menu.find((row) => row.key === key); if (!item || !confirm(`ลบ “${item.displayName}” ออกจากรายการทั้งหมด?`)) return;
-    const previousMenu = [...state.menu]; state.menu = state.menu.filter((row) => row.key !== key);
-    if (!await persistSettings("ลบรายการแล้ว")) { state.menu = previousMenu; renderSettings(); return; }
-    delete state.order[key]; delete state.receive[key]; delete state.returns[key]; saveDraft(); renderAll(); renderSettings();
+    return deleteMenuItems([key]);
+  }
+  async function deleteMenuItems(keys) {
+    if (state.deletingSettings || isStaffView() || !state.access?.canManage) return;
+    const keySet = new Set(keys);
+    const items = state.menu.filter((item) => keySet.has(item.key));
+    if (!items.length) return;
+    const names = items.slice(0, 8).map((item) => `• ${item.displayName}`).join("\n");
+    const more = items.length > 8 ? `\nและอีก ${items.length - 8} รายการ` : "";
+    if (!confirm(`ลบสินค้า ${items.length} รายการออกจากรายการ BigC?\n\n${names}${more}`)) return;
+    state.deletingSettings = true;
+    updateSettingsSelection();
+    const previousMenu = [...state.menu];
+    let persisted = false;
+    try {
+      state.menu = state.menu.filter((item) => !keySet.has(item.key));
+      if (!await persistSettings(`ลบสินค้า ${items.length} รายการแล้ว`)) {
+        state.menu = previousMenu;
+        return;
+      }
+      persisted = true;
+      items.forEach(({ key }) => {
+        delete state.order[key]; delete state.receive[key]; delete state.returns[key];
+        state.selectedSettingsKeys.delete(key);
+      });
+      saveDraft(); renderAll();
+    } catch (error) {
+      if (!persisted) state.menu = previousMenu;
+      notice(`บันทึกการลบไม่สำเร็จ: ${error.message}`, true);
+    } finally {
+      state.deletingSettings = false;
+      renderSettings();
+    }
   }
 
   function categoryNames() {
@@ -1135,6 +1193,15 @@
     $("#clearOrderFromSummary").onclick = () => { if (confirm("ล้างรายการสั่งของทั้งหมด?")) clearOrder(); };
     $("#saveSettings").onclick = saveSettings; $("#openAddItem").onclick = openAddItem; $("#addMenuItem").onclick = addMenuItem; $("#openSortSettings").onclick = openSortSettings; $("#saveSortOrder").onclick = saveSortOrder; $("#saveEditedItem").onclick = saveEditedItem;
     $("#settingsBack").onclick = () => showSettingsSection("");
+    $("#selectVisibleSettings").onchange = (event) => {
+      visibleSettingsItems().forEach((item) => {
+        if (event.target.checked) state.selectedSettingsKeys.add(item.key);
+        else state.selectedSettingsKeys.delete(item.key);
+      });
+      updateSettingsSelection();
+    };
+    $("#clearSettingsSelection").onclick = () => { state.selectedSettingsKeys.clear(); updateSettingsSelection(); };
+    $("#deleteSelectedItems").onclick = () => deleteMenuItems([...state.selectedSettingsKeys]);
     $$('[data-settings-section]').forEach((button) => { button.onclick = () => showSettingsSection(button.dataset.settingsSection); });
     $("#openMappingManager").onclick = openMappingManager; $("#mappingSearch").oninput = renderMappingList; $("#mappingFilter").onchange = renderMappingList; $("#applyExactMappings").onclick = applyExactMappings; $("#saveMappings").onclick = saveMappings; $("#copyStaffLink").onclick = copyStaffLink;
     $("#editItemMappingSearch").oninput = renderMasterItemOptions;
@@ -1189,3 +1256,4 @@
   window.addEventListener("boy-auth-ready", (event) => start(event.detail));
   if (window.BOY_AUTH_CONTEXT) start(window.BOY_AUTH_CONTEXT);
 })();
+
