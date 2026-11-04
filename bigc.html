@@ -361,6 +361,8 @@
     }
 
     async function apiCall(action, data = {}) {
+      if(window.BOY_CENTRAL_CONFIG?.financeCutover===true&&!window.BOY_DAILY_STORE) throw new Error('ตัวรับฐานกลางยังไม่พร้อม กรุณารีเฟรช ข้อมูลในเครื่องยังอยู่');
+      if(window.BOY_DAILY_STORE?.handles(action)) return window.BOY_DAILY_STORE.call(action,data);
       const res = await fetch(WEB_APP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -420,6 +422,7 @@
       const conversionRate = Number(source.conversionRate || source.conversion || 1);
       const unitOptions = uniqueUnitOptions(source.unitOptions || [baseUnit, primaryUnit, cleanUnit]);
       const meta = {
+        itemId:source.itemId||null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
         mainType: String(source.mainType || '').trim(),
         subType: String(source.subType || '').trim(),
         unit: baseUnit || cleanUnit,
@@ -638,11 +641,12 @@
       else addRow().querySelector('.item').focus();
     }
 
-    function addRow(i = '', q = '', u = '', p = '', n = '', pay = 'cash', mainType = '', subType = '') {
+    function addRow(i = '', q = '', u = '', p = '', n = '', pay = 'cash', mainType = '', subType = '', identity = null) {
       rowCounter++;
       const unitListId = 'unitOptions_' + rowCounter;
       const row = document.createElement('div');
       row.className = 'expense-row expanded';
+      if (identity?.item_id) row.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,master_code:identity.master_code,category_id:identity.category_id});
       row.innerHTML = `
         <button class="expense-summary" type="button" onclick="toggleExpenseRow(this)"><span class="expense-index">${rowCounter}</span><span class="expense-summary-copy"><strong>${escapeHtml(i || 'ยังไม่ระบุรายการ')}</strong><small class="expense-summary-category">${escapeHtml([mainType, subType].filter(Boolean).join(' · ') || 'ยังไม่เลือกหมวด')}</small></span><span class="expense-summary-amount">${Number(p || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></button>
         <div class="expense-detail">
@@ -693,7 +697,10 @@
         const note = row.querySelector('.note').value.trim();
         const pay = row.querySelector('.payment').value;
         if (!item && !qty && !unit && !amount && !note) return;
+        let identity = JSON.parse(row.dataset.centralIdentity || 'null');
+        if (identity?.name !== row.querySelector('.item').value) identity = null;
         exp.push({
+          item_id:identity?.item_id||getExpenseMeta(item,unit).itemId||null,master_code:identity?.master_code||getExpenseMeta(item,unit).masterCode||null,category_id:getExpenseMeta(item,unit).categoryId||identity?.category_id||null,
           i: item,
           q: qty,
           u: unit,
@@ -711,7 +718,7 @@
       document.getElementById('expenseList').innerHTML = '';
       const rows = snapshot && Array.isArray(snapshot.exp) ? snapshot.exp : [];
       if (rows.length) {
-        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay, row.m, row.t); });
+        rows.forEach(function(row) { addRow(row.i, row.q, row.u, row.p, row.n, row.pay, row.m, row.t, row); });
         addRow();
       } else {
         addRow();
@@ -724,9 +731,10 @@
       const date = document.getElementById('mainDate').value;
       if (!date) return;
       const data = collectSnapshot();
+      localStorage.setItem('BOY_BIGC_EXPENSE_DRAFT_'+date,JSON.stringify(data));
       timer = setTimeout(function() {
         apiCall('bigcExpenseAutoSave', { date, data }).catch(function() {});
-      }, 500);
+      }, 8000);
     }
 
     async function loadData() {
@@ -738,12 +746,15 @@
       try {
         const res = await apiCall('bigcExpenseLoadData', { date });
         const snapshot = safeParse(res.draft, {});
+        if(!Object.keys(snapshot).length) Object.assign(snapshot,safeParse(localStorage.getItem('BOY_BIGC_EXPENSE_DRAFT_'+date),{}));
         renderSnapshot(snapshot);
         if (res.submitted) document.getElementById('lockedOverlay').classList.remove('hidden');
         else document.getElementById('lockedOverlay').classList.add('hidden');
         setStatus(res.submitted ? 'วันนี้มีข้อมูลที่บันทึกแล้ว' : 'พร้อมบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
       } catch (e) {
-        alert('โหลดข้อมูลไม่สำเร็จ: ' + e.message);
+        const local=safeParse(localStorage.getItem('BOY_BIGC_EXPENSE_DRAFT_'+date),null);
+        if(local){renderSnapshot(local);setStatus('เปิดร่างในเครื่อง · ยังไม่ยืนยันข้อมูลออนไลน์');}
+        else alert('โหลดข้อมูลไม่สำเร็จ: ' + e.message);
       } finally {
         isLoadingData = false;
         hideLoading();
@@ -755,14 +766,16 @@
       if (!date) return alert('กรุณาเลือกวันที่');
       const data = collectSnapshot();
       if (!data.exp.length) return alert('ยังไม่มีรายการรายจ่าย');
+      localStorage.setItem('BOY_BIGC_EXPENSE_DRAFT_'+date,JSON.stringify(data));
       clearTimeout(timer);
       showLoading('กำลังบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
       try {
         const res = await apiCall('bigcExpenseSubmit', { date, data });
         if (res.status !== 'Success') throw new Error(res.message || res.status || 'บันทึกไม่สำเร็จ');
         document.getElementById('lockedOverlay').classList.remove('hidden');
-        setStatus('บันทึกแล้ว');
-        alert('บันทึกรายจ่ายบิ๊กซีพัทยากลางเรียบร้อย');
+        localStorage.removeItem('BOY_BIGC_EXPENSE_DRAFT_'+date);
+        const message=res.message||(window.BOY_DAILY_STORE?.handles('bigcExpenseSubmit')?'บันทึกฐานกลางแล้ว · สำเนาชีตรอส่ง':'บันทึกรายจ่ายใน Google Sheet แล้ว');
+        setStatus(message);alert(message);
       } catch (e) {
         alert('บันทึกไม่สำเร็จ: ' + e.message);
       } finally {
@@ -794,6 +807,7 @@
       appStarted = true;
       itemDict = safeParse(localStorage.getItem(STORAGE_ITEMS), {});
       itemMetaDict = safeParse(localStorage.getItem(STORAGE_META), {});
+      document.getElementById('expenseList').addEventListener('input',doSync);
       const today = new Date();
       document.getElementById('mainDate').value = today.toLocaleDateString('en-CA', {timeZone:'Asia/Bangkok'});
       loadData().finally(function() { pullItems(false); });
@@ -803,6 +817,8 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261105-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

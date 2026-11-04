@@ -119,6 +119,7 @@ function doPost(e) {
         result = handleAutoSave_(payload.date, payload.data);
         break;
       case 'submit':
+        if(PropertiesService.getScriptProperties().getProperty('BOY_CENTRAL_FINANCE_ACTIVE')==='true') throw new Error('หน้านี้เป็นเวอร์ชันเก่า กรุณารีเฟรชก่อนบันทึก ข้อมูลที่กรอกในเครื่องยังอยู่');
         result = handleSubmit_(payload.date, payload.data);
         break;
       case 'unlockDate':
@@ -218,6 +219,7 @@ function doPost(e) {
         result = handleBigcExpenseAutoSave_(payload.date, payload.data);
         break;
       case 'bigcExpenseSubmit':
+        if(PropertiesService.getScriptProperties().getProperty('BOY_CENTRAL_FINANCE_ACTIVE')==='true') throw new Error('หน้านี้เป็นเวอร์ชันเก่า กรุณารีเฟรชก่อนบันทึก ข้อมูลที่กรอกในเครื่องยังอยู่');
         result = handleBigcExpenseSubmit_(payload.date, payload.data);
         break;
       case 'bigcExpenseUnlockDate':
@@ -255,6 +257,9 @@ function doPost(e) {
         break;
       case 'bigcV2MirrorStatus':
         result = { status: 'success', branch_codes: ['BIGC-CENTRAL-PATTAYA', 'BIGC-SOUTH-PATTAYA'], south_sheet: 'T_BigC_South_Workflows' };
+        break;
+      case 'centralMirror':
+        result=handleCentralMirror_(payload);
         break;
       case 'dashboardGetMonthlySummary':
         result = handleDashboardGetMonthlySummary_(payload);
@@ -3367,6 +3372,63 @@ function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
   } finally {
     scriptLock.releaseLock();
   }
+}
+
+function handleCentralMirror_(request) {
+  const timestamp=String(request.timestamp||''),json=String(request.payload_json||'');
+  if(!/^\d+$/.test(timestamp)||Math.abs(Date.now()-Number(timestamp))>300000) throw new Error('expired mirror request');
+  // The signing key stays in Supabase Vault. This receiver verifies the exact
+  // payload with a boolean-only RPC; no credentials are copied into Apps Script.
+  const verification=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/verify_central_mirror',{
+    method:'post',contentType:'application/json',muteHttpExceptions:true,
+    headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'},
+    payload:JSON.stringify({request_timestamp:timestamp,payload_json:json,signature:String(request.signature||'')})
+  });
+  if(verification.getResponseCode()!==200||JSON.parse(verification.getContentText())!==true) throw new Error('invalid mirror signature');
+  const parsed=JSON.parse(json);
+  if(Array.isArray(parsed)) return {status:'success',results:parsed.map(function(payload){
+    try{return Object.assign({job_id:payload.job_id},handleCentralMirrorPayload_(payload));}
+    catch(error){return {job_id:payload.job_id,status:'error',message:String(error.message||error)};}
+  })};
+  return handleCentralMirrorPayload_(parsed);
+}
+function handleCentralMirrorPayload_(payload) {
+  const json=JSON.stringify(payload),id=String(payload.entity_id||'');
+  if(!/^[0-9a-f-]{36}$/i.test(id)||!payload.entity_type) throw new Error('invalid mirror entity');
+  const version=payload.entity_type==='transaction'?Date.parse(payload.header.updated_at):Number(payload.revision||payload.job_revision||1);
+  if(!Number.isFinite(version)) throw new Error('invalid mirror revision');
+  const scriptLock=lock_();scriptLock.waitLock(30000);
+  try{
+    const ss=ss_(CONFIG.spreadsheets.transactions);
+    const sh=ss.getSheetByName('T_Central_Mirror')||ss.insertSheet('T_Central_Mirror');
+    if(!sh.getLastRow()) sh.appendRow(['entity_id','entity_type','branch_code','business_date','revision','mirrored_at','payload_json']);
+    const match=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).createTextFinder(id).matchEntireCell(true).findNext():null;
+    const targetRow=match?match.getRow():sh.getLastRow()+1;
+    const existing=match?sh.getRange(targetRow,1,1,5).getValues()[0]:null;
+    if(existing&&Number(existing[4])>version) return {status:'success',stale:true};
+    // Keep the familiar income/expense tabs as a readable copy, but never run
+    // the old stock-writing routines. Stock comes from canonical movements.
+    if(payload.entity_type==='daily_document'){
+      const date=payload.business_date,data=payload.data||{},txId=id.slice(0,8);
+      if(payload.branch_code==='TAWANA'){
+        replaceIncomeRows_(date,data,txId);replaceExpenseRows_(date,data,txId);
+        upsertDailyCache_(date,CONFIG.branchName,data,true);
+      }else if(payload.branch_code==='BIGC-CENTRAL-PATTAYA'){
+        replaceExpenseRowsForBranch_(date,data,{branchName:CONFIG.bigcBranchName,sourceName:'BOY Operation System:BigC Expense',idPrefix:'BIGC-EXP',txId:txId});
+      }
+    }
+    const date=payload.business_date||(payload.header&&payload.header.transaction_date)||'';
+    const row=[id,payload.entity_type,payload.branch_code,date,version,new Date().toISOString()];
+    for(let offset=0;offset<json.length;offset+=45000) row.push(json.slice(offset,offset+45000));
+    const width=Math.max(row.length,sh.getLastColumn());
+    if(width>sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(),width-sh.getMaxColumns());
+    while(row.length<width) row.push('');
+    if(width>7) sh.getRange(1,8,1,width-7).setValues([Array.from({length:width-7},function(_,i){return 'payload_json_'+(i+2);})]);
+    sh.getRange(targetRow,1,1,width).setValues([row]);
+    const verified=sh.getRange(targetRow,7,1,width-6).getValues()[0].join('');
+    if(verified!==json)throw new Error('mirror read-back verification failed');
+    return {status:'success',entity_id:id,revision:version};
+  }finally{scriptLock.releaseLock();}
 }
 
 function handleBigcV2MirrorWorkflow_(payload) {

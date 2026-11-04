@@ -4,7 +4,7 @@
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
   const client = window.supabase && config.url && config.publishableKey
-    ? window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } })
+    ? window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true, ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) } })
     : null;
   const mode = document.body.dataset.dashboardMode || "all";
   const money = (value) => new Intl.NumberFormat("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0);
@@ -30,6 +30,17 @@
     return data;
   }
 
+  async function cachedRpc(name,args,ttl=60000,force=false) {
+    if(!client)throw new Error("Supabase ยังไม่พร้อม");
+    const {data:{session}}=await client.auth.getSession();
+    if(!session)throw new Error("กรุณาเข้าสู่ระบบออนไลน์");
+    const key=`BOY_REPORT_V2:${session.user.id}:${name}:${JSON.stringify(args)}`;
+    if(!force)try{const cached=JSON.parse(sessionStorage.getItem(key)||'null');if(cached&&Date.now()-cached.at<ttl)return cached.data;}catch(_){}
+    const data=await rpc(name,args);
+    try{sessionStorage.setItem(key,JSON.stringify({at:Date.now(),data}));}catch(_){}
+    return data;
+  }
+
   function setLoading(active) {
     document.querySelector("main")?.classList.toggle("loading", active);
     const button = $("#refreshBtn");
@@ -52,7 +63,7 @@
     const note = $("#capacityNote");
     if (!note) return;
     try {
-      const data = await rpc("get_system_capacity_snapshot", {});
+      const data = await cachedRpc("get_system_capacity_snapshot", {}, 24*60*60*1000);
       const used = Number(data.database_bytes || 0) / 1024 / 1024;
       const limit = Number(data.free_limit_bytes || 0) / 1024 / 1024;
       note.className = `capacity ${data.level || "ok"}`;
@@ -79,23 +90,18 @@
   async function loadAllDaily(force = false) {
     clearError(); setLoading(true);
     const date = $("#dateInput").value;
-    const key = `BOY_DAILY_OVERVIEW:${date}`;
-    if (!force) {
-      try { const cached = JSON.parse(localStorage.getItem(key) || "null"); if (cached) renderAllDaily(cached); } catch (_) {}
-    }
     try {
-      const data = await rpc("get_dashboard_daily", { target_date: date });
-      localStorage.setItem(key, JSON.stringify(data));
+      const data = await cachedRpc("get_dashboard_daily", { target_date: date },60000,force);
       renderAllDaily(data);
     } catch (error) { showError(error.message); }
     finally { setLoading(false); }
   }
 
-  async function loadAllMonthly() {
+  async function loadAllMonthly(force=false) {
     const target = $("#monthContent");
     target.textContent = "กำลังโหลดรายงานเดือน...";
     try {
-      const data = await rpc("get_dashboard_monthly", { target_year: Number($("#yearInput").value), target_month: Number($("#monthSelect").value) });
+      const data = await cachedRpc("get_dashboard_monthly", { target_year: Number($("#yearInput").value), target_month: Number($("#monthSelect").value) },60000,force===true);
       const summary = data.summary || {};
       const days = (data.dailyIncome || []).filter((row) => Number(row.total || row.income) > 0);
       const max = Math.max(1, ...days.map((row) => Number(row.total || row.income) || 0));
@@ -113,7 +119,7 @@
     $("#dateInput").addEventListener("change", () => loadAllDaily());
     $("#prevDate").addEventListener("click", () => moveOverviewDate(-1));
     $("#nextDate").addEventListener("click", () => moveOverviewDate(1));
-    $("#refreshBtn").addEventListener("click", () => loadAllDaily(true));
+    $("#refreshBtn").addEventListener("click", () => {loadAllDaily(true);loadAllMonthly(true);});
     $("#monthSelect").addEventListener("change", loadAllMonthly);
     $("#yearInput").addEventListener("change", loadAllMonthly);
     loadAllDaily(); loadAllMonthly(); loadCapacity();
@@ -180,10 +186,10 @@
     const orders = data.recentOrders || [];
     $("#orderRows").innerHTML = orders.length ? orders.map((row) => `<tr><td>${escapeHtml(row.order_no)}</td><td>${new Date(row.ordered_at).toLocaleString("th-TH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td>${escapeHtml(paymentNames[String(row.payment_method || "").toLowerCase()] || row.payment_method || "อื่น ๆ")}</td><td class="num">${count(row.item_count)}</td><td class="num">${money(row.total_amount)}</td></tr>`).join("") : '<tr><td colspan="5" class="muted">ยังไม่มีออเดอร์ในช่วงนี้</td></tr>';
     const availability = data.available || {};
-    $("#availability").textContent = availability.from ? `มีข้อมูลตั้งแต่ ${thaiDate(availability.from)} ถึง ${thaiDate(availability.to)}` : "สาขานี้ยังไม่มีข้อมูลยอดขายหรือรายจ่ายใน Supabase";
+    $("#availability").textContent = (availability.from ? `มีข้อมูลตั้งแต่ ${thaiDate(availability.from)} ถึง ${thaiDate(availability.to)}` : "สาขานี้ยังไม่มีข้อมูลยอดขายหรือรายจ่ายใน Supabase") + (data.detailReconciled===false ? " · รายรับตามกะที่ยืนยันแล้ว; รายละเอียดสินค้าจากบิล POS" : "");
   }
 
-  async function loadBranch() {
+  async function loadBranch(force=false) {
     clearError(); setLoading(true);
     const branch = new URLSearchParams(location.search).get("branch") || "BURGER";
     const current = new URL(location.href);
@@ -193,7 +199,7 @@
     current.searchParams.delete("preset");
     history.replaceState(null, "", current);
     try {
-      const data = await rpc("get_branch_dashboard", { target_branch_code: branch, date_from: $("#dateFrom").value, date_to: $("#dateTo").value });
+      const data = await cachedRpc("get_branch_dashboard", { target_branch_code: branch, date_from: $("#dateFrom").value, date_to: $("#dateTo").value },60000,force===true);
       renderBranch(data);
     } catch (error) { showError(error.message); }
     finally { setLoading(false); }
@@ -231,7 +237,7 @@
     }));
     $("#dateFrom").addEventListener("change", () => { setActivePreset(); loadBranch(); });
     $("#dateTo").addEventListener("change", () => { setActivePreset(); loadBranch(); });
-    $("#refreshBtn").addEventListener("click", loadBranch);
+    $("#refreshBtn").addEventListener("click", () => loadBranch(true));
     loadBranch();
   }
 

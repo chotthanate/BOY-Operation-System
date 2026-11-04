@@ -1025,6 +1025,8 @@
 
     // --- ระบบเชื่อมต่อ API ---
     async function apiCall(action, data = {}) {
+      if(window.BOY_CENTRAL_CONFIG?.financeCutover===true&&!window.BOY_DAILY_STORE) throw new Error('ตัวรับฐานกลางยังไม่พร้อม กรุณารีเฟรช ข้อมูลในเครื่องยังอยู่');
+      if(window.BOY_DAILY_STORE?.handles(action)) return window.BOY_DAILY_STORE.call(action,data);
       if (STAGING_MODE || !WEB_APP_URL) {
         const writeActions = new Set([
           'submit', 'unlockDate', 'autoSave', 'saveMultipleLeaves',
@@ -1613,6 +1615,7 @@
       if (!isFinite(conversionRate) || conversionRate <= 0) conversionRate = 1;
       var unitOptions = uniqueUnitOptions(source.unitOptions || [baseUnit, primaryUnit, cleanUnit]);
       var meta = {
+        itemId: source.itemId || null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
         mainType: String(source.mainType || '').trim(),
         subType: String(source.subType || '').trim(),
         unit: baseUnit || cleanUnit,
@@ -1974,7 +1977,7 @@
       refreshExpenseIndexes();
     }
 
-    function addRow(i, q, u, p, mainType, subType, supplier, note, paymentMethod) {
+    function addRow(i, q, u, p, mainType, subType, supplier, note, paymentMethod, identity) {
       if(!i) i = ''; if(!q) q = ''; if(!u) u = ''; if(!p) p = '';
       if(!mainType) mainType = ''; if(!subType) subType = '';
       if(!supplier) supplier = ''; if(!note) note = '';
@@ -1986,6 +1989,7 @@
       collapseOtherExpenseCards();
       var wrapper = document.createElement('div');
       wrapper.className = 'swipe-wrapper' + (hasExistingData ? '' : ' expanded');
+      if (identity && identity.item_id) wrapper.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,master_code:identity.master_code,category_id:identity.category_id});
       wrapper.innerHTML = 
         '<div class="expense-summary" role="button" tabindex="0" aria-expanded="'+(!hasExistingData)+'" onclick="toggleExpenseDetails(this)" onkeydown="handleExpenseSummaryKey(event,this)">' +
           '<div class="expense-summary-main"><span class="expense-index"></span><span class="expense-summary-copy"><strong class="expense-summary-name">รายการใหม่</strong><span class="expense-summary-category">ยังไม่เลือกหมวด</span></span></div>' +
@@ -2067,7 +2071,10 @@
           var meta = getExpenseMeta(itemName, unit);
           var mainType = (mainSelect && mainSelect.value) || meta.mainType || '';
           var subType = (subSelect && subSelect.value) || meta.subType || '';
+          var identity = JSON.parse(wrappers[w].dataset.centralIdentity || 'null');
+          if (identity && identity.name !== itemInput.value) identity = null;
           exp.push({
+            item_id:identity?.item_id||meta.itemId||null,master_code:identity?.master_code||meta.masterCode||null,category_id:meta.categoryId||identity?.category_id||null,
             i: itemInput.value,
             q: qtyInput.value,
             u: unitInput.value,
@@ -2101,6 +2108,7 @@
       clearTimeout(timer);
       document.getElementById('loadingOverlay').classList.remove('hidden');
       var data = collectFormDataSnapshot();
+      persistLocalDraft();
       try {
         const res = await apiCall('submit', { date: date, data: data });
         document.getElementById('loadingOverlay').classList.add('hidden');
@@ -2108,7 +2116,7 @@
           stockLoaded = false;
           historyLoaded = false;
           localStorage.removeItem('BOY_TAWANA_DRAFT_' + date);
-          setSaveState('saved', 'ส่งข้อมูลแล้ว');
+          setSaveState('saved', res.message || (window.BOY_DAILY_STORE?.handles('submit') ? 'บันทึกฐานกลางแล้ว · สำเนาชีตรอส่ง' : 'ส่งข้อมูลแล้ว'));
           const dObj = new Date(date);
           const thMonths = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
           document.getElementById('displayDateText').innerText = `${dObj.getDate()} ${thMonths[dObj.getMonth()]} ${dObj.getFullYear().toString().slice(-2)}`;
@@ -2167,7 +2175,7 @@
         } catch (error) {
           setSaveState('error', 'บันทึกร่างไม่สำเร็จ');
         }
-      }, 500);
+      }, 8000);
     }
 
     async function loadData() {
@@ -2201,7 +2209,7 @@
         document.getElementById('otherIncomeNote').value = (d.other) ? d.other.n : '';
         restoreIncomeCardState();
         if (d.exp && d.exp.length > 0) {
-          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t, d.exp[r].s, d.exp[r].n, d.exp[r].pay); }
+          for(var r=0; r<d.exp.length; r++) { addRow(d.exp[r].i, d.exp[r].q, d.exp[r].u, d.exp[r].p, d.exp[r].m, d.exp[r].t, d.exp[r].s, d.exp[r].n, d.exp[r].pay, d.exp[r]); }
         } else { addRow(); }
         if (parsed.submitted) {
           document.getElementById('lockedDate').value = date; 
@@ -2230,6 +2238,8 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
+  <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261105-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

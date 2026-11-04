@@ -865,9 +865,9 @@
     const payload = {
       workflow_type: type, business_date: type === "close_order" ? $("#orderDate").value : type === "receive" ? $("#receiveDate").value : $("#returnDate").value,
       source_workflow_id: type === "receive" ? state.contexts.receive?.previous_order?.id || null : null,
-      cash_amount: type === "return" ? number($("#cashAmount").value) : 0,
-      transfer_amount: type === "return" ? number($("#transferAmount").value) : 0,
-      thai_chuay_thai_amount: type === "return" ? number($("#thaiAmount").value) : 0,
+      cash_amount: type === "return" && !SOUTH_BRANCH ? number($("#cashAmount").value) : 0,
+      transfer_amount: type === "return" && !SOUTH_BRANCH ? number($("#transferAmount").value) : 0,
+      thai_chuay_thai_amount: type === "return" && !SOUTH_BRANCH ? number($("#thaiAmount").value) : 0,
       lines
     };
     if (type === "close_order") payload.submission_id = submissionIdFor(payload.business_date, lines);
@@ -896,6 +896,9 @@
       setSync("บันทึกฐานข้อมูลแล้ว", "ok");
       if (DEMO_MODE) {
         setSync("โหมดทดลอง", "pending"); notice("บันทึกทดลองแล้ว · ไม่ส่งข้อมูลจริง");
+      } else if (state.context?.server_mirror) {
+        setSync("บันทึกฐานข้อมูลแล้ว · สำเนาชีตรอส่ง", "pending");
+        notice("บันทึกสำเร็จ · ระบบจะส่งสำเนาชีตให้อัตโนมัติ");
       } else if (deferMirror && type === "close_order") {
         setSync("บันทึก Supabase แล้ว · กำลังส่งชีต", "pending");
       } else try {
@@ -910,7 +913,7 @@
       if (reload) await loadPage();
       return type === "close_order" ? { workflowId: data.workflow_id,
         submissionId: payload.submission_id, businessDate: payload.business_date, lines,
-        mirrorPayload: data.mirror_payload || payload, mirrorSynced } : true;
+        mirrorPayload: data.mirror_payload || payload, serverMirror: state.context?.server_mirror === true, mirrorSynced } : true;
     } catch (error) {
       if (type === "close_order") saveDraft();
       setSync("บันทึกไม่สำเร็จ", "error"); notice(error.message, true); return false;
@@ -920,6 +923,11 @@
 
   async function mirrorSavedOrder(saved, { copied = true } = {}) {
     if (DEMO_MODE) return true;
+    if (saved.serverMirror) {
+      setSync("บันทึกฐานข้อมูลแล้ว · สำเนาชีตรอส่ง", "pending");
+      showActionToast(copied ? "บันทึกและคัดลอกแล้ว · สำเนาชีตรอส่งอัตโนมัติ" : "บันทึกแล้ว · คัดลอกซ้ำในประวัติได้ · สำเนาชีตรอส่งอัตโนมัติ", copied ? "ok" : "warning");
+      return true;
+    }
     try {
       await sheetApi("bigcV2MirrorWorkflow", { payload: { ...saved.mirrorPayload, workflow_id: saved.workflowId } });
       const { error } = await workflowApi.rpc("mark_bigc_v2_sheet_sync", {
@@ -1713,6 +1721,7 @@
     $('.branch-mark').textContent='BS';
     $('#settingsReconnect').href='burger.html?next='+encodeURIComponent('bigc-v2.html?branch='+BRANCH_CODE)+'&online=1';
     $('.demo-link')?.setAttribute('href','bigc-demo.html?branch='+BRANCH_CODE);
+    $('.revenue-card').hidden = true;
   }
   initializePersonalSettings();
   if (DEMO_MODE) {

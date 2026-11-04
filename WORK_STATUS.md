@@ -1,5 +1,23 @@
 # Work Status
 
+## 2026-11-05: Finance cutover prepared, NOT activated
+
+- เตรียม RPC บันทึกรายวันทาวน่า/BigC Central, ร่างแยกผู้ใช้, request UUID กันส่งซ้ำ, revision กันเขียนทับ, ประวัติ revision, ยกเลิกรายจ่ายเดิมก่อนแก้, และคิวสำเนาชีตใน transaction เดียวกัน โค้ดอยู่ใน migrations ใหม่ 4 ไฟล์และ `boy-daily-store.js`
+- **ยังไม่ได้ apply migrations ทั้ง 4, deploy Edge Function หรืออัปเดต Apps Script**: ทดสอบทั้งหมดใน `BEGIN/ROLLBACK` เท่านั้น ตรวจหลังทดสอบแล้วไม่มีตารางใหม่และไม่มีธุรกรรม QA ค้าง การ commit/push รอบนี้ไม่ใช่การเปิดใช้ finance cutover
+- `BOY_CENTRAL_CONFIG.financeCutover=false` โดยตั้งใจ; ทาวน่า/หน้า `bigc.html` ยังใช้เส้นทางเดิม ห้ามเปลี่ยนเป็น true ก่อนแก้ data readiness และทดสอบ mirror จริง ห้ามบอกผู้ใช้ว่าทั้งสองหน้าย้ายไป Supabase เสร็จแล้ว
+- จุดหยุดจากการตรวจจริง: M_สินค้าเปิดใช้งาน 318 แถว; join company + business code ไป `items` ได้ 217 แถว ขาด UUID 101 แถว (84 มีหน่วยที่จับด้วย code ได้, 17 ไม่มีหน่วยฐานที่จับได้) นี่คือความต่างระหว่าง master catalog กับ runtime ไม่ใช่สินค้าถูกลบ ต้องทำ normalization bridge แบบรักษา UUID เดิม/ตรวจ conversion และให้เจ้าของกำหนด 17 หน่วยที่ขาด ห้ามจับคู่ด้วยชื่อหรือสมมติหน่วย ตรวจซ้ำด้วย `tests/central-data-readiness.sql`
+- `M_รายการค่าใช้จ่าย` อีก 61 แถวยังไม่ตรง code กับ runtime expense definitions; ห้ามตัดออกจากตัวเลือกหรือ import ทับ ต้องรักษา mapping ITEM/EXP และเส้นทางบันทึกให้ถูกประเภทก่อนเปิด catalog ใหม่
+- รายรับตามโจทย์: ทาวน่าเจ้าของกรอกเอง, BigC Central พนักงานกรอกสรุปกะ, South/Burger/Grill จาก POS ปิดกะ SQL แยก source หลัก ไม่บวกยอดบิลซ้ำกับกะ และเตรียมให้เปลี่ยน POS branch หลังได้รับกะจาก client ใหม่จริง (ทาวน่ายังคง manual)
+- เตรียม `central-mirror-worker` + cron ทุก 5 นาทีเฉพาะเมื่อมีงานค้าง ใช้ HMAC/Vault; Apps Script ขอผลตรวจลายเซ็น boolean จาก Supabase ไม่ต้องแจก service-role หรือใส่ signing secret ในเว็บ/ชีต สำเนา UUID + revision และอ่านกลับก่อน ACK; ยังทดสอบด้วย mock เท่านั้น **ต้องทดสอบ end-to-end และ payload ใหญ่/หลาย revision ก่อน deploy**
+- การเรียก Apps Script Execution API ผ่าน clasp ใช้ไม่ได้ด้วยบัญชีปัจจุบัน แม้แก้/เผยแพร่โค้ดได้; ไม่เพิ่ม public configure-secret endpoint เพื่อข้ามข้อจำกัด ใช้ verifier ฝั่ง Supabase แทน แต่ยังไม่ได้เปิดจริง
+- ลด egress ที่ทำแล้วในโค้ด: Dashboard cache 60 วินาทีแยก user; refresh เองข้าม cache; capacity cache 24 ชม.; daily catalog 15 นาที + version; debounce ร่าง 8 วินาทีพร้อม local draft ทุก input; POS delta และ compact image-free projection เตรียมไว้หลัง feature flag ยังไม่ได้วัด egress รอบบิลจริง
+- Free ระยะยาว: เตรียม guardrail 60/75/85% และ archive manifests แต่ **ยังไม่มี archive/restore ที่ตรวจผ่านหรือ purge ข้อมูลธุรกิจ** จึงรับรอง Free ตลอดไปไม่ได้ ต้องทดสอบสำรอง/restore และกำหนดระยะเก็บรายละเอียดก่อนถึง quota ห้ามลบ orders/events เพื่อประหยัดโดยไม่มีสำเนาที่ตรวจแล้ว
+- ผลทดสอบ: Node 119/119 ผ่าน; SQL rollback ผ่าน idempotency, stale revision conflict, correction/void, revision audit, แหล่งรายรับ, mixed cutover payment, POS close retry/conflict, delta no-change, สิทธิ์ anon และ HMAC tamper/expiry; ไม่มี QA records ค้าง ไม่ใช่หลักฐานทดสอบ iPhone/แท็บเล็ตจริงหรือ Google Sheet production ผ่าน
+- Burger และ GRILL Vite build ผ่านทั้งค่า default และ `VITE_CENTRAL_FINANCE_V2=true`; GRILL มี warning path ฟอนต์/โลโก้เดิมและ chunk ใหญ่ ต้องตรวจ Android ก่อนใช้งานจริง ไม่ได้ติดตั้ง APK รอบนี้
+- Burger source อยู่ repo `burger-pos` (เตรียม 1.8); Water source `/Users/call_center/CodexProjects/water-pos` (1.1.8), GRILL source `/Users/call_center/Documents/Codex/2026-10-29/files-mentioned-by-the-user-grill/work/GRILL_POS` (1.27) สองหลังไม่ใช่ Git repo; เก็บ source overlay แยกใน workspace artifacts ห้ามกล่าวว่า push GitHub ทำให้แท็บเล็ตอัปเดตแล้ว
+- งานถัดไป: (1) normalization + 17 หน่วย (2) preview/reconcile ประวัติ Sheet และคิวเดิมโดย UUID/code/ยอด ก่อนนำเข้า (3) deploy backend/worker/Apps Script ทดสอบ read-back (4) เปิด flags และทดสอบบันทึกจริงสองเครื่อง (5) ติดตั้ง POS โดยไม่ล้างข้อมูลแล้วเทียบ Dashboard/ชีต/สต็อก จึงถือว่า cutover เสร็จ
+
+
 ## BigC พัทยาใต้และตรวจความพร้อม (5 พ.ย. 2569)
 
 - เพิ่ม `BIGC-SOUTH-PATTAYA` โดยเปิดใช้ Master สาขาเดิม `BR-003`; สร้าง normalized branch/location, สิทธิ์ admin/manager และสำเนาการตั้งค่า/สินค้า 157 รายการจากพัทยากลาง **ไม่คัดลอก** ยอดสต็อก ประวัติ ร่าง หรือสิทธิ์ staff ของสาขาเดิม
