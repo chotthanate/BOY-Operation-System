@@ -1,0 +1,33 @@
+body.expense-app{--store-accent:#0b8068;--store-accent-soft:#e8f5ef;--green:#0b8068;--green2:#0b8068;--orange:#0b8068;--orange-soft:#e8f5ef;background:#f5f7f5;color:#17322c}
+.expense-app .app-shell{max-width:900px;margin-inline:auto;padding-top:calc(84px + env(safe-area-inset-top))}
+.expense-app .branch-shell-header{position:fixed;top:0;left:50%;transform:translateX(-50%);width:min(calc(100% - 24px),868px);z-index:30;display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;min-height:68px;margin:0;padding:calc(8px + env(safe-area-inset-top)) 0 8px;background:#f5f7f5}
+.expense-app>header+main{padding-top:84px}
+.expense-menu-button{width:44px;height:44px;display:grid;place-items:center;padding:0;border:1px solid #dce5df;border-radius:13px;background:white;color:#17322c;cursor:pointer;touch-action:manipulation}
+.expense-menu-button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.expense-app .expense-app-title{min-width:0;display:grid;gap:3px}
+.expense-app-title strong{font-size:1rem}.expense-app-title small{font-size:.76rem;color:#6b7c75}
+.expense-app .branch-header-actions{min-width:0}.expense-app .connection-badge{max-width:155px;overflow:hidden;text-overflow:ellipsis}
+.expense-app input:not([type=checkbox]):not([type=radio]),.expense-app select,.expense-app textarea{font-size:16px;min-width:0}
+.expense-app .expense-card,.expense-app #expenseList>.swipe-wrapper{border:1px solid #dfe7e1;border-radius:18px;background:#fff;box-shadow:0 3px 12px #17322c05}
+.expense-app #expenseList,.expense-app #expenseLines{gap:10px}
+.expense-app .expense-summary{min-height:76px;padding:12px;background:white}
+.expense-app .expense-summary-amount,.expense-app .summary-amount strong{color:#0b8068}
+.expense-app .expense-details,.expense-app .expense-detail{padding:14px;border-top:1px solid #e6ece7;background:#fafcfb}
+.expense-app .expense-category-row,.expense-app .expense-extra-row,.expense-app .expense-detail>.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.expense-app .expense-compact-row,.expense-app .expense-fields{display:grid;grid-template-columns:.8fr 1fr 1.2fr;gap:8px}
+.expense-app .expense-fields.fields-1{grid-template-columns:1fr}
+.expense-app .expense-fields.fields-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.expense-app .expense-note-field{grid-column:1/-1}
+.expense-card-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;margin-top:4px}
+.expense-card-actions button{width:100%;min-height:46px;padding:10px;border:1px solid #dce6df;border-radius:12px;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
+.expense-card-actions .expense-done{background:#e7f4ed;border-color:#cfe6d7;color:#07674d}
+.expense-app .expense-card-actions .remove-line,.expense-app .expense-card-actions .delete-action{position:static;margin:0;transform:none;background:white;color:#b34242;border-color:#eadbdb;opacity:1;visibility:visible;height:auto}
+.expense-app .line-number,.expense-app .expense-index{background:#e8f5ef;color:#0b8068}
+.expense-app .expense-card .unit-price,.expense-app .unit-price-line{background:#edf6f0;color:#0b8068}
+.expense-navigation{position:fixed;inset:0 auto 0 0;margin:0;width:min(330px,88vw);max-width:none;height:100dvh;max-height:none;padding:22px 16px;border:0;border-radius:0 22px 22px 0;background:#fff;color:#17322c;overflow-y:auto;box-shadow:10px 0 50px #17322c22;font-family:Arial,"Noto Sans Thai",sans-serif}
+.expense-navigation::backdrop{background:#15382d66;backdrop-filter:blur(2px)}
+.expense-nav-heading{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 8px 20px}.expense-nav-heading small{font-size:.67rem;color:#6b7c75;letter-spacing:.08em}.expense-nav-heading h2{margin:5px 0 0;font-size:1.3rem}.expense-nav-heading button{width:42px;height:42px;border:0;border-radius:12px;background:#f1f5f2;font-size:1.5rem;color:#17322c}
+.expense-navigation nav{display:grid;gap:5px}.expense-nav-label{padding:18px 12px 7px;font-size:.75rem;color:#718078;font-weight:700}
+.expense-navigation nav a{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:10px;align-items:center;min-height:58px;padding:8px 12px;border-radius:13px;text-decoration:none;color:#29473b}
+.expense-navigation nav a>span{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#f1f5f2;font-size:.72rem;font-weight:800}.expense-navigation nav a strong{font-size:.9rem}.expense-navigation nav a[aria-current]{background:#e7f4ed;color:#07674d}.expense-navigation nav a:hover{background:#f1f6f3}
+@media(max-width:430px){.expense-app .branch-shell-header{gap:8px;grid-template-columns:42px minmax(0,1fr) auto}.expense-app .connection-badge{max-width:106px;font-size:.63rem;padding:7px}.expense-app .branch-home-button{display:none}.expense-app-title strong{font-size:.92rem}.expense-app .expense-detail,.expense-app .expense-details{padding:12px}.expense-app .expense-category-row,.expense-app .expense-extra-row{grid-template-columns:repeat(2,minmax(0,1fr))}.expense-app .exp-field label,.expense-app .expense-detail label{font-size:.72rem}.expense-app .summary-copy strong{font-size:.9rem}.expense-app .summary-amount strong{font-size:.94rem}}

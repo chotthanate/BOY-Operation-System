@@ -592,6 +592,8 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-1">
+  <script src="assets/js/expense-app.js?v=20261105-1"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -608,7 +610,7 @@
 
   <div class="app-shell">
     <header class="app-topbar branch-shell-header">
-      <button class="branch-identity" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="branch-identity-mark">TW</span><span class="branch-identity-copy"><strong>ทาวน่า</strong><small>ร้านน้ำ · แตะเพื่อเปลี่ยนสาขา</small></span></button>
+      <button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ลงค่าใช้จ่าย</strong><small>ทาวน่า</small></div>
       <div class="branch-header-actions"><a class="branch-home-button" href="./index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
     </header>
     <main class="app-content">
@@ -755,14 +757,17 @@
     var leaveRowCounter = 0; // ตัวนับบรรทัดของกล่องการลา
 
     function closeAppSwitcher() {
+      document.getElementById('expenseNavigation')?.close();
       document.getElementById('appSwitcherBackdrop').classList.add('app-switcher-hidden');
       document.getElementById('appSwitcherPanel').classList.add('app-switcher-hidden');
     }
 
     function toggleAppSwitcher() {
-      document.getElementById('appSwitcherBackdrop').classList.toggle('app-switcher-hidden');
-      document.getElementById('appSwitcherPanel').classList.toggle('app-switcher-hidden');
+      window.BOY_EXPENSE_APP.toggleMenu();
     }
+
+    window.BOY_EXPENSE_APP.init('TAWANA');
+    window.addEventListener('expense-before-navigate', function() { if (!isLoadingData && appStarted) doSync(); });
 
     function switchAppView(viewId, button) {
       document.querySelectorAll('.app-view').forEach(function(view) {
@@ -1707,6 +1712,14 @@
       var itemInput = wrapper.querySelector('.i');
       var supplierInput = wrapper.querySelector('.exp-supplier');
       if (!itemInput || !supplierInput) return;
+      var itemName = itemInput.value.trim();
+      if (supplierInput.dataset.autoSupplier && supplierInput.dataset.supplierItem !== itemName && supplierInput.value === supplierInput.dataset.autoSupplier) supplierInput.value = '';
+      var onlySupplier = window.BOY_EXPENSE_APP.onlySupplier(getExpenseMeta(itemName, '').supplierOptions || []);
+      if (!supplierInput.value.trim() && onlySupplier) {
+        supplierInput.value = onlySupplier;
+        supplierInput.dataset.autoSupplier = onlySupplier;
+      }
+      supplierInput.dataset.supplierItem = itemName;
       var datalist = document.getElementById(supplierInput.getAttribute('list'));
       if (!datalist) return;
       var options = getSupplierOptionsForItem(itemInput.value, supplierInput.value);
@@ -1887,6 +1900,18 @@
       });
     }
 
+    function finishExpenseCard(button) {
+      var wrapper = button.closest('.swipe-wrapper');
+      document.activeElement?.blur();
+      closeExpenseSuggestions();
+      updateExpenseCard(wrapper);
+      wrapper.classList.remove('expanded');
+      wrapper.querySelector('.expense-summary').setAttribute('aria-expanded', 'false');
+      doSync();
+      wrapper.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      wrapper.querySelector('.expense-summary').focus({ preventScroll: true });
+    }
+
     function handleExpenseSummaryKey(event, summary) {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -1968,7 +1993,7 @@
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
           '<div class="expense-extra-row"><div class="exp-field"><label>ชำระด้วย</label><select class="exp-payment" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"><option value="cash"'+(paymentMethod === 'cash' ? ' selected' : '')+'>เงินสด</option><option value="credit_card"'+(paymentMethod === 'credit_card' ? ' selected' : '')+'>บัตรเครดิต</option><option value="reimbursement_pending"'+(paymentMethod === 'reimbursement_pending' ? ' selected' : '')+'>รอเบิก</option></select></div><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
-          '<button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button>' +
+          '<div class="expense-card-actions"><button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseCard(this)">✓ เสร็จสิ้น / ย่อ</button></div>' +
         '</div></div>';
       document.getElementById('expenseList').appendChild(wrapper);
       wrapper.querySelector('.i').addEventListener('input', function() {

@@ -246,6 +246,8 @@
     @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}.store-bottom-nav a{font-size:.58rem}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-1">
+  <script src="assets/js/expense-app.js?v=20261105-1"></script>
 </head>
 <body>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
@@ -258,7 +260,7 @@
     <a href="./burger.html?branch=GRILL"><span>GR</span><span><strong>ร้านเนื้อย่าง</strong><small>รายจ่าย สต็อก และข้อมูลร้าน</small></span><b>เปิด</b></a>
   </nav>
 
-  <header class="store-shell-header branch-shell-header"><button class="branch-identity" type="button" onclick="toggleAppSwitcher()" aria-label="เปลี่ยนร้านค้า"><span class="branch-identity-mark" style="background:linear-gradient(145deg,#f2b705,#d99a00);color:#3c2c00">BC</span><span class="branch-identity-copy"><strong>บิ๊กซี พัทยากลาง</strong><small>ร้านน้ำ · แตะเพื่อเปลี่ยนสาขา</small></span></button><div class="branch-header-actions"><button class="branch-action-button" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div></header>
+  <header class="store-shell-header branch-shell-header"><button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ลงค่าใช้จ่าย</strong><small>BigC พัทยากลาง</small></div><div class="branch-header-actions"><button class="branch-action-button" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button></div></header>
 
   <main>
     <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายจ่าย</span></div>
@@ -329,14 +331,16 @@
     });
 
     function closeAppSwitcher() {
+      document.getElementById('expenseNavigation')?.close();
       document.getElementById('appSwitcherBackdrop').classList.add('app-switcher-hidden');
       document.getElementById('appSwitcherPanel').classList.add('app-switcher-hidden');
     }
 
     function toggleAppSwitcher() {
-      document.getElementById('appSwitcherBackdrop').classList.toggle('app-switcher-hidden');
-      document.getElementById('appSwitcherPanel').classList.toggle('app-switcher-hidden');
+      window.BOY_EXPENSE_APP.toggleMenu();
     }
+
+    window.BOY_EXPENSE_APP.init('BIGC-CENTRAL-PATTAYA');
 
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') closeAppSwitcher();

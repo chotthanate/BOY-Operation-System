@@ -12,11 +12,12 @@
   <link rel="stylesheet" href="assets/css/burger-central.css?v=20261008-3">
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20261008-2">
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-1">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar branch-shell-header">
-      <button class="branch-identity" id="storeButton" type="button" aria-haspopup="dialog"><span class="branch-identity-mark store-mark" id="branchMark">BG</span><span class="branch-identity-copy"><strong id="branchName">ร้านเบอร์เกอร์</strong><small id="branchSubtitle">ร้านอาหาร · แตะเพื่อเปลี่ยนสาขา</small></span></button>
+      <button class="expense-menu-button" id="storeButton" data-expense-menu type="button" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ลงค่าใช้จ่าย</strong><small id="branchName">ร้านเบอร์เกอร์</small><span id="branchMark" hidden>BG</span></div>
       <div class="branch-header-actions"><button class="connection-badge" id="connectionBadge" type="button">กำลังเชื่อมต่อ</button><a class="branch-home-button" href="index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
     </header>
 
@@ -246,6 +247,7 @@
   <script>window.BOY_BRANCH_CONFIG=new URLSearchParams(location.search).get('branch')==='GRILL'?{branchCode:'GRILL',slug:'grill',name:'ร้านเนื้อย่าง',mark:'GR',sourceSystem:'boy_grill_web',accent:'#9b4835',accentSoft:'#f8ece7'}:{branchCode:'BURGER',slug:'burger',name:'ร้านเบอร์เกอร์',mark:'BG',sourceSystem:'boy_burger_web',accent:'#ef6c4d',accentSoft:'#fff0e9'};</script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
   <script src="assets/js/boy-pin-auth.js?v=20261102-4"></script>
-  <script src="assets/js/burger.js?v=20261102-5"></script>
+  <script src="assets/js/expense-app.js?v=20261105-1"></script>
+  <script src="assets/js/burger.js?v=20261105-1"></script>
 </body>
 </html>
