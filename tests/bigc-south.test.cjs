@@ -46,9 +46,9 @@ test('South Sheet mirror retries update the same document without touching Centr
   const start=source.indexOf('function mirrorBigcSouthWorkflow_(');
   const end=source.indexOf('\nfunction readBigcOrderMenu_',start);
   const rows=[]; let locks=0;
-  const sheet={getLastRow:()=>rows.length,appendRow:r=>rows.push(r),getRange:(row,col,count,width)=>({
+  const sheet={getLastRow:()=>rows.length,getLastColumn:()=>Math.max(0,...rows.map(r=>r.length)),getMaxColumns:()=>26,appendRow:r=>rows.push(r),getRange:(row,col,count,width)=>({
     getValues:()=>rows.slice(row-1,row-1+count).map(r=>r.slice(col-1,col-1+width)),
-    setValues:values=>values.forEach((r,i)=>{rows[row-1+i]=r;})})};
+    setValues:values=>values.forEach((r,i)=>{rows[row-1+i]||=[];r.forEach((value,j)=>{rows[row-1+i][col-1+j]=value;});})})};
   const context={normalizeText_:x=>String(x||'').trim(),lock_:()=>({waitLock(){locks++;},releaseLock(){locks--;}}),
     CONFIG:{spreadsheets:{transactions:'transactions'}},ss_:()=>({getSheetByName:n=>n==='T_BigC_South_Workflows'?sheet:null})};
   vm.runInNewContext(source.slice(start,end),context);
@@ -59,4 +59,9 @@ test('South Sheet mirror retries update the same document without touching Centr
   assert.equal(rows[1][1],'BIGC-SOUTH-PATTAYA');
   assert.equal(JSON.parse(rows[1][5]).lines[0].quantity,3);
   assert.equal(locks,0);
+  context.mirrorBigcSouthWorkflow_({...payload,note:'ก'.repeat(60000)});
+  assert.ok(rows[1][5].length<=45000);
+  assert.equal(JSON.parse(rows[1].slice(5).join('')).note.length,60000);
+  context.mirrorBigcSouthWorkflow_(payload);
+  assert.equal(rows[1][6],'');
 });

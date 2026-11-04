@@ -3442,7 +3442,16 @@ function mirrorBigcSouthWorkflow_(payload) {
     if (!sh.getLastRow()) sh.appendRow(['workflow_id', 'branch_code', 'business_date', 'workflow_type', 'mirrored_at', 'payload_json']);
     const rows = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues() : [];
     const found = rows.findIndex(function(row) { return String(row[0]) === id; });
-    const row = [id, 'BIGC-SOUTH-PATTAYA', String(payload.business_date || ''), payload.workflow_type, new Date().toISOString(), JSON.stringify(payload)];
+    const json=JSON.stringify(payload);
+    const parts=[];
+    for (let offset=0;offset<json.length;offset+=45000) parts.push(json.slice(offset,offset+45000));
+    const row = [id, 'BIGC-SOUTH-PATTAYA', String(payload.business_date || ''), payload.workflow_type, new Date().toISOString()].concat(parts);
+    const width=Math.max(sh.getLastColumn(),row.length);
+    if(width>sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(),width-sh.getMaxColumns());
+    // A workflow may contain more than one Sheet cell can hold. Keep all JSON
+    // parts, and clear trailing parts when a corrected document becomes shorter.
+    while(row.length<width) row.push('');
+    if(width>6) sh.getRange(1,7,1,width-6).setValues([Array.from({length:width-6},function(_,i){return 'payload_json_'+(i+2);})]);
     sh.getRange(found < 0 ? sh.getLastRow() + 1 : found + 2, 1, 1, row.length).setValues([row]);
     return { status: 'success', workflow_id: id, branch_code: 'BIGC-SOUTH-PATTAYA', saved: 1 };
   } finally {
