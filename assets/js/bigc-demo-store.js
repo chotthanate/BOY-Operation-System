@@ -12,12 +12,13 @@
     key,displayName,name:displayName,category,unit,sortOrder,
     active:true,inputMode:"quantity",handlingType:"standard"
   }));
-  function createStore(storage = localStorage) {
+  function createStore(storage = localStorage, options = {}) {
+    const storageKey=options.storageKey||STORAGE_KEY;
     let data;
-    try { data=JSON.parse(storage.getItem(STORAGE_KEY)||"null"); } catch (_) {}
+    try { data=JSON.parse(storage.getItem(storageKey)||"null"); } catch (_) {}
     if (!data || data.version!==1) data={version:1,menu:sampleMenu,workflows:{},batches:{},submissions:[]};
     if (!Array.isArray(data.submissions)) data.submissions=[];
-    const persist=()=>storage.setItem(STORAGE_KEY,JSON.stringify(data));
+    const persist=()=>storage.setItem(storageKey,JSON.stringify(data));
     const nextDate=(date,days=1)=>{
       const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);
       return d.toISOString().slice(0,10);
@@ -31,7 +32,7 @@
       return planned<nextMorning?planned:nextMorning;
     };
     const context=date=>({
-      branch:{id:"demo",name:"BigC · ทดลอง",code:"DEMO"},
+      branch:clone(options.branch||{id:"demo",name:"BigC · ทดลอง",code:"DEMO"}),
       business_date:date,settings:{menu_config:clone(data.menu)},
       workflows:clone(Object.values(data.workflows).filter(w=>w.business_date===date)),
       previous_order:clone(data.workflows[nextDate(date,-1)+":close_order"]||null),

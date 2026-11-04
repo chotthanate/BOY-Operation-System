@@ -246,8 +246,9 @@
     @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}.store-bottom-nav a{font-size:.58rem}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-1">
-  <script src="assets/js/expense-app.js?v=20261105-1"></script>
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-2">
+  <script src="assets/js/boy-branches.js?v=20261105-2"></script>
+  <script src="assets/js/expense-app.js?v=20261105-2"></script>
 </head>
 <body>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
@@ -260,7 +261,7 @@
     <a href="./burger.html?branch=GRILL"><span>GR</span><span><strong>ร้านเนื้อย่าง</strong><small>รายจ่าย สต็อก และข้อมูลร้าน</small></span><b>เปิด</b></a>
   </nav>
 
-  <header class="store-shell-header branch-shell-header"><button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ลงค่าใช้จ่าย</strong><small>BigC พัทยากลาง</small></div><div class="branch-header-actions"><button class="branch-action-button" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button></div></header>
+  <header class="store-shell-header branch-shell-header"><button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>BigC พัทยากลาง</strong></div><div class="branch-header-actions"><button class="branch-action-button" type="button" onclick="pullItems(true)" aria-label="อัปเดตรายการ">↻</button></div></header>
 
   <main>
     <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายจ่าย</span></div>
@@ -285,7 +286,7 @@
     <button class="btn btn-danger" type="button" onclick="clearAllData()">ล้างข้อมูล</button>
     <button class="btn btn-primary" type="button" onclick="submitExpenses()">บันทึกรายจ่าย</button>
   </div>
-  <nav class="store-bottom-nav" aria-label="เมนูสาขา"><a class="active" href="bigc.html"><span>＋</span>บันทึก</a><a href="branch-dashboard.html?branch=BIGC-CENTRAL-PATTAYA"><span>▥</span>Dashboard</a><a href="bigc-order.html#receive"><span>▦</span>สต็อก</a><a href="master-data.html?entity=employees&store=water"><span>♙</span>พนักงาน</a><a href="master-data.html?entity=branches&store=water"><span>•••</span>เพิ่มเติม</a><a href="bigc-order.html"><span>⇄</span>เบิก / รับของ</a></nav>
+  <nav class="store-bottom-nav" aria-label="เมนูสาขา"><a class="active" href="bigc.html"><span>＋</span>บันทึก</a><a href="branch-dashboard.html?branch=BIGC-CENTRAL-PATTAYA"><span>▥</span>Dashboard</a><a href="burger.html?branch=BIGC-CENTRAL-PATTAYA&amp;page=stock"><span>▦</span>สต็อก</a><a href="master-data.html?entity=employees&store=water"><span>♙</span>พนักงาน</a><a href="master-data.html?entity=branches&store=water"><span>•••</span>เพิ่มเติม</a><a href="bigc-v2.html"><span>⇄</span>เบิก / รับของ</a></nav>
 
   <div id="loadingOverlay" class="overlay hidden">
     <div class="overlay-card">
@@ -652,10 +653,10 @@
           <label class="form-field unit-field"><span>หน่วย</span><input class="unit" type="text" placeholder="กรอกหรือเลือกหน่วย" value="${escapeHtml(u)}" list="${unitListId}" onchange="updateUnitOptions(this.closest('.expense-row')); doSync()" onkeydown="nav(event, 2)"></label>
           <datalist id="${unitListId}"></datalist>
           <label class="form-field amount-field"><span>ยอดรวม</span><input class="amount" type="number" inputmode="decimal" placeholder="0.00" value="${escapeHtml(p)}" oninput="refreshExpenseSummary(this.closest('.expense-row'))" onchange="doSync()" onkeydown="nav(event, 3)"></label>
-          <button class="delete-btn" type="button" onclick="removeRow(this)">×</button>
           <label class="form-field payment-field"><span>ชำระด้วย</span><select class="payment" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select></label>
           <label class="form-field note-field"><span>หมายเหตุ</span><input class="note" type="text" placeholder="รายละเอียดเพิ่มเติม" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)"></label>
           <div class="type-hint"></div>
+          <div class="expense-card-actions"><button class="remove-line" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseRow(this)">✓ เสร็จสิ้น</button></div>
         </div>
       `;
       document.getElementById('expenseList').appendChild(row);
@@ -671,8 +672,15 @@
     }
 
     function removeRow(btn) {
+      if (!confirm('ลบรายการนี้ใช่ไหม?')) return;
       btn.closest('.expense-row').remove();
       doSync();
+    }
+
+    function finishExpenseRow(button) {
+      const row=button.closest('.expense-row');
+      document.activeElement?.blur(); closeAllLists(); refreshExpenseSummary(row);
+      row.classList.remove('expanded'); doSync(); row.querySelector('.expense-summary').focus({preventScroll:true});
     }
 
     function collectSnapshot() {
@@ -787,7 +795,7 @@
       itemDict = safeParse(localStorage.getItem(STORAGE_ITEMS), {});
       itemMetaDict = safeParse(localStorage.getItem(STORAGE_META), {});
       const today = new Date();
-      document.getElementById('mainDate').value = today.toISOString().slice(0, 10);
+      document.getElementById('mainDate').value = today.toLocaleDateString('en-CA', {timeZone:'Asia/Bangkok'});
       loadData().finally(function() { pullItems(false); });
     }
 

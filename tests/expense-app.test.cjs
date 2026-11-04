@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const root = path.join(__dirname, '..');
 const context = vm.createContext({ window: {} });
+vm.runInContext(fs.readFileSync(path.join(root, 'assets/js/boy-branches.js'), 'utf8'), context);
 vm.runInContext(fs.readFileSync(path.join(root, 'assets/js/expense-app.js'), 'utf8'), context);
 const app = context.window.BOY_EXPENSE_APP;
 

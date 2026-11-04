@@ -50,7 +50,8 @@ test('back office opens the online full version in a new tab', () => {
 test('employee link hides catalog settings and keeps sorting local to that device', () => {
   assert.match(page, /bigc-v2\.html\?view=staff&amp;online=1/);
   assert.match(script, /document\.body\.classList\.toggle\("staff-view", staff\)/);
-  assert.match(script, /\$\("#settingsButton"\)\.hidden = staff \|\| !state\.access\?\.canManage/);
+  assert.match(script, /\$\("#settingsButton"\)\.hidden = false/);
+  assert.match(script, /if \(isStaffView\(\) \|\| !state\.access\?\.canManage\)/);
   assert.match(script, /localStorage\.setItem\(STAFF_SORT_KEY/);
   assert.match(script, /บันทึกลำดับสำหรับเครื่องนี้แล้ว/);
 });

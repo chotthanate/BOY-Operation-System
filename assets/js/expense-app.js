@@ -1,11 +1,6 @@
 (() => {
   "use strict";
-  const branches = [
-    { code: "TAWANA", name: "ทาวน่า", mark: "TW", path: "tawana.html" },
-    { code: "BURGER", name: "ร้านเบอร์เกอร์", mark: "BG", path: "burger.html" },
-    { code: "GRILL", name: "ร้านเนื้อย่าง", mark: "GR", path: "burger.html?branch=GRILL" },
-    { code: "BIGC-CENTRAL-PATTAYA", name: "BigC พัทยากลาง", mark: "BC", path: "bigc.html" }
-  ];
+  const branches = window.BOY_BRANCHES.all.map(branch => ({ ...branch, path: branch.expensePath }));
   const uniqueNames = (rows) => [...new Map(rows.filter(Boolean).map(value => {
     const name = String(value.name || value).trim();
     return [name.toLocaleLowerCase("th"), name];
@@ -43,7 +38,7 @@
     dialog.id = "expenseNavigation";
     dialog.className = "expense-navigation";
     dialog.setAttribute("aria-labelledby", "expenseNavigationTitle");
-    dialog.innerHTML = `<div class="expense-nav-heading"><div><small>BOY OPERATION</small><h2 id="expenseNavigationTitle">ลงค่าใช้จ่าย</h2></div><button type="button" data-expense-nav-close aria-label="ปิดเมนู">×</button></div><nav aria-label="เลือกสาขา"><div class="expense-nav-label">สาขา</div>${branches.map(branch => `<a href="${branch.path}" ${branch.code === branchCode ? 'aria-current="page"' : ""}><span>${branch.mark}</span><strong>${branch.name}</strong>${branch.code === branchCode ? '<b aria-hidden="true">✓</b>' : ""}</a>`).join("")}<div class="expense-nav-label">เมนูอื่น</div><a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong></a><a href="dashboard.html"><span>▥</span><strong>Dashboard รวม</strong></a><a href="master-data.html?entity=items"><span>▦</span><strong>ข้อมูลกลาง</strong></a></nav>`;
+    dialog.innerHTML = `<div class="expense-nav-heading"><div><small>BOY OPERATION</small><h2 id="expenseNavigationTitle">เลือกสาขา</h2></div><button type="button" data-expense-nav-close aria-label="ปิดเมนู">×</button></div><nav aria-label="เลือกสาขา"><div class="expense-nav-label">สาขา</div>${branches.map(branch => `<a href="${branch.path}" ${branch.code === branchCode ? 'aria-current="page"' : ""}><span>${branch.mark}</span><strong>${branch.name}</strong>${branch.code === branchCode ? '<b aria-hidden="true">✓</b>' : ""}</a>`).join("")}<div class="expense-nav-label">เมนูอื่น</div><a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong></a><a href="dashboard.html"><span>▥</span><strong>Dashboard รวม</strong></a><a href="master-data.html?entity=items"><span>▦</span><strong>ข้อมูลกลาง</strong></a></nav>`;
     document.body.appendChild(dialog);
     dialog.querySelector("[data-expense-nav-close]").addEventListener("click", () => dialog.close());
     dialog.addEventListener("click", event => { if (event.target === dialog && event.clientX >= dialog.getBoundingClientRect().right) dialog.close(); });

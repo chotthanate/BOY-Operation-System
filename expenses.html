@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ลงค่าใช้จ่าย | BOY Operation</title></head><body>
 <p>กำลังเปิดหน้าลงค่าใช้จ่าย…</p>
-<script>
+<script src="assets/js/boy-branches.js?v=20261105-2"></script><script>
   const query = new URLSearchParams(location.search);
   const branch = query.get('branch') || 'TAWANA';
-  const routes = { TAWANA: 'tawana.html', BURGER: 'burger.html', GRILL: 'burger.html', 'BIGC-CENTRAL-PATTAYA': 'bigc.html' };
-  const target = new URL(routes[branch] || routes.TAWANA, location.href);
+  const selected=window.BOY_BRANCHES.get(branch)||window.BOY_BRANCHES.get('TAWANA');
+  const target = new URL(selected.expensePath, location.href);
   query.delete('branch');
-  target.search = query.toString();
+  query.forEach((value,key)=>target.searchParams.set(key,value));
   if (branch === 'GRILL') target.searchParams.set('branch', 'GRILL');
   target.hash = location.hash;
   location.replace(target.href);

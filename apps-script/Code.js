@@ -253,6 +253,9 @@ function doPost(e) {
       case 'bigcV2MirrorWorkflow':
         result = handleBigcV2MirrorWorkflow_(payload.payload || {});
         break;
+      case 'bigcV2MirrorStatus':
+        result = { status: 'success', branch_codes: ['BIGC-CENTRAL-PATTAYA', 'BIGC-SOUTH-PATTAYA'], south_sheet: 'T_BigC_South_Workflows' };
+        break;
       case 'dashboardGetMonthlySummary':
         result = handleDashboardGetMonthlySummary_(payload);
         break;
@@ -3367,6 +3370,9 @@ function handleBigcOrderReturn_(date, qtyData, cash, transfer) {
 }
 
 function handleBigcV2MirrorWorkflow_(payload) {
+  const branchCode = normalizeText_(payload.branch_code) || 'BIGC-CENTRAL-PATTAYA';
+  if (branchCode === 'BIGC-SOUTH-PATTAYA') return mirrorBigcSouthWorkflow_(payload);
+  if (branchCode !== 'BIGC-CENTRAL-PATTAYA') throw new Error('ไม่รู้จักสาขา BigC');
   const workflowType = normalizeText_(payload.workflow_type);
   const date = payload.business_date || dateKey_(now_());
   const lines = Array.isArray(payload.lines) ? payload.lines : [];
@@ -3420,6 +3426,28 @@ function handleBigcV2MirrorWorkflow_(payload) {
   }
 
   throw new Error('workflow_type ไม่ถูกต้อง');
+}
+
+// South has its own mirror archive. Never pass its data through the legacy
+// central-branch routines, which also maintain central-only order caches.
+function mirrorBigcSouthWorkflow_(payload) {
+  const id = normalizeText_(payload.workflow_id);
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('ไม่พบรหัสเอกสารสำหรับสำรองข้อมูล');
+  if (['close_order', 'receive', 'return'].indexOf(payload.workflow_type) < 0) throw new Error('workflow_type ไม่ถูกต้อง');
+  const scriptLock = lock_();
+  scriptLock.waitLock(30000);
+  try {
+    const ss = ss_(CONFIG.spreadsheets.transactions);
+    const sh = ss.getSheetByName('T_BigC_South_Workflows') || ss.insertSheet('T_BigC_South_Workflows');
+    if (!sh.getLastRow()) sh.appendRow(['workflow_id', 'branch_code', 'business_date', 'workflow_type', 'mirrored_at', 'payload_json']);
+    const rows = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues() : [];
+    const found = rows.findIndex(function(row) { return String(row[0]) === id; });
+    const row = [id, 'BIGC-SOUTH-PATTAYA', String(payload.business_date || ''), payload.workflow_type, new Date().toISOString(), JSON.stringify(payload)];
+    sh.getRange(found < 0 ? sh.getLastRow() + 1 : found + 2, 1, 1, row.length).setValues([row]);
+    return { status: 'success', workflow_id: id, branch_code: 'BIGC-SOUTH-PATTAYA', saved: 1 };
+  } finally {
+    scriptLock.releaseLock();
+  }
 }
 
 function readBigcOrderMenu_() {

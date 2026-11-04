@@ -17,6 +17,7 @@
   const branchMeta = {
     TAWANA: { slug: "tawana", mark: "TW", name: "ทาวน่า", color: "#0b876b", soft: "#e8f6f0" },
     "BIGC-CENTRAL-PATTAYA": { slug: "bigc", mark: "BC", name: "บิ๊กซีพัทยากลาง", color: "#b88812", soft: "#fff5d4" },
+    "BIGC-SOUTH-PATTAYA": { slug: "bigc-south", mark: "BS", name: "BigC พัทยาใต้", color: "#0b8068", soft: "#e8f5ef" },
     BURGER: { slug: "burger", mark: "BG", name: "ร้านเบอร์เกอร์", color: "#ef6c4d", soft: "#fff0e9" },
     GRILL: { slug: "grill", mark: "GR", name: "ร้านเนื้อย่าง", color: "#7d3f31", soft: "#f5e8e3" }
   };
@@ -162,7 +163,7 @@
     const totals = data.totals || {};
     $("#branchUpdated").textContent = `${thaiDate(data.dateFrom)}${data.dateFrom === data.dateTo ? "" : ` – ${thaiDate(data.dateTo)}`} · อัปเดต ${new Date(data.generatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`;
     $("#metricGrid").innerHTML = [
-      ["ยอดขายสุทธิ", money(totals.revenue), `${count(totals.orders)} ออเดอร์`, "accent"],
+      ["ยอดขายสุทธิ", money(totals.revenue), data.manualRevenue>0 ? "รวมยอดสรุปประจำวัน" : `${count(totals.orders)} ออเดอร์`, "accent"],
       ["รายจ่าย", money(totals.expenses), `${count(totals.expenseTransactions)} รายการ`, ""],
       ["คงเหลือก่อนต้นทุน", money(totals.net), "ยอดขายหักรายจ่าย", ""],
       ["เฉลี่ยต่อบิล", money(totals.averageOrder), "ต่อออเดอร์", ""],
@@ -200,6 +201,17 @@
 
   function initBranch() {
     const params = new URLSearchParams(location.search);
+    const code=params.get('branch')||'BURGER';
+    const branch=window.BOY_BRANCHES.get(code)||window.BOY_BRANCHES.get('BURGER');
+    const dataPage=page=>window.BOY_BRANCHES.dataPath(branch.code,page);
+    const links=branch.code==='TAWANA' ? [
+      ['＋','บันทึก','tawana.html'],['▥','Dashboard','#'],['◷','ประวัติ','tawana.html?view=history'],['▦','สต็อก','tawana.html?view=stock'],['♙','พนักงาน','tawana.html?view=employee'],['⌂','หน้าหลัก','index.html']
+    ] : [
+      ['＋','บันทึก',branch.expensePath],['▥','Dashboard','#'],['▦','สต็อก',dataPage('stock')],['▣','รอรับ',dataPage('receipts')],
+      [branch.orderPath?'⇄':'•••',branch.orderPath?'สั่งของ':'เพิ่มเติม',branch.orderPath||dataPage('settings')],['⌂','หน้าหลัก','index.html']
+    ];
+    $('#branchBottomNav').innerHTML=links.map(([icon,label,href])=>`<a href="${escapeHtml(href)}"${label==='Dashboard'?' aria-current="page"':''}><span>${icon}</span><strong>${label}</strong></a>`).join('');
+    document.body.classList.add('has-branch-nav');
     const preset = params.get("preset") || "today";
     const [defaultFrom, defaultTo] = rangeForPreset(preset);
     $("#dateFrom").value = params.get("from") || defaultFrom;

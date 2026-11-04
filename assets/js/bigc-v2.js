@@ -1,9 +1,16 @@
 (() => {
   "use strict";
   const DEMO_MODE = document.body.dataset.demo === "true";
-  const DEMO_STORE = DEMO_MODE ? globalThis.BOYBigCDemo.createStore() : null;
-  const STORAGE_PREFIX = DEMO_MODE ? "boy-bigc-demo:" : "boy-bigc-v2-";
-  const BRANCH_CODE = "BIGC-CENTRAL-PATTAYA";
+  const BRANCH_CODE = new URLSearchParams(location.search).get('branch')==='BIGC-SOUTH-PATTAYA'?'BIGC-SOUTH-PATTAYA':'BIGC-CENTRAL-PATTAYA';
+  const SOUTH_BRANCH = BRANCH_CODE==='BIGC-SOUTH-PATTAYA';
+  const STORAGE_PREFIX = DEMO_MODE ? (SOUTH_BRANCH?'boy-bigc-south-demo:':'boy-bigc-demo:') : (SOUTH_BRANCH?'boy-bigc-south-v2-':'boy-bigc-v2-');
+  const DEMO_STORE = DEMO_MODE ? globalThis.BOYBigCDemo.createStore(localStorage, SOUTH_BRANCH ? {
+    storageKey:'boy-bigc-south-demo:data',branch:{id:'demo-south',code:'DEMO-SOUTH',name:'BigC พัทยาใต้ · ทดลอง'}
+  } : {}) : null;
+  const workflowApi = { rpc(operation, arguments_ = {}) {
+    if (!SOUTH_BRANCH || operation==='get_master_catalog') return state.client.schema('boy_central').rpc(operation,arguments_);
+    return state.client.schema('boy_central').rpc('bigc_branch_request',{target_branch_code:BRANCH_CODE,operation,arguments:arguments_});
+  } };
   const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzgShPP4BpUUvDSs53esvJLru3CFAe1tM4LqdXE9rUzENbBNBFY3lPPqjVw6fnhgEKmGw/exec";
   const CLOUD_DRAFT_DELAY = 8000;
   const SETTINGS_CACHE_KEY = STORAGE_PREFIX + "settings-cache";
@@ -78,7 +85,7 @@
     if (DEMO_MODE) return true;
     if (!state.session) { setSync("ต้องเชื่อม Supabase", "error"); return false; }
     if (!navigator.onLine) { setSync("ออฟไลน์ · รอส่งข้อมูล", "pending"); return false; }
-    const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_draft", { payload: draft });
+    const { error } = await workflowApi.rpc("save_bigc_v2_draft", { payload: draft });
     if (error) { setSync("รอส่งข้อมูล", "error"); notice(`ร่างเก็บไว้ในเครื่องแล้ว แต่ส่ง Supabase ไม่สำเร็จ: ${error.message}`, true); return false; }
     setSync("บันทึกแล้ว", "ok"); return true;
   }
@@ -118,6 +125,7 @@
 
   async function sheetApi(action, payload = {}) {
     if (DEMO_MODE) throw new Error("โหมดทดลองไม่ส่งข้อมูลออนไลน์");
+    if (action==='bigcV2MirrorWorkflow') payload={...payload,payload:{...payload.payload,branch_code:BRANCH_CODE}};
     const response = await fetch(WEB_APP_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action, ...payload }) });
     const data = await response.json();
     if (!response.ok || !["success", "Success"].includes(data.status)) throw new Error(data.message || "Google Sheets ตอบกลับผิดปกติ");
@@ -147,10 +155,10 @@
     try {
       const result = await sheetApi("bigcOrderLoadDB");
       const menu = normalizeMenu(result.database || {});
-      localStorage.setItem("boy-bigc-v2-menu-cache", JSON.stringify(menu));
+      localStorage.setItem(STORAGE_PREFIX+"menu-cache", JSON.stringify(menu));
       return menu;
     } catch (_) {
-      try { return JSON.parse(localStorage.getItem("boy-bigc-v2-menu-cache") || "[]"); }
+      try { return JSON.parse(localStorage.getItem(STORAGE_PREFIX+"menu-cache") || "[]"); }
       catch (_) { return []; }
     }
   }
@@ -179,6 +187,7 @@
   function staffLink() {
     const url = new URL("bigc-v2.html", location.href);
     url.search = "?view=staff&online=1";
+    if(SOUTH_BRANCH) url.searchParams.set('branch',BRANCH_CODE);
     return url.href;
   }
   function applyStaffSort(menu) {
@@ -262,9 +271,9 @@
   }
   async function uploadSettingsPayload(payload) {
     const cleanPayload = { menu_config: payload.menu_config || [], default_return_keys: payload.default_return_keys || [] };
-    const { error } = await state.client.schema("boy_central").rpc("save_bigc_v2_settings", { payload: cleanPayload });
+    const { error } = await workflowApi.rpc("save_bigc_v2_settings", { payload: cleanPayload });
     if (error) throw error;
-    const { data, error: verifyError } = await state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
+    const { data, error: verifyError } = await workflowApi.rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
     if (verifyError) throw verifyError;
     if (settingsFingerprint(data?.settings || {}) !== settingsFingerprint(cleanPayload)) throw new Error("ตรวจสอบการตั้งค่าที่บันทึกแล้วไม่ตรงกัน");
     localStorage.removeItem(SETTINGS_PENDING_KEY);
@@ -278,7 +287,7 @@
     const pending = readStoredJson(SETTINGS_PENDING_KEY);
     if (!pending || !state.session || !navigator.onLine) return false;
     try {
-      const { data: current, error: readError } = await state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
+      const { data: current, error: readError } = await workflowApi.rpc("get_bigc_v2_context", { target_date: activeDate() || today() });
       if (readError) throw readError;
       const cloudFingerprint = settingsFingerprint(current?.settings || {});
       if (settingsFingerprint(pending) === cloudFingerprint) {
@@ -313,15 +322,15 @@
       await flushPendingSettings(true);
       const dates = { order: $("#orderDate").value, receive: $("#receiveDate").value, returns: $("#returnDate").value };
       const requests = {};
-      Object.values(dates).forEach((date) => { if (!requests[date]) requests[date] = state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: date }); });
+      Object.values(dates).forEach((date) => { if (!requests[date]) requests[date] = workflowApi.rpc("get_bigc_v2_context", { target_date: date }); });
       const resolved = Object.fromEntries(await Promise.all(Object.entries(requests).map(async ([date, request]) => {
         const { data, error } = await request; if (error) throw error; return [date, data || {}];
       })));
       state.contexts = { order: resolved[dates.order], receive: resolved[dates.receive], returns: resolved[dates.returns] };
       const [historyResult, roundsResult, orderHistoryResult] = await Promise.all([
-        state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: dates.receive }),
-        state.client.schema("boy_central").rpc("get_bigc_v2_receive_order_rounds", { target_date: dates.receive }),
-        state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 })
+        workflowApi.rpc("get_bigc_v2_receive_history", { target_date: dates.receive }),
+        workflowApi.rpc("get_bigc_v2_receive_order_rounds", { target_date: dates.receive }),
+        workflowApi.rpc("get_bigc_v2_order_history", { max_rows: 30 })
       ]);
       state.receiveHistory = historyResult.error ? null : historyResult.data || [];
       if (roundsResult.error) throw roundsResult.error;
@@ -870,7 +879,7 @@
       }
       if (type === "receive") saveDraft();
       const { data, error } = DEMO_MODE ? { data: DEMO_STORE.submit(payload) }
-        : await state.client.schema("boy_central").rpc(
+        : await workflowApi.rpc(
           type === "receive" ? "append_bigc_v2_receive" : type === "close_order" ? "append_bigc_v2_order" : "save_bigc_v2_workflow", { payload });
       if (error) throw error;
       if (data?.status !== "saved" && !DEMO_MODE) throw new Error("ฐานข้อมูลยังไม่ยืนยันการบันทึก");
@@ -891,11 +900,11 @@
         setSync("บันทึก Supabase แล้ว · กำลังส่งชีต", "pending");
       } else try {
         await sheetApi("bigcV2MirrorWorkflow", { payload: { ...(data.mirror_payload || payload), workflow_id: data.workflow_id } });
-        await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
+        await workflowApi.rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "synced", sync_error: null });
         mirrorSynced = true;
         setSync("บันทึกครบแล้ว", "ok"); notice("บันทึกเรียบร้อย");
       } catch (sheetError) {
-        try { await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "error", sync_error: String(sheetError.message || sheetError).slice(0, 400) }); } catch (_) { /* database save remains valid */ }
+        try { await workflowApi.rpc("mark_bigc_v2_sheet_sync", { target_workflow_id: data.workflow_id, sync_status: "error", sync_error: String(sheetError.message || sheetError).slice(0, 400) }); } catch (_) { /* database save remains valid */ }
         setSync("รอส่ง Google Sheets", "pending"); notice("ข้อมูลอยู่ในฐานข้อมูลแล้ว แต่สำเนา Google Sheets ยังรอส่ง", false);
       }
       if (reload) await loadPage();
@@ -913,7 +922,7 @@
     if (DEMO_MODE) return true;
     try {
       await sheetApi("bigcV2MirrorWorkflow", { payload: { ...saved.mirrorPayload, workflow_id: saved.workflowId } });
-      const { error } = await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", {
+      const { error } = await workflowApi.rpc("mark_bigc_v2_sheet_sync", {
         target_workflow_id: saved.workflowId, sync_status: "synced", sync_error: null
       });
       if (error) throw error;
@@ -922,7 +931,7 @@
         "บันทึก Supabase และส่งสำเนา Google Sheets แล้ว · คัดลอกซ้ำในประวัติ", copied ? "ok" : "warning");
       return true;
     } catch (error) {
-      try { await state.client.schema("boy_central").rpc("mark_bigc_v2_sheet_sync", {
+      try { await workflowApi.rpc("mark_bigc_v2_sheet_sync", {
         target_workflow_id: saved.workflowId, sync_status: "error",
         sync_error: String(error.message || error).slice(0, 400)
       }); } catch (_) { /* database save remains valid */ }
@@ -935,10 +944,10 @@
   async function refreshReceiveAfterOrder(receiveDate, submissionId) {
     if (DEMO_MODE) { loadDemoPage(); return state.receiveRounds.some((round) => round.id === submissionId); }
     const [contextResult, roundsResult, historyResult, orderHistoryResult] = await Promise.all([
-      state.client.schema("boy_central").rpc("get_bigc_v2_context", { target_date: receiveDate }),
-      state.client.schema("boy_central").rpc("get_bigc_v2_receive_order_rounds", { target_date: receiveDate }),
-      state.client.schema("boy_central").rpc("get_bigc_v2_receive_history", { target_date: receiveDate }),
-      state.client.schema("boy_central").rpc("get_bigc_v2_order_history", { max_rows: 30 })
+      workflowApi.rpc("get_bigc_v2_context", { target_date: receiveDate }),
+      workflowApi.rpc("get_bigc_v2_receive_order_rounds", { target_date: receiveDate }),
+      workflowApi.rpc("get_bigc_v2_receive_history", { target_date: receiveDate }),
+      workflowApi.rpc("get_bigc_v2_order_history", { max_rows: 30 })
     ]);
     if (contextResult.error || roundsResult.error) throw contextResult.error || roundsResult.error;
     state.contexts.receive = contextResult.data || {};
@@ -1001,7 +1010,7 @@
   async function loadMasterItems(force = false) {
     if ((!force && state.masterItems.length) || !state.session) return;
     const [catalogResult, normalizedResult] = await Promise.all([
-      state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_สินค้า" }),
+      workflowApi.rpc("get_master_catalog", { target_sheet_name: "M_สินค้า" }),
       state.client.schema("boy_central").from("items").select("id,code,name,stock_target_item_id,active").eq("active", true).limit(1000)
     ]);
     if (catalogResult.error) throw catalogResult.error;
@@ -1023,7 +1032,7 @@
     const codes = [...new Set(items.map((item) => item.masterItemId || item.master_item_id).filter((code) => code && !state.normalizedItemsByCode.has(code)))];
     if (codes.length && !state.session) throw new Error("เข้าสู่ระบบออนไลน์ก่อนจับคู่สินค้า");
     for (let index = 0; index < codes.length; index += 50) {
-      const { data, error } = await state.client.schema("boy_central").rpc("ensure_bigc_catalog_items", { target_codes: codes.slice(index, index + 50) });
+      const { data, error } = await workflowApi.rpc("ensure_bigc_catalog_items", { target_codes: codes.slice(index, index + 50) });
       if (error) throw error;
       Object.entries(data || {}).forEach(([code, id]) => { if (id) state.normalizedItemsByCode.set(code, id); });
     }
@@ -1156,8 +1165,8 @@
     loading("กำลังโหลดต้นทุนผลไม้");
     try {
       const [{ data, error }, sourceResult] = await Promise.all([
-        state.client.schema("boy_central").rpc("get_bigc_fruit_cost_settings"),
-        state.client.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: "M_UW_สรุป" })
+        workflowApi.rpc("get_bigc_fruit_cost_settings"),
+        workflowApi.rpc("get_master_catalog", { target_sheet_name: "M_UW_สรุป" })
       ]);
       if (error) throw error;
       state.fruitCostItems = data?.items || [];
@@ -1181,7 +1190,7 @@
     }
     loading("กำลังบันทึกต้นทุนผลไม้"); $("#fruitCostError").textContent = "";
     try {
-      const { data, error } = await state.client.schema("boy_central").rpc("admin_save_bigc_piece_weight", {
+      const { data, error } = await workflowApi.rpc("admin_save_bigc_piece_weight", {
         payload: { raw_item_id: itemId, effective_month: `${month}-01`, kg_per_piece: kg, sample_note: sampleNote }
       });
       if (error) throw error;
@@ -1258,7 +1267,7 @@
       if (!state.session || !navigator.onLine) { notice("เชื่อมต่อออนไลน์ก่อนบันทึกรายการคืนประจำ", true); return false; }
       loading("กำลังบันทึกรายการคืนประจำ");
       try {
-        const {data,error} = await state.client.schema("boy_central").rpc("save_bigc_v2_default_returns", {
+        const {data,error} = await workflowApi.rpc("save_bigc_v2_default_returns", {
           payload:{default_return_keys:state.menu.filter(item=>item.defaultReturn).map(item=>item.key)}
         });
         if (error) throw error;
@@ -1697,6 +1706,13 @@
     state.receiveHistory = DEMO_STORE.history($("#receiveDate").value);
     state.orderHistory = DEMO_STORE.orderHistory();
     renderAll(); setSync("โหมดทดลอง","pending");
+  }
+  if(SOUTH_BRANCH) {
+    document.title='BigC พัทยาใต้ | BOY Operation';
+    $('.branch-brand strong').textContent='BigC พัทยาใต้';
+    $('.branch-mark').textContent='BS';
+    $('#settingsReconnect').href='burger.html?next='+encodeURIComponent('bigc-v2.html?branch='+BRANCH_CODE)+'&online=1';
+    $('.demo-link')?.setAttribute('href','bigc-demo.html?branch='+BRANCH_CODE);
   }
   initializePersonalSettings();
   if (DEMO_MODE) {

@@ -592,8 +592,9 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-1">
-  <script src="assets/js/expense-app.js?v=20261105-1"></script>
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-2">
+  <script src="assets/js/boy-branches.js?v=20261105-2"></script>
+  <script src="assets/js/expense-app.js?v=20261105-2"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -610,7 +611,7 @@
 
   <div class="app-shell">
     <header class="app-topbar branch-shell-header">
-      <button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ลงค่าใช้จ่าย</strong><small>ทาวน่า</small></div>
+      <button class="expense-menu-button" data-expense-menu type="button" onclick="toggleAppSwitcher()" aria-label="เปิดเมนูเลือกสาขา" aria-haspopup="dialog" aria-controls="expenseNavigation" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><div class="expense-app-title"><strong>ทาวน่า</strong></div>
       <div class="branch-header-actions"><a class="branch-home-button" href="./index.html" aria-label="กลับหน้าหลัก"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h13V10M9 20v-6h6v6"/></svg></a></div>
     </header>
     <main class="app-content">
@@ -1799,7 +1800,15 @@
       document.getElementById('leaveDate').value = todayKey;
       setupEmployeePeriod();
       document.getElementById('formArea').addEventListener('input', persistLocalDraft);
-      loadData().finally(function() { setTimeout(pullItems, 0); });
+      loadData().finally(function() {
+        setTimeout(pullItems, 0);
+        const view=new URLSearchParams(location.search).get('view');
+        const views={history:'historyView',stock:'stockView',employee:'leaveView'};
+        if(views[view]) {
+          const button=[...document.querySelectorAll('.bottom-nav-item')].find(el=>(el.getAttribute('onclick')||'').includes(views[view]));
+          if(button) button.click();
+        }
+      });
     }
 
     function showSuggestions(inp) {
@@ -1993,7 +2002,7 @@
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
           '<div class="expense-extra-row"><div class="exp-field"><label>ชำระด้วย</label><select class="exp-payment" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"><option value="cash"'+(paymentMethod === 'cash' ? ' selected' : '')+'>เงินสด</option><option value="credit_card"'+(paymentMethod === 'credit_card' ? ' selected' : '')+'>บัตรเครดิต</option><option value="reimbursement_pending"'+(paymentMethod === 'reimbursement_pending' ? ' selected' : '')+'>รอเบิก</option></select></div><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
-          '<div class="expense-card-actions"><button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseCard(this)">✓ เสร็จสิ้น / ย่อ</button></div>' +
+          '<div class="expense-card-actions"><button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseCard(this)">✓ เสร็จสิ้น</button></div>' +
         '</div></div>';
       document.getElementById('expenseList').appendChild(wrapper);
       wrapper.querySelector('.i').addEventListener('input', function() {

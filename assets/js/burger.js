@@ -38,6 +38,10 @@
     activeChoice?.querySelector("small") && (activeChoice.querySelector("small").textContent = "กำลังใช้");
     const employeeLink = document.getElementById("employeeNavLink");
     if (employeeLink) employeeLink.href = `master-data.html?entity=employees&store=${branchApp.slug}`;
+    if (employeeLink && branchApp.orderPath) {
+      employeeLink.href=branchApp.orderPath;
+      employeeLink.innerHTML='<span>⇄</span> สั่งของ';
+    }
     const dashboardLink = document.getElementById("dashboardNavLink");
     if (dashboardLink) dashboardLink.href = `branch-dashboard.html?branch=${encodeURIComponent(branchApp.branchCode)}`;
     if (branchApp.branchCode === "GRILL") document.body.classList.add("grill-branch");
@@ -601,7 +605,7 @@
             <label>Supplier<input data-field="supplier_name" list="suppliers-${line.id}" value="${escapeHtml(line.supplier_name)}" placeholder="เลือกหรือพิมพ์ชื่อ"><datalist id="suppliers-${line.id}">${suppliers.map((row) => `<option value="${escapeHtml(row.name)}"></option>`).join("")}</datalist></label>
           </div>
           <label>หมายเหตุ<textarea data-field="note" placeholder="ไม่บังคับ">${escapeHtml(line.note)}</textarea></label>
-          <div class="expense-card-actions"><button class="remove-line" type="button" data-action="remove-line">ลบรายการนี้</button><button class="expense-done" type="button" data-action="finish-line">✓ เสร็จสิ้น / ย่อ</button></div>
+          <div class="expense-card-actions"><button class="remove-line" type="button" data-action="remove-line">ลบรายการนี้</button><button class="expense-done" type="button" data-action="finish-line">✓ เสร็จสิ้น</button></div>
         </div>
       </article>`;
     }).join("");
@@ -1693,6 +1697,8 @@
     if (data.session) await enterApp(data.session);
     else if (!forceOnlineLogin && window.BOY_LOCAL_ACCESS?.hasAccess()) await enterLocalApp();
     else { document.body.classList.add("auth-mode"); $("#authCard").hidden = false; $$(".page,.bottom-nav").forEach((element) => element.hidden = true); setConnection("กรุณาเข้าสู่ระบบ"); }
+    const page=new URLSearchParams(location.search).get('page');
+    if (state.session && ['expense','stock','receipts','settings','account'].includes(page)) setPage(page);
   }
 
   $$(".bottom-nav button").forEach((button) => button.addEventListener("click", () => setPage(button.dataset.target)));

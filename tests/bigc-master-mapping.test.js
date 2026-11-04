@@ -8,7 +8,7 @@ const { codesFor, withCodes, canonicalCodeFor, matchesSearch } = require('../ass
 function appSettingsFunctions() {
   const source = fs.readFileSync(path.join(__dirname, '..', 'assets/js/bigc-v2.js'), 'utf8');
   const context = { document: { body: { dataset: {} } }, location: { search: '' }, URLSearchParams, window: { addEventListener() {} }, BOYBigCMasterMapping: { codesFor, withCodes, canonicalCodeFor, matchesSearch } };
-  vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.__test = { settingsMenu, settingsPayload, settingsFingerprint };})();'), context);
+  vm.runInNewContext(source.slice(0, source.lastIndexOf('  if(SOUTH_BRANCH) {')) + 'globalThis.__test = { settingsMenu, settingsPayload, settingsFingerprint };})();', context);
   return context.__test;
 }
 

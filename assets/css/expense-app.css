@@ -18,8 +18,8 @@ body.expense-app{--store-accent:#0b8068;--store-accent-soft:#e8f5ef;--green:#0b8
 .expense-app .expense-fields.fields-1{grid-template-columns:1fr}
 .expense-app .expense-fields.fields-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .expense-app .expense-note-field{grid-column:1/-1}
-.expense-card-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:10px;margin-top:4px}
-.expense-card-actions button{width:100%;min-height:46px;padding:10px;border:1px solid #dce6df;border-radius:12px;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation}
+.expense-card-actions{display:flex!important;flex-wrap:nowrap;grid-column:1/-1;gap:10px;margin-top:4px}
+.expense-card-actions button{width:auto!important;flex:1;min-width:0;min-height:46px;padding:10px;border:1px solid #dce6df;border-radius:12px;font:inherit;font-weight:700;cursor:pointer;touch-action:manipulation;white-space:nowrap}
 .expense-card-actions .expense-done{background:#e7f4ed;border-color:#cfe6d7;color:#07674d}
 .expense-app .expense-card-actions .remove-line,.expense-app .expense-card-actions .delete-action{position:static;margin:0;transform:none;background:white;color:#b34242;border-color:#eadbdb;opacity:1;visibility:visible;height:auto}
 .expense-app .line-number,.expense-app .expense-index{background:#e8f5ef;color:#0b8068}
