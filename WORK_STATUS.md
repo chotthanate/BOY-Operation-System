@@ -1,5 +1,18 @@
 # Work Status
 
+## 2026-11-09: Master/runtime bridge applied; financial cutover still OFF
+
+- ใช้ migration `20261108225652_master_runtime_identity_bridge` บน Supabase แล้ว เพิ่มสินค้า runtime ใหม่ 95 แถว (231 → 326) และ expense definitions 59 แถว (79 → 138) โดยใช้ company + code, ไม่ใช้ชื่อในการตัดสินว่าเป็นสินค้าเดียวกัน
+- มี persistent links พร้อมใช้ 369 แถว: สินค้า 309 + ค่าใช้จ่าย 60; หนึ่งค่าใช้จ่ายอ้าง definition เดิมด้วย explicit ITEM→EXP code จึงไม่สร้างซ้ำ เปลี่ยนชื่อผ่าน Master หลังเชื่อมแล้วรักษา UUID; การเปลี่ยนหน่วยฐานที่มีธุรกรรม/สูตร/กลุ่มสต็อกจะถูกปฏิเสธแทนการตีความประวัติใหม่
+- แยกรอทบทวน 10 แถว: หน่วยว่าง 3 (เครื่องปั่น/ปากกาเมจิก/เครื่องสกัด), ชื่อชนต่างรหัส 4 (มะพร้าว/แคนตาลูป/มะละกอ/ค่าขนส่ง), หน่วยต่างจาก runtime 3 (ขนมปังเบอร์เกอร์/เนื้อนกกระจอกเทศ/ITEM-0336)
+- **พบ code reuse สำคัญ:** Master `ITEM-0336` คือ “ลิ้นจี่ แช่แข็ง aro 1 กก.” หน่วยถุง แต่ runtime code นี้เป็น “ขนมปัง” หน่วยชิ้นและมีประวัติเดิม ห้ามเปิดใช้แถวนี้หรือ sync ชื่อ/หน่วยทับโดยอัตโนมัติ ต้องแยกตัวตนลิ้นจี่กับขนมปังโดยรักษาประวัติเดิมก่อน financial cutover
+- Initial bridge ไม่เปลี่ยน UUID/ชื่อ/หน่วย/ธงสต็อกของ runtime เดิม, ไม่เขียนธุรกรรม สต็อกเคลื่อนไหว ยอดคงเหลือ หรือสูตร และไม่ย้ายยอดที่มีอยู่ ไม่มีการตั้งยอดสต็อกแทนผู้ใช้
+- เพิ่ม guard แถว quarantine อีกชั้น: การแก้ชื่อหรือข้อมูล Master ของรายการที่หน่วย/ตัวตนขัดแย้งจะยังไม่เขียนทับ runtime จนกว่าจะยืนยัน mapping ทดสอบเปลี่ยนชื่อลิ้นจี่ใน transaction แล้วขนมปังเดิมไม่เปลี่ยน ผ่าน
+- SQL `tests/master-runtime-bridge.sql` ทดสอบ migration ใน BEGIN/ROLLBACK ผ่าน preservation, idempotent backfill, rename keeps UUID, historical unit guard, private function privileges และ code-reuse quarantine; Node เดิม 119 กรณีผ่าน ตรวจ advisors หลัง apply ไม่มี finding ที่อ้างถึงตาราง bridge ใหม่
+- Four finance migrations จากรอบก่อนยังไม่ apply, worker/Apps Script ยังไม่ deploy และ `financeCutover=false` เช่นเดิม การเชื่อม Master ครั้งนี้ไม่ใช่การเปิดบันทึกการเงินเส้นทางใหม่
+- ก่อนเดินต่อ: ให้เจ้าของยืนยันการแยกสินค้ารหัสที่ถูกใช้ซ้ำ; จากนั้นปรับ catalog/financial adapters ให้ใช้ links และแสดงเฉพาะแถว ready (รวม expense definitions) ตรวจข้อมูลเก่า/คิวแบบ preview ก่อนย้าย และทดสอบ mirror/อุปกรณ์จริงก่อนเปิด flags
+
+
 ## 2026-11-05: Finance cutover prepared, NOT activated
 
 - เตรียม RPC บันทึกรายวันทาวน่า/BigC Central, ร่างแยกผู้ใช้, request UUID กันส่งซ้ำ, revision กันเขียนทับ, ประวัติ revision, ยกเลิกรายจ่ายเดิมก่อนแก้, และคิวสำเนาชีตใน transaction เดียวกัน โค้ดอยู่ใน migrations ใหม่ 4 ไฟล์และ `boy-daily-store.js`
