@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-14: Frozen Aro lychee code separated from burger bread
+
+- Applied `20261113213305_separate_frozen_aro_lychee_from_bread` to Supabase. The Master Aro frozen lychee and purchase-unit mapping `IU-00288` now use `ITEM-0400`; its runtime item has its own UUID and still points to the frozen-lychee pooled stock `ITEM-179326699290620`.
+- The burger bread remains `ITEM-0336`. Verified its 927 stock movements and 12 recipes were not moved; the new Aro item has zero movements and zero recipes.
+- Updated only the Aro product row and four Aro branch-reference rows in the `BOY_Master` Google Sheet mirror; verified their new codes after write. Bread brand targets that legitimately reference `ITEM-0336` were left unchanged.
+- This resolves one of the 10 previously quarantined bridge rows; the other nine still require separate review. Finance cutover remains OFF. The previous 2026-11-09 section below records the historical pre-fix state.
+
 ## 2026-11-09: Master/runtime bridge applied; financial cutover still OFF
 
 - ใช้ migration `20261108225652_master_runtime_identity_bridge` บน Supabase แล้ว เพิ่มสินค้า runtime ใหม่ 95 แถว (231 → 326) และ expense definitions 59 แถว (79 → 138) โดยใช้ company + code, ไม่ใช้ชื่อในการตัดสินว่าเป็นสินค้าเดียวกัน
