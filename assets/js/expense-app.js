@@ -18,6 +18,18 @@
     });
     return [...groups].map(([method, rows]) => ({ method, lines: rows }));
   }
+  function groupPurchases(lines, defaultMethod = 'cash') {
+    const groups = new Map();
+    lines.forEach(line => {
+      const method=line.payment_method||defaultMethod;
+      const receiving_mode=line.receiving_mode==='delivery'?'delivery':'immediate';
+      const key=method+':'+receiving_mode;
+      if(!groups.has(key))groups.set(key,{method,receiving_mode,lines:[]});
+      groups.get(key).lines.push(line);
+    });
+    return [...groups.values()];
+  }
+  const expenseRpcName=payload=>Object.prototype.hasOwnProperty.call(payload,'receiving_mode')?'record_expense_v4':'record_expense_v3';
   function mappedSuppliers(item, branch, links, suppliers, branchRows) {
     if (!item) return [];
     const masterBranch = (branchRows || []).find(row => row['รหัสสาขา'] === branch.code);
@@ -60,5 +72,5 @@
     if (dialog.open) dialog.close();
     else { dialog.showModal(); document.querySelector("[data-expense-menu]")?.setAttribute("aria-expanded", "true"); }
   }
-  window.BOY_EXPENSE_APP = { branches, uniqueNames, onlySupplier, groupPayments, mappedSuppliers, init, toggleMenu };
+  window.BOY_EXPENSE_APP = { branches, uniqueNames, onlySupplier, groupPayments, groupPurchases, expenseRpcName, mappedSuppliers, init, toggleMenu };
 })();

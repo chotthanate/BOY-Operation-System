@@ -1,7 +1,7 @@
 -- Run inside BEGIN/ROLLBACK. No fixture, purchase or balance may remain.
 do $test$
 declare actor uuid; company uuid; branch uuid; category uuid; unit uuid; item uuid; location uuid;
- document uuid; body jsonb; payload jsonb; result jsonb; receipts integer; old_ids uuid[]; cat jsonb;
+ document uuid; body jsonb; payload jsonb; result jsonb; receipts integer; old_ids uuid[]; cat jsonb; definition jsonb;
 begin
  select user_id,company_id into actor,company from boy_central.profiles where active and company_role='admin' limit 1;
  perform set_config('request.jwt.claim.sub',actor::text,true);
@@ -40,5 +40,10 @@ begin
  if not exists(select 1 from jsonb_array_elements(cat->'items') i where i->>'expense_item_id' is not null) then raise exception 'expense definitions missing from catalog';end if;
  if exists(select 1 from jsonb_array_elements(cat->'items') i join boy_central.master_runtime_links l on l.item_id=(i->>'id')::uuid where l.status<>'ready') then raise exception 'quarantine exposed';end if;
  if has_function_privilege('anon','boy_central.record_expense_v4(jsonb)','execute') then raise exception 'anonymous expense write';end if;
+ select i into definition from jsonb_array_elements(cat->'items') i where i->>'expense_item_id' is not null and not (i->>'requires_quantity')::boolean limit 1;
+ if definition is null then raise exception 'missing expense-only fixture';end if;
+ result:=boy_central.post_daily_document(jsonb_build_object('branch_code','BIGC-CENTRAL-PATTAYA','business_date','2099-03-03','request_id',gen_random_uuid(),'expected_revision',0,
+  'data',jsonb_build_object('exp',jsonb_build_array(jsonb_build_object('i',definition->>'name','expense_item_id',definition->>'expense_item_id','master_code',definition->>'code','category_id',definition->>'category_id','p',50,'receiving_mode','immediate')))));
+ if result->>'status'<>'Success' then raise exception 'expense definition failed to save';end if;
 end $test$;
 select 'daily immediate/delivery, retries, income-only correction, catalog and permissions passed' as result;

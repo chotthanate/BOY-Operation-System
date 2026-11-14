@@ -22,6 +22,17 @@ test('payment selection stays per line while transactions are grouped by method'
   assert.deepEqual(Array.from(groups[1].lines, row => row.id), ['two', 'legacy']);
 });
 
+test('purchase groups separate immediate and delivery even with the same payment',()=>{
+ const groups=app.groupPurchases([{id:'a',payment_method:'cash',receiving_mode:'immediate'},{id:'b',payment_method:'cash',receiving_mode:'delivery'},{id:'c',payment_method:'cash'}]);
+ assert.equal(groups.length,2);assert.equal(groups[0].receiving_mode,'immediate');
+ assert.deepEqual(Array.from(groups[0].lines,x=>x.id),['a','c']);assert.equal(groups[1].receiving_mode,'delivery');
+});
+test('old queued purchases retain v3 semantics while new receiving choices use v4',()=>{
+ assert.equal(app.expenseRpcName({lines:[]}), 'record_expense_v3');
+ assert.equal(app.expenseRpcName({receiving_mode:'delivery',lines:[]}), 'record_expense_v4');
+ assert.equal(app.expenseRpcName({receiving_mode:'immediate',lines:[]}), 'record_expense_v4');
+});
+
 test('supplier mapping respects product identity, branch scope, and inactive rows', () => {
   const item = { id: 'uuid-item', code: 'ITEM-1' };
   const branch = { id: 'uuid-branch', code: 'BURGER' };

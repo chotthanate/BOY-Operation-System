@@ -3379,12 +3379,13 @@ function handleCentralMirror_(request) {
   if(!/^\d+$/.test(timestamp)||Math.abs(Date.now()-Number(timestamp))>300000) throw new Error('expired mirror request');
   // The signing key stays in Supabase Vault. This receiver verifies the exact
   // payload with a boolean-only RPC; no credentials are copied into Apps Script.
-  const verification=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/verify_central_mirror',{
+  const verification=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/rpc/verify_central_mirror',{
     method:'post',contentType:'application/json',muteHttpExceptions:true,
     headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'},
     payload:JSON.stringify({request_timestamp:timestamp,payload_json:json,signature:String(request.signature||'')})
   });
-  if(verification.getResponseCode()!==200||JSON.parse(verification.getContentText())!==true) throw new Error('invalid mirror signature');
+  if(verification.getResponseCode()!==200)throw new Error('mirror verifier unavailable (HTTP '+verification.getResponseCode()+')');
+  if(JSON.parse(verification.getContentText())!==true) throw new Error('invalid mirror signature');
   const parsed=JSON.parse(json);
   if(Array.isArray(parsed)) return {status:'success',results:parsed.map(function(payload){
     try{return Object.assign({job_id:payload.job_id},handleCentralMirrorPayload_(payload));}
@@ -3395,7 +3396,7 @@ function handleCentralMirror_(request) {
 // Run manually from the editor when Google requests the external-request scope.
 // This only reads the public cutover flag; it never changes business data.
 function verifyCentralMirrorSetup() {
-  var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/daily_finance_active',{
+  var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/rpc/daily_finance_active',{
     method:'post',contentType:'application/json',payload:'{}',muteHttpExceptions:true,
     headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'}
   });
@@ -3405,7 +3406,7 @@ function verifyCentralMirrorSetup() {
 function assertLegacyFinanceWriteAllowed_() {
   var cache=CacheService.getScriptCache(),value=cache.get('boy-central-finance-active');
   if(value===null){
-    var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/daily_finance_active',{
+    var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/rpc/daily_finance_active',{
       method:'post',contentType:'application/json',payload:'{}',muteHttpExceptions:true,
       headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'}
     });

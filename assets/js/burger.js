@@ -390,7 +390,8 @@
 
   async function sendQueuedOperation(operation) {
     if (["expense", "expense_legacy"].includes(operation.type)) {
-      return client.schema("boy_central").rpc("record_expense_v3", { payload: normalizeQueuedExpensePayload(operation.payload) });
+      const payload=normalizeQueuedExpensePayload(operation.payload);
+      return client.schema("boy_central").rpc(window.BOY_EXPENSE_APP.expenseRpcName(payload), { payload });
     }
     if (operation.type === "master") {
       const payload = normalizeQueuedMasterPayload(operation.payload);
@@ -580,13 +581,13 @@
       ].filter(Boolean);
       const conversion = Number(line.conversion_to_base || unitLink?.conversion_to_base || 1);
       const stockEffect = stockItem && unit
-        ? `รอรับ ${escapeHtml(stockItem.name)} ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")}`
+        ? `${line.receiving_mode==='delivery'?'รอรับ':'รับทันที'} ${escapeHtml(stockItem.name)} ${number.format((Number(line.quantity) || 0) * conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")}`
         : "";
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line" aria-expanded="${Boolean(line.expanded)}">
           <span class="line-number">${index + 1}</span>
           <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
-          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `รอรับ ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
+          <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `${line.receiving_mode==='delivery'?'รอรับ':'รับทันที'} ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
           <div class="expense-picker">
@@ -598,6 +599,7 @@
             <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}</select></label>
           </div>
           <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
+          ${item ? `<label class="receiving-mode-field">การรับสินค้า<select data-field="receiving_mode"><option value="immediate" ${line.receiving_mode!=='delivery'?'selected':''}>รับสินค้าทันที</option><option value="delivery" ${line.receiving_mode==='delivery'?'selected':''}>รอจัดส่ง</option></select></label>` : ''}
           ${stockItem && unit ? `<div class="conversion-field ${line.conversion_overridden ? "is-editing" : ""}"><div><span>อัตราจากข้อมูลสินค้า</span><strong>1 ${escapeHtml(unit.name)} = ${escapeHtml(conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")} ใน ${escapeHtml(stockItem.name)}</strong><small>ใช้กับรายการซื้อครั้งนี้เท่านั้น ไม่แก้ข้อมูลสินค้า</small></div><label class="conversion-toggle"><input data-field="conversion_overridden" type="checkbox" ${line.conversion_overridden ? "checked" : ""}><span>ปรับครั้งนี้</span></label>${line.conversion_overridden ? `<input data-field="conversion_to_base" aria-label="จำนวนที่เพิ่มเข้าสต็อกครั้งนี้" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}">` : ""}</div>` : ""}
           ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
@@ -783,7 +785,7 @@
     if (state.syncing || validateExpense().length) return;
     const button = $("#confirmExpenseButton");
     const date = $("#expenseDate").value;
-    const groups = window.BOY_EXPENSE_APP.groupPayments(state.lines, $("#expensePaymentMethod").value);
+    const groups = window.BOY_EXPENSE_APP.groupPurchases(state.lines, $("#expensePaymentMethod").value);
     let saved = 0, queued = 0;
     state.syncing = true;
     clearTimeout(state.draftTimer);
@@ -795,7 +797,7 @@
       for (const group of groups) {
         const payload = normalizeQueuedExpensePayload({
           branch_id: state.branch.id, transaction_date: date, source_system: branchApp.sourceSystem,
-          idempotency_key: crypto.randomUUID(), payment_method: group.method,
+          idempotency_key: crypto.randomUUID(), payment_method: group.method, receiving_mode: group.receiving_mode,
           payment: { method: group.method, amount: group.lines.reduce((sum, line) => sum + Number(line.line_total || 0), 0) },
           lines: group.lines.map(line => {
             const supplier = state.suppliers.find(row => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
@@ -810,7 +812,7 @@
         localStorage.setItem(draftKeyForDate(date), JSON.stringify(draftPayload()));
         let error = null;
         if (centralAvailable()) {
-          try { ({ error } = await client.schema('boy_central').rpc('record_expense_v3', { payload })); }
+          try { ({ error } = await client.schema('boy_central').rpc(window.BOY_EXPENSE_APP.expenseRpcName(payload), { payload })); }
           catch (transportError) { error = transportError; }
         } else error = new Error('network offline');
         if (error && !isNetworkError(error)) {

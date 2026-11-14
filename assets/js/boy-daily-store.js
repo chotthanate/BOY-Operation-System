@@ -74,7 +74,7 @@
     const data=await rpc('get_daily_document',{target_branch_code:branch,target_date:date});
     // History is an explicitly labelled archive, not a save fallback. Never
     // replace an old submitted Sheet day with an empty new central document.
-    if(!data.revision&&date<(window.BOY_CENTRAL_CONFIG.financeCutoverDate||'0000-00-00')){
+    if(!data.revision&&date<=(window.BOY_CENTRAL_CONFIG.financeCutoverDate||'0000-00-00')){
       if(typeof WEB_APP_URL==='undefined'||!WEB_APP_URL)throw new Error('ยังเปิดข้อมูลเก่าวันนี้ไม่ได้ ข้อมูลในเครื่องยังอยู่');
       const response=await fetch(WEB_APP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
         body:JSON.stringify({action:branch==='TAWANA'?'loadData':'bigcExpenseLoadData',date}),signal:AbortSignal.timeout(20000)});

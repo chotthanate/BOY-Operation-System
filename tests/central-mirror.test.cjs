@@ -27,3 +27,9 @@ test('same entity retry updates one row and stale revisions cannot undo newer da
 test('mirror splits large JSON across cells and verifies the read-back',()=>{const h=harness();h.handleCentralMirror_(h.sign({...base,data:{note:'ก'.repeat(100000)}}));assert.ok(h.rows[1].slice(6).every(cell=>cell.length<=45000));assert.equal(JSON.parse(h.rows[1].slice(6).join('')).data.note.length,100000);h.handleCentralMirror_(h.sign({...base,revision:3}));assert.equal(h.rows[1][7],'');});
 test('one rejected entity does not hide successful acknowledgements in the same batch',()=>{const h=harness();const result=h.handleCentralMirror_(h.sign([{...base,job_id:'a'},{entity_id:'invalid',job_id:'b'}]));assert.equal(result.results[0].status,'success');assert.equal(result.results[1].status,'error');});
 test('canonical stock and POS mirror do not invoke legacy stock writers',()=>{const h=harness();h.handleCentralMirror_(h.sign({...base,entity_type:'stock_movement'}));assert.equal(h.legacyWrites(),0);assert.equal(h.rows.length,2);});
+test('Apps Script uses RPC routes for the public boolean endpoints',()=>{
+ assert.ok(code.includes('/rest/v1/rpc/verify_central_mirror'));
+ assert.ok(code.includes('/rest/v1/rpc/daily_finance_active'));
+ assert.equal(code.includes('/rest/v1/verify_central_mirror'),false);
+ assert.equal(code.includes('/rest/v1/daily_finance_active'),false);
+});
