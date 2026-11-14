@@ -119,7 +119,7 @@ function doPost(e) {
         result = handleAutoSave_(payload.date, payload.data);
         break;
       case 'submit':
-        if(PropertiesService.getScriptProperties().getProperty('BOY_CENTRAL_FINANCE_ACTIVE')==='true') throw new Error('หน้านี้เป็นเวอร์ชันเก่า กรุณารีเฟรชก่อนบันทึก ข้อมูลที่กรอกในเครื่องยังอยู่');
+        assertLegacyFinanceWriteAllowed_();
         result = handleSubmit_(payload.date, payload.data);
         break;
       case 'unlockDate':
@@ -219,7 +219,7 @@ function doPost(e) {
         result = handleBigcExpenseAutoSave_(payload.date, payload.data);
         break;
       case 'bigcExpenseSubmit':
-        if(PropertiesService.getScriptProperties().getProperty('BOY_CENTRAL_FINANCE_ACTIVE')==='true') throw new Error('หน้านี้เป็นเวอร์ชันเก่า กรุณารีเฟรชก่อนบันทึก ข้อมูลที่กรอกในเครื่องยังอยู่');
+        assertLegacyFinanceWriteAllowed_();
         result = handleBigcExpenseSubmit_(payload.date, payload.data);
         break;
       case 'bigcExpenseUnlockDate':
@@ -3391,6 +3391,28 @@ function handleCentralMirror_(request) {
     catch(error){return {job_id:payload.job_id,status:'error',message:String(error.message||error)};}
   })};
   return handleCentralMirrorPayload_(parsed);
+}
+// Run manually from the editor when Google requests the external-request scope.
+// This only reads the public cutover flag; it never changes business data.
+function verifyCentralMirrorSetup() {
+  var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/daily_finance_active',{
+    method:'post',contentType:'application/json',payload:'{}',muteHttpExceptions:true,
+    headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'}
+  });
+  if(response.getResponseCode()!==200)throw new Error('Supabase connection failed: '+response.getResponseCode());
+  console.log('Supabase connection verified; finance active: '+response.getContentText());
+}
+function assertLegacyFinanceWriteAllowed_() {
+  var cache=CacheService.getScriptCache(),value=cache.get('boy-central-finance-active');
+  if(value===null){
+    var response=UrlFetchApp.fetch('https://qfyszyzonvrchgbpowvs.supabase.co/rest/v1/daily_finance_active',{
+      method:'post',contentType:'application/json',payload:'{}',muteHttpExceptions:true,
+      headers:{apikey:'sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo'}
+    });
+    if(response.getResponseCode()!==200)throw new Error('ตรวจสถานะฐานกลางไม่สำเร็จ กรุณาลองใหม่ ข้อมูลในเครื่องยังอยู่');
+    value=JSON.parse(response.getContentText())===true?'true':'false';if(value==='true')cache.put('boy-central-finance-active',value,60);
+  }
+  if(value==='true')throw new Error('หน้านี้เป็นเวอร์ชันเก่า กรุณารีเฟรชก่อนบันทึก ข้อมูลในเครื่องยังอยู่');
 }
 function handleCentralMirrorPayload_(payload) {
   const json=JSON.stringify(payload),id=String(payload.entity_id||'');

@@ -246,7 +246,7 @@
     @media(max-width:560px){.boy-home-copy{display:none}.store-shell-header{grid-template-columns:minmax(0,1fr) auto}.compact-page-header h1{font-size:1.3rem}.actions{margin-bottom:72px}.store-bottom-nav a{font-size:.58rem}}
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-2">
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261115-1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
   <script src="assets/js/expense-app.js?v=20261105-2"></script>
 </head>
@@ -422,7 +422,7 @@
       const conversionRate = Number(source.conversionRate || source.conversion || 1);
       const unitOptions = uniqueUnitOptions(source.unitOptions || [baseUnit, primaryUnit, cleanUnit]);
       const meta = {
-        itemId:source.itemId||null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
+        itemId:source.itemId||null,expenseItemId:source.expenseItemId||null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
         mainType: String(source.mainType || '').trim(),
         subType: String(source.subType || '').trim(),
         unit: baseUnit || cleanUnit,
@@ -617,6 +617,9 @@
     function refreshExpenseSummary(row) {
       if (!row) return;
       const name = row.querySelector('.item')?.value.trim() || 'ยังไม่ระบุรายการ';
+      const receivingField=row.querySelector('.receiving-mode-field');
+      const meta=getExpenseMeta(name,row.querySelector('.unit')?.value||'');
+      if(receivingField) receivingField.hidden=window.BOY_CENTRAL_CONFIG?.financeCutover!==true||!meta.itemId||!!meta.expenseItemId;
       const amount = Number(row.querySelector('.amount')?.value || 0);
       const nameNode = row.querySelector('.expense-summary-copy strong');
       const amountNode = row.querySelector('.expense-summary-amount');
@@ -646,7 +649,7 @@
       const unitListId = 'unitOptions_' + rowCounter;
       const row = document.createElement('div');
       row.className = 'expense-row expanded';
-      if (identity?.item_id) row.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,master_code:identity.master_code,category_id:identity.category_id});
+      if (identity?.item_id||identity?.expense_item_id) row.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,expense_item_id:identity.expense_item_id,master_code:identity.master_code,category_id:identity.category_id});
       row.innerHTML = `
         <button class="expense-summary" type="button" onclick="toggleExpenseRow(this)"><span class="expense-index">${rowCounter}</span><span class="expense-summary-copy"><strong>${escapeHtml(i || 'ยังไม่ระบุรายการ')}</strong><small class="expense-summary-category">${escapeHtml([mainType, subType].filter(Boolean).join(' · ') || 'ยังไม่เลือกหมวด')}</small></span><span class="expense-summary-amount">${Number(p || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></button>
         <div class="expense-detail">
@@ -658,6 +661,7 @@
           <datalist id="${unitListId}"></datalist>
           <label class="form-field amount-field"><span>ยอดรวม</span><input class="amount" type="number" inputmode="decimal" placeholder="0.00" value="${escapeHtml(p)}" oninput="refreshExpenseSummary(this.closest('.expense-row'))" onchange="doSync()" onkeydown="nav(event, 3)"></label>
           <label class="form-field payment-field"><span>ชำระด้วย</span><select class="payment" onchange="doSync()"><option value="cash"${pay === 'cash' ? ' selected' : ''}>เงินสด</option><option value="credit_card"${pay === 'credit_card' ? ' selected' : ''}>บัตรเครดิต</option><option value="reimbursement_pending"${pay === 'reimbursement_pending' ? ' selected' : ''}>รอเบิก</option></select></label>
+          <label class="form-field receiving-mode-field" hidden><span>การรับสินค้า</span><select class="receiving-mode" onchange="doSync()"><option value="immediate"${identity?.receiving_mode !== 'delivery' ? ' selected' : ''}>รับสินค้าทันที</option><option value="delivery"${identity?.receiving_mode === 'delivery' ? ' selected' : ''}>รอจัดส่ง</option></select></label>
           <label class="form-field note-field"><span>หมายเหตุ</span><input class="note" type="text" placeholder="รายละเอียดเพิ่มเติม" value="${escapeHtml(n)}" onchange="doSync()" onkeydown="nav(event, 4)"></label>
           <div class="type-hint"></div>
           <div class="expense-card-actions"><button class="remove-line" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseRow(this)">✓ เสร็จสิ้น</button></div>
@@ -701,6 +705,7 @@
         if (identity?.name !== row.querySelector('.item').value) identity = null;
         exp.push({
           item_id:identity?.item_id||getExpenseMeta(item,unit).itemId||null,master_code:identity?.master_code||getExpenseMeta(item,unit).masterCode||null,category_id:getExpenseMeta(item,unit).categoryId||identity?.category_id||null,
+          expense_item_id:identity?.expense_item_id||getExpenseMeta(item,unit).expenseItemId||null,receiving_mode:row.querySelector('.receiving-mode')?.value||'immediate',
           i: item,
           q: qty,
           u: unit,
@@ -750,7 +755,7 @@
         renderSnapshot(snapshot);
         if (res.submitted) document.getElementById('lockedOverlay').classList.remove('hidden');
         else document.getElementById('lockedOverlay').classList.add('hidden');
-        setStatus(res.submitted ? 'วันนี้มีข้อมูลที่บันทึกแล้ว' : 'พร้อมบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
+        setStatus(res.archive ? 'ข้อมูลเดิมจากชีต · อ่านอย่างเดียว' : res.submitted ? 'วันนี้มีข้อมูลที่บันทึกแล้ว' : 'พร้อมบันทึกรายจ่ายบิ๊กซีพัทยากลาง');
       } catch (e) {
         const local=safeParse(localStorage.getItem('BOY_BIGC_EXPENSE_DRAFT_'+date),null);
         if(local){renderSnapshot(local);setStatus('เปิดร่างในเครื่อง · ยังไม่ยืนยันข้อมูลออนไลน์');}
@@ -818,7 +823,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261105-3"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261115-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

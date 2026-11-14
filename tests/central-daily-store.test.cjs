@@ -23,3 +23,28 @@ test('offline loading does not call Google Sheet or claim a save',async()=>{cons
 test('catalog is cached for the same authenticated user instead of re-downloaded per edit',async()=>{const h=harness();await h.app.catalog();await h.app.catalog();await h.app.normalize({exp:[]});assert.equal(h.calls.filter(c=>c.name==='get_daily_catalog').length,1);});
 test('cloud/local draft disagreement keeps a recovery copy without overwriting cloud',async()=>{const h=harness();h.values.set('BOY_TAWANA_DRAFT_2026-11-05',JSON.stringify({exp:[{i:'local'}]}));h.responses.push(()=>({data:{revision:3,draft:'{"exp":[{"i":"cloud"}]}'}}));const x=await h.app.call('loadData',{date:'2026-11-05'});assert.equal(JSON.parse(x.draft).exp[0].i,'cloud');assert.ok([...h.values.keys()].some(k=>k.includes('recovered:')));});
 test('modified pages and scripts have valid JavaScript syntax',()=>{for(const file of ['assets/js/boy-daily-store.js','assets/js/bigc-v2.js','assets/js/dashboard.js','apps-script/Code.js'])new vm.Script(fs.readFileSync(path.join(root,file),'utf8'),{filename:file});for(const file of ['tawana.html','bigc.html'])for(const match of fs.readFileSync(path.join(root,file),'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1],{filename:file});});
+test('expense definitions retain their UUID without masquerading as stock items',async()=>{
+ const h=harness();h.catalog.items.push({id:'expense-uuid',expense_item_id:'expense-uuid',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat'});
+ const row=(await h.app.normalize({exp:[{expense_item_id:'expense-uuid',i:'ชื่อเดิม',p:500}]})).exp[0];
+ assert.equal(row.item_id,null);assert.equal(row.expense_item_id,'expense-uuid');assert.equal(row.master_code,'ITEM-EXP');
+});
+test('stable legacy item codes map to UUID and preserve delivery mode',async()=>{
+ const h=harness();const row=(await h.app.normalize({exp:[{item_id:'ITEM-1',i:'ชื่อเก่า',u:'กก.',receiving_mode:'delivery'}]})).exp[0];
+ assert.equal(row.item_id,'fruit-uuid');assert.equal(row.receiving_mode,'delivery');
+});
+test('an explicit unknown identity cannot silently fall back to its name',async()=>{
+ const h=harness();await assert.rejects(h.app.normalize({exp:[{item_id:'quarantined-id',i:'แตงโมชื่อใหม่'}]}),/ยังไม่พร้อม/);
+});
+test('a historical Sheet document is labelled read-only and keeps the local recovery copy',async()=>{
+ const h=harness();h.context.window.BOY_CENTRAL_CONFIG.financeCutoverDate='2026-11-15';
+ h.context.WEB_APP_URL='https://example.invalid/archive';h.context.AbortSignal={timeout:()=>undefined};
+ let archiveReads=0;h.context.fetch=async()=>{archiveReads++;return{json:async()=>({submitted:true,draft:JSON.stringify({exp:[{i:'old'}]})})};};
+ h.values.set('BOY_TAWANA_DRAFT_2026-11-05',JSON.stringify({exp:[{i:'local'}]}));
+ const result=await h.app.call('loadData',{date:'2026-11-05'});
+ assert.equal(result.archive,true);assert.equal(JSON.parse(result.draft).exp[0].i,'old');assert.equal(archiveReads,1);
+ assert.ok([...h.values.keys()].some(k=>k.includes('recovered:')));
+ await assert.rejects(h.app.call('autoSave',{date:'2026-11-05',data:{exp:[]}}),/อ่านอย่างเดียว/);
+ await assert.rejects(h.app.call('unlockDate',{date:'2026-11-05'}),/อ่านอย่างเดียว/);
+ await assert.rejects(h.app.call('submit',{date:'2026-11-05',data:{exp:[]}}),/ไม่บันทึกทับ/);
+ assert.equal(h.calls.filter(c=>c.name==='post_daily_document'||c.name==='save_daily_draft').length,0);
+});

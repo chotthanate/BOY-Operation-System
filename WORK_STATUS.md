@@ -1,5 +1,16 @@
 # Work Status
 
+## 2026-11-15: Daily finance backend installed; activation waiting for Google consent
+
+- Actual target forms are `tawana.html` and `bigc.html` (BigC Central), not the BigC ordering page. Added a compact immediate/delivery selector for physical items, preserving expense UUIDs and receiving mode in drafts. The selector stays hidden while `financeCutover=false`.
+- Applied seven finance migrations `20261114221157` through `20261114222435`: daily documents/revisions/idempotency, server Sheet mirror queue, reporting policies, compact POS projections, secured scheduler, receiving modes and activation guards. No old transactions were imported or rewritten. `daily_cutover_control.active=false` and frontend `financeCutover=false` remain intentional.
+- Live `central-mirror-worker` version 2 is deployed with Vault/HMAC authorization and UTF-8 bounded batches. Scheduler is gated OFF. Apps Script HEAD contains only the reviewed Code.js/manifest changes; immutable version 77 and a separate test deployment exist (`AKfycbxDvOiieWQFPLPeTOwtT7QZ5rtMK-Pj0X9XZ2BqAwWhs3uNKKF0uMWYY76UKkN_KM9lpg`). Production deployment remains version 76.
+- User explicitly approved the two-file Apps Script update and external-request scope. Signed test probe reached version 77 but returned a Google missing `script.external_request` permission error; no mirror row was written. Safari opens the owner project but the authorization popup redirects to “page not found” with multiple Google accounts. User must authorize from an owner-only browser session: select **verifyCentralMirrorSetup** and Run. This helper is read-only; do not run reset functions. HEAD includes this helper after version 77; create a fresh immutable version after consent.
+- Never activate finance or redeploy the production Apps Script until a signed mirror probe has a successful verified read-back. Then set an explicit Bangkok cutover date, switch frontend/backend together, cache-bust config, test an authenticated form save and Dashboard/Sheet agreement. Historical submitted Sheet dates must remain labelled read-only until separately reconciled; no Sheet save fallback.
+- Node suite: 123/123 passed. SQL tests `daily-receiving-modes.sql` and `central-financial-flow.sql` passed inside BEGIN/ROLLBACK, including immediate vs delivery stock, retry deduplication, income-only corrections, stale conflicts and auth. Browser fixtures for both forms at 390/1440 px passed identity, receiving mode and no horizontal overflow. Fixtures block all external requests and are not live iPhone testing.
+- Post-test production counts unchanged: transactions 3130, stock movements 1906, daily documents 0. Nine Master/runtime rows remain quarantined and are excluded from the new daily catalog; do not guess their mappings or units.
+- Burger POS partial receiving/new APK and all-other-branch receiving selectors remain follow-up work. No Burger tablet was installed or cleared in this round.
+
 ## 2026-11-14: Frozen Aro lychee code separated from burger bread
 
 - Applied `20261113213305_separate_frozen_aro_lychee_from_bread` to Supabase. The Master Aro frozen lychee and purchase-unit mapping `IU-00288` now use `ITEM-0400`; its runtime item has its own UUID and still points to the frozen-lychee pooled stock `ITEM-179326699290620`.

@@ -49,7 +49,7 @@
       const unit=units.get(item.base_unit_id)||'',name=item.name,display=unit?name+' ('+unit+')':name;
       (categories[item.main||'อื่นๆ']||=[]).push(display);
       const suppliers=(c.item_suppliers||[]).filter(x=>x.item_id===item.id).map(x=>c.suppliers.find(s=>s.id===x.supplier_id)?.name).filter(Boolean);
-      itemMeta[name]=itemMeta[display]={itemId:item.id,masterCode:item.code,categoryId:item.category_id,baseUnit:unit,mainType:item.main||'',subType:item.sub||'',useStock:item.track_stock,unitOptions:options.map(u=>u.name),unitMappings:options,supplierOptions:[...new Set(suppliers)]};
+      itemMeta[name]=itemMeta[display]={itemId:item.expense_item_id?null:item.id,expenseItemId:item.expense_item_id||null,masterCode:item.code,categoryId:item.category_id,baseUnit:unit,mainType:item.main||'',subType:item.sub||'',useStock:item.track_stock,unitOptions:options.map(u=>u.name),unitMappings:options,supplierOptions:[...new Set(suppliers)]};
     });
     return {database:{categories,itemMeta,suppliers:c.suppliers.map(x=>x.name),expenseCategories:{rows:[],mainTypes:mains,subTypesByMain:subs}}};
   }
@@ -58,23 +58,37 @@
     const exp=(data.exp||[]).map(row=>{
       // Existing UUID wins. Exact catalog lookup is only for an unsaved legacy
       // form; ambiguous names must never be auto-linked.
-      const matches=c.items.filter(i=>i.id===row.item_id||(!row.item_id&&i.name===String(row.i||'').trim()));
+      const matches=c.items.filter(i=>row.item_id?(i.id===row.item_id&&!i.expense_item_id)||i.code===row.item_id:row.expense_item_id?i.expense_item_id===row.expense_item_id:row.master_code?i.code===row.master_code:i.name===String(row.i||'').trim());
       if(matches.length>1)throw new Error('ชื่อสินค้าซ้ำ กรุณาเลือกสินค้ากลางใหม่: '+row.i);
-      const item=matches[0];const units=c.units.filter(u=>u.name===String(row.u||'').trim());
-      const category=c.categories.find(x=>!x.parent_id&&x.name===row.m);
+      const item=matches[0];
+      if(!item&&(row.item_id||row.expense_item_id||row.master_code))throw new Error('รายการยังไม่พร้อมในฐานกลาง กรุณาเลือกใหม่: '+row.i);
+      const units=c.units.filter(u=>row.unit_id?u.id===row.unit_id:u.name===String(row.u||'').trim());
+      const category=c.categories.find(x=>x.id===row.category_id)||c.categories.find(x=>x.id===item?.category_id)||c.categories.find(x=>!x.parent_id&&x.name===row.m);
       const unit=units.length===1?units[0]:null;
       if(item&&row.u&&!unit)throw new Error('หน่วยยังไม่ตรงฐานกลาง: '+row.i);
-      return {...row,item_id:item?.id||row.item_id||null,master_code:item?.code||row.master_code||null,
-        category_id:category?.id||row.category_id||item?.category_id||null,unit_id:unit?.id||null};
+      return {...row,item_id:item?.expense_item_id?null:item?.id||null,expense_item_id:item?.expense_item_id||null,master_code:item?.code||row.master_code||null,
+        category_id:category?.id||null,unit_id:unit?.id||null,receiving_mode:row.receiving_mode||'immediate'};
     });return {...data,exp};
   }
   async function load(date){
     const data=await rpc('get_daily_document',{target_branch_code:branch,target_date:date});
+    // History is an explicitly labelled archive, not a save fallback. Never
+    // replace an old submitted Sheet day with an empty new central document.
+    if(!data.revision&&date<(window.BOY_CENTRAL_CONFIG.financeCutoverDate||'0000-00-00')){
+      if(typeof WEB_APP_URL==='undefined'||!WEB_APP_URL)throw new Error('ยังเปิดข้อมูลเก่าวันนี้ไม่ได้ ข้อมูลในเครื่องยังอยู่');
+      const response=await fetch(WEB_APP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({action:branch==='TAWANA'?'loadData':'bigcExpenseLoadData',date}),signal:AbortSignal.timeout(20000)});
+      const legacy=await response.json();
+      if(legacy.status==='error')throw new Error(legacy.message||'เปิดข้อมูลเก่าไม่สำเร็จ');
+      const old=JSON.parse(legacy.draft||'{}');
+      if(legacy.submitted){data.draft=JSON.stringify(old);data.submitted=true;data.archive=true;}
+      else if(Object.keys(old).length)data.draft=JSON.stringify(old);
+    }
     const localKey=branch==='TAWANA'?'BOY_TAWANA_DRAFT_':'BOY_BIGC_EXPENSE_DRAFT_';
     const local=read(localKey+date),cloud=JSON.parse(data.draft||'{}');
     if(local&&Object.keys(local).length&&JSON.stringify(local)!==JSON.stringify(cloud)){
       write(prefix+'recovered:'+date+':'+Date.now(),local);
-      if(!Object.keys(cloud).length||confirm('มีร่างในเครื่องนี้ต่างจากฐานกลาง ต้องการใช้ร่างในเครื่องนี้ไหม?\nยกเลิก = เปิดข้อมูลฐานกลาง โดยยังเก็บสำเนาร่างเดิมไว้')){
+      if(!data.archive&&(!Object.keys(cloud).length||confirm('มีร่างในเครื่องนี้ต่างจากฐานกลาง ต้องการใช้ร่างในเครื่องนี้ไหม?\nยกเลิก = เปิดข้อมูลฐานกลาง โดยยังเก็บสำเนาร่างเดิมไว้'))){
         data.draft=JSON.stringify(local);data.submitted=false;
       }
     }
@@ -84,6 +98,7 @@
     const previous=state.drafts.get(date)||Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       const context=state.contexts.get(date)||await load(date);
+      if(context.archive)throw new Error('ข้อมูลเดิมจากชีตเป็นแบบอ่านอย่างเดียว ยังไม่ส่งทับประวัติเดิม');
       const result=await rpc('save_daily_draft',{payload:{branch_code:branch,business_date:date,data,expected_revision:context.draft_revision||0,expected_document_revision:context.revision||0}});
       context.draft_revision=result.revision;return result;
     });state.drafts.set(date,task);return task;
@@ -94,6 +109,7 @@
     let queued=read(key);
     if(queued&&queued.fingerprint!==fp)throw new Error('มีรายการก่อนหน้ารอส่งอยู่ กรุณาส่งรายการเดิมให้สำเร็จก่อนแก้ไข');
     const context=state.contexts.get(date)||await load(date);
+    if(context.archive)throw new Error('วันที่นี้มีข้อมูลเดิมจากชีต ต้องตรวจเทียบก่อนนำเข้า ไม่บันทึกทับอัตโนมัติ');
     if(!queued){queued={fingerprint:fp,payload:{request_id:crypto.randomUUID(),branch_code:branch,business_date:date,expected_revision:context.revision||0,data:normalized}};write(key,queued);}
     const result=await rpc('post_daily_document',{payload:queued.payload});
     if(result.status!=='Success')throw new Error('ฐานกลางยังไม่ยืนยันการบันทึก');
@@ -106,7 +122,11 @@
     if(['submit','bigcExpenseSubmit'].includes(action))return submit(args.date,args.data);
     if(['autoSave','bigcExpenseAutoSave'].includes(action))return saveDraft(args.date,args.data);
     if(['loadData','bigcExpenseLoadData'].includes(action))return load(args.date);
-    if(['unlockDate','bigcExpenseUnlockDate'].includes(action))return {status:'success'};
+    if(['unlockDate','bigcExpenseUnlockDate'].includes(action)){
+      const context=state.contexts.get(args.date)||await load(args.date);
+      if(context.archive)throw new Error('ข้อมูลเดิมจากชีตเป็นแบบอ่านอย่างเดียว ต้องตรวจเทียบก่อนนำเข้า');
+      return {status:'success'};
+    }
     if(action==='shared_loadDB')return legacyCatalog(await catalog(args.force===true));
     if(action==='pullItems'){const c=await catalog();const units=new Map(c.units.map(x=>[x.id,x.name]));return c.items.map(i=>({n:i.name,u:units.get(i.base_unit_id)||''}));}
     if(action==='branchHistory')return rpc('get_daily_history',{target_branch_code:branch,before_date:args.before_date||null});

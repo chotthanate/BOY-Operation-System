@@ -592,7 +592,7 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-2">
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261115-1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
   <script src="assets/js/expense-app.js?v=20261105-2"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
@@ -1615,7 +1615,7 @@
       if (!isFinite(conversionRate) || conversionRate <= 0) conversionRate = 1;
       var unitOptions = uniqueUnitOptions(source.unitOptions || [baseUnit, primaryUnit, cleanUnit]);
       var meta = {
-        itemId: source.itemId || null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
+        itemId: source.itemId || null,expenseItemId:source.expenseItemId||null,masterCode:source.masterCode||null,categoryId:source.categoryId||null,unitMappings:source.unitMappings||[],
         mainType: String(source.mainType || '').trim(),
         subType: String(source.subType || '').trim(),
         unit: baseUnit || cleanUnit,
@@ -1952,6 +1952,8 @@
       var amountValue = toUiNumber(amount && amount.value);
       var unitText = String(unit && unit.value || '').trim();
       var meta = getExpenseMeta(nameText, unitText);
+      var receivingField=wrapper.querySelector('.receiving-mode-field');
+      if(receivingField) receivingField.hidden=window.BOY_CENTRAL_CONFIG?.financeCutover!==true||!meta.itemId||!!meta.expenseItemId;
       var paymentText = payment && payment.options[payment.selectedIndex] ? payment.options[payment.selectedIndex].text : 'เงินสด';
       var category = [mainType && mainType.value, subType && subType.value, paymentText].filter(Boolean).join(' · ');
       wrapper.querySelector('.expense-summary-name').textContent = nameText || 'รายการใหม่';
@@ -1989,7 +1991,7 @@
       collapseOtherExpenseCards();
       var wrapper = document.createElement('div');
       wrapper.className = 'swipe-wrapper' + (hasExistingData ? '' : ' expanded');
-      if (identity && identity.item_id) wrapper.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,master_code:identity.master_code,category_id:identity.category_id});
+      if (identity && (identity.item_id||identity.expense_item_id)) wrapper.dataset.centralIdentity = JSON.stringify({name:i,item_id:identity.item_id,expense_item_id:identity.expense_item_id,master_code:identity.master_code,category_id:identity.category_id});
       wrapper.innerHTML = 
         '<div class="expense-summary" role="button" tabindex="0" aria-expanded="'+(!hasExistingData)+'" onclick="toggleExpenseDetails(this)" onkeydown="handleExpenseSummaryKey(event,this)">' +
           '<div class="expense-summary-main"><span class="expense-index"></span><span class="expense-summary-copy"><strong class="expense-summary-name">รายการใหม่</strong><span class="expense-summary-category">ยังไม่เลือกหมวด</span></span></div>' +
@@ -2005,6 +2007,7 @@
             '<div class="exp-field"><label>ยอดรวม</label><input type="text" inputmode="decimal" class="p" placeholder="0.00" value="'+escapeHtml(p)+'" oninput="updateExpenseCard(this.closest(\'.swipe-wrapper\'))" onchange="doSync()" onkeydown="nav(event, 3)"></div>' +
           '</div>' +
           '<div class="unit-price-line"><span>ราคาต่อหน่วย</span><span class="unit-price-value">กรอกจำนวนเพื่อคำนวณ</span></div>' +
+          '<label class="exp-field receiving-mode-field" hidden><span>การรับสินค้า</span><select class="receiving-mode" onchange="doSync()"><option value="immediate"'+(!identity||identity.receiving_mode!=='delivery'?' selected':'')+'>รับสินค้าทันที</option><option value="delivery"'+(identity&&identity.receiving_mode==='delivery'?' selected':'')+'>รอจัดส่ง</option></select></label>' +
           '<div class="expense-extra-row"><div class="exp-field"><label>ชำระด้วย</label><select class="exp-payment" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"><option value="cash"'+(paymentMethod === 'cash' ? ' selected' : '')+'>เงินสด</option><option value="credit_card"'+(paymentMethod === 'credit_card' ? ' selected' : '')+'>บัตรเครดิต</option><option value="reimbursement_pending"'+(paymentMethod === 'reimbursement_pending' ? ' selected' : '')+'>รอเบิก</option></select></div><div class="exp-field"><label>Supplier / ผู้ขาย</label><input type="text" class="exp-supplier" placeholder="เลือกหรือพิมพ์ชื่อผู้ขาย" value="'+escapeHtml(supplier)+'" list="'+supplierListId+'" autocomplete="off" onfocus="updateSupplierOptions(this.closest(\'.swipe-wrapper\'))" onchange="updateSupplierOptions(this.closest(\'.swipe-wrapper\')); doSync()"><datalist id="'+supplierListId+'"></datalist></div><div class="exp-field expense-note-field"><label>หมายเหตุ</label><textarea class="exp-note" placeholder="รายละเอียดเพิ่มเติม" onchange="doSync()">'+escapeHtml(note)+'</textarea></div></div>' +
           '<div class="expense-card-actions"><button class="delete-action" type="button" onclick="removeRow(this)">ลบรายการนี้</button><button class="expense-done" type="button" onclick="finishExpenseCard(this)">✓ เสร็จสิ้น</button></div>' +
         '</div></div>';
@@ -2075,6 +2078,7 @@
           if (identity && identity.name !== itemInput.value) identity = null;
           exp.push({
             item_id:identity?.item_id||meta.itemId||null,master_code:identity?.master_code||meta.masterCode||null,category_id:meta.categoryId||identity?.category_id||null,
+            expense_item_id:identity?.expense_item_id||meta.expenseItemId||null,receiving_mode:wrappers[w].querySelector('.receiving-mode')?.value||'immediate',
             i: itemInput.value,
             q: qtyInput.value,
             u: unitInput.value,
@@ -2139,10 +2143,12 @@
 
     function unlockScreen() { document.getElementById('successOverlay').classList.add('hidden'); unlockEditMode(); }
     async function unlockEditMode() {
-      document.getElementById('lockedOverlay').classList.add('hidden');
-      document.getElementById('btnSubmit').style.display = 'block';
-      await apiCall('unlockDate', { date: document.getElementById('mainDate').value });
-      setSaveState('saved', 'เปิดให้แก้ไขแล้ว');
+      try {
+        await apiCall('unlockDate', { date: document.getElementById('mainDate').value });
+        document.getElementById('lockedOverlay').classList.add('hidden');
+        document.getElementById('btnSubmit').style.display = 'block';
+        setSaveState('saved', 'เปิดให้แก้ไขแล้ว');
+      } catch(error) { alert(error.message); }
     }
 
     function nav(e, idx) {
@@ -2215,7 +2221,7 @@
           document.getElementById('lockedDate').value = date; 
           document.getElementById('lockedOverlay').classList.remove('hidden');
           document.getElementById('btnSubmit').style.display = 'none';
-          setSaveState('saved', 'ส่งข้อมูลแล้ว');
+          setSaveState('saved', parsed.archive ? 'ข้อมูลเดิมจากชีต · อ่านอย่างเดียว' : 'บันทึกแล้ว');
         } else {
           document.getElementById('lockedOverlay').classList.add('hidden');
           document.getElementById('btnSubmit').style.display = 'block';
@@ -2239,7 +2245,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261105-3"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261115-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>
