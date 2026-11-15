@@ -1,11 +1,13 @@
 # Work Status
 
-## 2026-11-15: Approved boolean APIs and verified mirror; final activation rollout
+## 2026-11-15 current state: Daily finance ACTIVE; mirror verified
 
 - User explicitly approved only the two anon boolean APIs. Applied `20261114231913_public_finance_boolean_endpoints`; anon still has no USAGE on boy_central, no SELECT on transactions and no EXECUTE on the Vault-key getter. The pending SQL was moved into the applied migrations directory.
 - Production and test Apps Script deployments now use immutable version 79. Backed up and compared remote HEAD before push; only the reviewed verifier error diagnostic differed. Real HMAC probe/read-back succeeded, then a 60,000-Thai-character payload split across cells succeeded and an old revision returned stale=true. The large direct pg_net-to-Google probe timed out before reaching Apps Script; the actual fetch transport used by the worker passed, so do not use pg_net direct large-body tests as worker evidence.
 - Real worker pipeline probe `048b361a-ec02-4c0a-9814-57e849002f62` was claimed once and marked synced with no error. This is a clearly labelled QA archive entity only, not a sale, expense or stock movement. No business history was imported or reset.
-- Frontend `financeCutover=true` with Bangkok date 2026-11-15 is being published, with versioned config on both legacy target forms. Backend active flag must be verified/enabled after Pages publication; update this rollout status once confirmed. Same-day pre-cutover Sheet submissions are protected as read-only archives too. Nine quarantined item mappings remain excluded until reviewed.
+- Frontend `financeCutover=true` with Bangkok date 2026-11-15 is live on GitHub Pages (commit fe73a87), with versioned config on both legacy target forms. Backend `daily_cutover_control.active=true` is confirmed. Both online forms load normally with the authenticated browser; BigC explicitly displays 370 catalog entries. Same-day pre-cutover Sheet submissions are protected as read-only archives too. Nine quarantined item mappings remain excluded until reviewed.
+- Existing business counts increased from 3130/1906 to 3131 transactions/1909 stock movements during rollout; the newest source is an ordinary BURGER POS transaction, not a QA row. Do not delete or reset it. Daily submitted document count is still 0; rollout probes did not create financial entries.
+- Authenticated live browser draft tests succeeded for Tawana 2099-12-30 and BigC Central 2099-12-29: typed QA notes appeared in daily_drafts revision 1. Cleared the notes through the forms and saved empty drafts back; these are draft-only future test dates, not financial documents. No submit/financial-post action was clicked. Automated Node suite 126/126 and 390/1440px fixtures passed; the full transactional SQL flow suite passed in earlier rollback runs, while a redundant rerun in this rollout expired at the connector confirmation rather than executing.
 
 ## 2026-11-15 follow-up: Google consent completed; boolean API authorization still pending
 
