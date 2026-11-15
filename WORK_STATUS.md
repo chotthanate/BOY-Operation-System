@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-15: Approved boolean APIs and verified mirror; final activation rollout
+
+- User explicitly approved only the two anon boolean APIs. Applied `20261114231913_public_finance_boolean_endpoints`; anon still has no USAGE on boy_central, no SELECT on transactions and no EXECUTE on the Vault-key getter. The pending SQL was moved into the applied migrations directory.
+- Production and test Apps Script deployments now use immutable version 79. Backed up and compared remote HEAD before push; only the reviewed verifier error diagnostic differed. Real HMAC probe/read-back succeeded, then a 60,000-Thai-character payload split across cells succeeded and an old revision returned stale=true. The large direct pg_net-to-Google probe timed out before reaching Apps Script; the actual fetch transport used by the worker passed, so do not use pg_net direct large-body tests as worker evidence.
+- Real worker pipeline probe `048b361a-ec02-4c0a-9814-57e849002f62` was claimed once and marked synced with no error. This is a clearly labelled QA archive entity only, not a sale, expense or stock movement. No business history was imported or reset.
+- Frontend `financeCutover=true` with Bangkok date 2026-11-15 is being published, with versioned config on both legacy target forms. Backend active flag must be verified/enabled after Pages publication; update this rollout status once confirmed. Same-day pre-cutover Sheet submissions are protected as read-only archives too. Nine quarantined item mappings remain excluded until reviewed.
+
 ## 2026-11-15 follow-up: Google consent completed; boolean API authorization still pending
 
 - User completed Google consent. Apps Script test deployment is now version 78; production remains 76. End-to-end testing found/fixed missing `/rpc/` in verifier/status URLs. The next test exposed the remaining cause: the public invoker wrappers cannot access `boy_central` as anon (HTTP 401), not a bad HMAC. No business data or archive probe was written.
