@@ -848,7 +848,7 @@
 
   function renderPendingReceipts() {
     const list = $("#pendingReceiptList");
-    $("#pendingReceiptCount").textContent = `${state.pendingReceipts.length} รายการ`;
+    $("#pendingReceiptCount").textContent = `${state.pendingReceipts.filter(row => row.status !== 'received').length} รายการรอรับ`;
     if (!state.pendingReceipts.length) {
       list.innerHTML = '<div class="empty-state">ไม่มีสินค้ารอรับ</div>';
       return;
@@ -857,11 +857,19 @@
       const lines = Array.isArray(receipt.lines) ? receipt.lines : [];
       const date = new Date(receipt.created_at || receipt.transaction_date);
       const dateLabel = Number.isNaN(date.getTime()) ? receipt.transaction_date : date.toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
-      return `<article class="pending-receipt-card" data-receipt-id="${escapeHtml(receipt.receipt_id)}">
-        <div class="pending-receipt-head"><span><strong>${escapeHtml(receipt.transaction_no || "รายการซื้อ")}</strong><small>${escapeHtml(dateLabel)} · ${lines.length} รายการ</small></span><span class="pending-receipt-total">${money.format(Number(receipt.total_amount || 0))}</span></div>
-        <div class="pending-receipt-lines">${lines.map((line) => `<div class="pending-receipt-line"><span>${escapeHtml(line.item_name || "สินค้า")}</span><b>${number.format(Number(line.quantity || 0))} ${escapeHtml(line.unit || "")}</b></div>`).join("")}</div>
-        <button class="receive-button" type="button" data-receive-receipt="${escapeHtml(receipt.receipt_id)}">รับสินค้าเข้าสต็อก</button>
-      </article>`;
+      const draft = readReceiptDraft(receipt.receipt_id);
+      const locked = Boolean(draft.request || draft.invalid);
+      const completed = receipt.status === 'received';
+      return `<details class="pending-receipt-card" data-receipt-id="${escapeHtml(receipt.receipt_id)}" ${!completed || draft.request ? 'open' : ''}>
+        <summary class="pending-receipt-head"><span><strong>${escapeHtml(receipt.transaction_no || "รายการซื้อ")}</strong><small>${escapeHtml(dateLabel)} · ${escapeHtml(receipt.supplier_name || '')} · ${completed ? 'รับครบแล้ว' : 'รอรับ'}</small></span><span class="pending-receipt-total">${money.format(Number(receipt.total_amount || 0))}</span></summary>
+        <div class="pending-receipt-lines">${lines.map((line) => {
+          const remaining = Math.max(0, Number(line.quantity) - Number(line.quantity_received || 0));
+          const edit = draft.lines?.[line.line_id] || {};
+          return `<div class="pending-receipt-line" data-receipt-line="${escapeHtml(line.line_id)}"><label><input type="checkbox" data-receipt-check ${edit.checked ? 'checked' : ''} ${locked || !remaining ? 'disabled' : ''}><span>${escapeHtml(line.item_name || 'สินค้า')}<small>สั่ง ${number.format(line.quantity)} · รับแล้ว ${number.format(line.quantity_received || 0)} ${escapeHtml(line.unit || '')}</small></span></label>${remaining ? `<div class="receipt-quantity"><button type="button" data-receipt-step="-1" ${locked ? 'disabled' : ''} aria-label="ลดจำนวน">−</button><input aria-label="จำนวนรับ ${escapeHtml(line.item_name)}" data-receipt-quantity type="number" min="0" max="${remaining}" step="any" inputmode="decimal" value="${escapeHtml(edit.quantity ?? remaining)}" ${locked ? 'disabled' : ''}><button type="button" data-receipt-step="1" ${locked ? 'disabled' : ''} aria-label="เพิ่มจำนวน">+</button><small>${escapeHtml(line.unit || '')} · รอ ${number.format(remaining)}</small></div>` : '<b>รับครบ</b>'}</div>`;
+        }).join('')}</div>
+        ${draft.invalid ? '<p role="alert">อ่านร่างค้างไม่ได้ กรุณาติดต่อผู้ดูแล ห้ามล้างข้อมูล</p>' : !completed || draft.request ? `<button class="receive-button" type="button" data-receive-receipt="${escapeHtml(receipt.receipt_id)}">${draft.request ? 'ตรวจผล/ส่งคำขอเดิม' : 'บันทึกรับที่เลือก'}</button>` : ''}
+        ${(receipt.checks || []).length ? `<details><summary>ประวัติการรับ (${receipt.checks.length})</summary>${receipt.checks.map(check => `<p>${escapeHtml(new Date(check.created_at).toLocaleString('th-TH'))} · ${(check.lines || []).map(line => `${escapeHtml(line.item_name || '')} ${number.format(line.quantity)} ${escapeHtml(line.unit || '')}`).join(', ')}</p>`).join('')}</details>` : ''}
+      </details>`;
     }).join("");
   }
 
@@ -894,16 +902,59 @@
     }
   }
 
+  const receiptDraftKey = id => `boy.receipt-check.v1:${branchApp.branchCode}:${id}`;
+  function readReceiptDraft(id) {
+    try {
+      const draft = JSON.parse(localStorage.getItem(receiptDraftKey(id)) || '{"lines":{}}');
+      if (!draft || typeof draft !== 'object' || Array.isArray(draft)) throw new Error('invalid draft');
+      return draft;
+    }
+    catch { return { invalid: true }; }
+  }
+  function updateReceiptDraft(event) {
+    const card = event.target.closest('[data-receipt-id]');
+    const row = event.target.closest('[data-receipt-line]');
+    if (!card || !row) return;
+    const draft = readReceiptDraft(card.dataset.receiptId);
+    if (draft.invalid || draft.request) return;
+    const input = row.querySelector('[data-receipt-quantity]');
+    const check = row.querySelector('[data-receipt-check]');
+    if (event.target.closest('[data-receipt-step]') && input) {
+      input.value = Math.max(0, Math.min(Number(input.max), Number(input.value || 0) + Number(event.target.closest('[data-receipt-step]').dataset.receiptStep)));
+      check.checked = true;
+    }
+    draft.lines ||= {};
+    draft.lines[row.dataset.receiptLine] = { checked: check.checked, quantity: input?.value || '0' };
+    try { localStorage.setItem(receiptDraftKey(card.dataset.receiptId), JSON.stringify(draft)); }
+    catch { toast('เก็บร่างในเครื่องไม่สำเร็จ กรุณาตรวจพื้นที่ว่างก่อนรับสินค้า'); }
+  }
   async function receivePendingReceipt(receiptId, button) {
-    if (!confirm("ยืนยันว่ารับสินค้าครบแล้วและเพิ่มเข้าสต็อกใช่ไหม")) return;
-    button.disabled = true;
-    button.textContent = "กำลังรับสินค้า…";
-    const { data, error } = await client.schema("boy_central").rpc("receive_purchase_receipt", { receipt_id: receiptId });
-    if (error) { button.disabled = false; button.textContent = "รับสินค้าเข้าสต็อก"; toast(`รับสินค้าไม่สำเร็จ: ${error.message}`); return; }
-    state.pendingReceipts = state.pendingReceipts.filter((receipt) => receipt.receipt_id !== receiptId);
-    renderPendingReceipts();
-    await loadStock();
-    toast(data?.status === "duplicate" ? "รายการนี้ถูกรับจากอีกเครื่องแล้ว" : `รับสินค้าเข้าสต็อก ${data?.line_count || 0} รายการแล้ว`);
+    if (navigator.onLine === false) { toast('ต้องเชื่อมต่ออินเทอร์เน็ตเพื่อยืนยันรับสินค้า'); return; }
+    const receipt = state.pendingReceipts.find(row => row.receipt_id === receiptId);
+    const draft = readReceiptDraft(receiptId);
+    if (!receipt || draft.invalid) return;
+    try {
+      if (!draft.request) {
+        const lines = (receipt.lines || []).filter(line => draft.lines?.[line.line_id]?.checked).map(line => ({line_id:line.line_id,quantity:Number(draft.lines[line.line_id].quantity),expected_received:Number(line.quantity_received || 0)}));
+        if (!lines.length || lines.some(line => !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > Number(receipt.lines.find(row => row.line_id === line.line_id).quantity) - line.expected_received)) throw new Error('เลือกรายการและใส่จำนวนไม่เกินยอดรอรับ');
+        if (!confirm(`ยืนยันรับ ${lines.length} รายการตามจำนวนที่กรอก?`)) return;
+        draft.request = {request_id:crypto.randomUUID(),receipt_id:receiptId,lines};
+        localStorage.setItem(receiptDraftKey(receiptId), JSON.stringify(draft));
+      }
+      button.disabled = true; button.textContent = 'กำลังบันทึก…';
+      const {data,error} = await client.schema('boy_central').rpc('receive_purchase_receipt_lines',{payload:draft.request}).abortSignal(AbortSignal.timeout(15000));
+      if (error) {
+        if (['P0001','22P02','22023'].includes(error.code)) { delete draft.request; localStorage.setItem(receiptDraftKey(receiptId),JSON.stringify(draft)); }
+        throw error;
+      }
+      if (!['partial','received','duplicate'].includes(data?.status)) throw new Error('ยังไม่ได้รับคำยืนยันจากฐานกลาง');
+      localStorage.removeItem(receiptDraftKey(receiptId));
+      toast(data.status === 'partial' ? 'รับบางส่วนแล้ว ยอดที่เหลือยังรอรับ' : data.status === 'duplicate' ? 'ยืนยันผลเดิมแล้ว ไม่เพิ่มสต็อกซ้ำ' : 'บันทึกรับสินค้าครบแล้ว');
+      await loadPendingReceipts(); await loadStock();
+    } catch (error) {
+      toast(`รับสินค้าไม่สำเร็จ: ${error.message} หากส่งแล้วให้ตรวจผลด้วยคำขอเดิม`);
+      renderPendingReceipts();
+    }
   }
 
   async function loadExpenseHistory() {
@@ -1758,9 +1809,12 @@
   $("#refreshStockButton").addEventListener("click", loadStock);
   $("#refreshReceiptsButton").addEventListener("click", () => loadPendingReceipts());
   $("#pendingReceiptList").addEventListener("click", (event) => {
+    if (event.target.closest('[data-receipt-step]')) updateReceiptDraft(event);
     const button = event.target.closest("[data-receive-receipt]");
     if (button) receivePendingReceipt(button.dataset.receiveReceipt, button);
   });
+  $("#pendingReceiptList").addEventListener('input', updateReceiptDraft);
+  $("#pendingReceiptList").addEventListener('change', updateReceiptDraft);
   $("#manageRecipesButton").addEventListener("click", openRecipeManager);
   $("#addStockGroupButton").addEventListener("click", () => openStockGroup());
   $("#manageStockTrackingButton").addEventListener("click", openStockTracking);

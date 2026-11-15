@@ -1,5 +1,14 @@
 # Work Status
 
+## 2026-11-15: Shared partial receiving + GRILL admin opening balances
+
+- Applied `20261115082922_shared_receiving_and_grill_admin_stock`. GRILL/Burger device RPC signatures remain unchanged and delegate to a single private line-receiving core. New authenticated web RPC uses branch access, receipt/stock locks, expected_received, request deduplication and proportional rounding. Existing GRILL/Burger audit action names remain intact, so both POS histories include web receipts.
+- Shared `burger.js` receiving UI now has per-bill collapsible cards, checkboxes, actual quantities, partial/final status, recent history and durable exact-request retries after uncertainty. Only the confirmed bill draft is cleared; other bills remain untouched. Automatic reads retain the existing 5-minute/backoff budget and manual refresh.
+- GRILL admin stock API requires a live active company-admin identity plus GRILL device token; anon/ordinary device-only STOCK_ADJUST is denied. Records actor/reason/before-after, rejects stale quantities and deduplicates retries. Current single-location setup is supported; multiple locations are explicitly rejected instead of guessing.
+- Backend rollback tests passed admin/staff/device authorization, conflicts, deduplication, negative quantities, web→POS partial completion, value rounding, history, legacy receiver guards, GRILL/Burger regressions. Browser fixtures passed 390px receiving and admin stock, response loss/reload retries and staff-hidden controls; no business QA rows remain.
+- GRILL source 1.34/code35 is in the separate grill-pos repo; APK built. Tablet not visible in ADB on 2026-11-15, so **not installed or verified on the actual tablet yet**. User was asked to reconnect/unlock. Install with replacement only; never uninstall/clear data. Owner email/password or email verification is required for manual adjustments; local six-digit screen PIN is not online authorization.
+- Burger 1.9/code10 remains prepared from the previous round and still awaits its tablet. No historical business data/queues were imported, cleared or reset. Daily finance remains ACTIVE as recorded below.
+
 ## 2026-11-15 current state: Daily finance ACTIVE; mirror verified
 
 - User explicitly approved only the two anon boolean APIs. Applied `20261114231913_public_finance_boolean_endpoints`; anon still has no USAGE on boy_central, no SELECT on transactions and no EXECUTE on the Vault-key getter. The pending SQL was moved into the applied migrations directory.
