@@ -60,11 +60,19 @@ test('readonly fields are not offered for bulk edits', () => {
   assert.deepEqual(Array.from(scope.bulkFields(), entry => entry[0]), ['เปิดใช้งาน']);
 });
 
-test('category scopes can be edited in bulk without stock-specific controls', () => {
+test('retired category usage flags are not offered for bulk edits', () => {
   const { scope } = context({
     current: 'categories',
-    catalog: { idHeader: 'subcategory_id', headers: ['subcategory_id', 'ใช้กับรายจ่าย', 'ใช้กับการเบิก', 'เปิดใช้งาน'], readonlyHeaders: [] },
-    isBoolHeader: key => ['ใช้กับรายจ่าย', 'ใช้กับการเบิก', 'เปิดใช้งาน'].includes(key)
+    catalog: { idHeader: 'subcategory_id', headers: ['subcategory_id', 'ใช้กับรายจ่าย', 'ใช้กับการเบิก', 'ใช้กับสต็อก', 'เปิดใช้งาน'], readonlyHeaders: [] },
+    isBoolHeader: key => ['ใช้กับรายจ่าย', 'ใช้กับการเบิก', 'ใช้กับสต็อก', 'เปิดใช้งาน'].includes(key)
   });
-  assert.deepEqual(Array.from(scope.bulkFields(), entry => entry[0]), ['เปิดใช้งาน', 'ใช้กับรายจ่าย', 'ใช้กับการเบิก']);
+  assert.deepEqual(Array.from(scope.bulkFields(), entry => entry[0]), ['เปิดใช้งาน']);
+});
+
+test('new subcategories receive an automatic SUB code before save', () => {
+  assert.match(source, /if\(!editing\)\{\s*const nums=.*row\.subcategory_id[\s\S]*values\.subcategory_id='SUB-'/);
+});
+
+test('retired category usage flags are hidden from the editor', () => {
+  assert.match(source, /current==='categories'.*\['ใช้กับรายจ่าย','ใช้กับการเบิก','ใช้กับสต็อก'\]\.includes\(h\)/);
 });
