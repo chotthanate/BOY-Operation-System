@@ -89,6 +89,13 @@ test('employee editor hides the internal id and prefills an editable login code'
   assert.match(source, /isEmployee&&h==='รหัสพนักงาน'\?generatedEmployeeCode:''/);
 });
 
+test('item category choices follow selected store scopes while retaining an existing category', () => {
+  assert.match(source, /const scopes=\[\.\.\.\$\('#form'\)\.querySelectorAll\('\[name="_store_scope"\]:checked'\)\]/);
+  assert.match(source, /!types\.length\|\|types\.some\(type=>scopes\.includes\(type\)\)/);
+  assert.match(source, /String\(row\.subcategory_id\)===String\(wanted\)&&Boolean\(editing\)/);
+  assert.match(source, /input\.onchange=\(\)=>syncCategorySelects\(sub\.value\)/);
+});
+
 test('retired category usage flags are hidden from the editor', () => {
   assert.match(source, /current==='categories'.*\['ใช้กับรายจ่าย','ใช้กับการเบิก','ใช้กับสต็อก'\]\.includes\(h\)/);
 });
