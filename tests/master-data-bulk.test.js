@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'master-data.html'), 'utf8');
-const functions = ['bulkFields', 'bulkStockLocked', 'bulkStoreChanged']
+const functions = ['bulkFields', 'bulkStockLocked', 'bulkStoreChanged', 'nextSequentialMasterCode']
   .map(name => {
     const line = source.split('\n').find(value => value.trimStart().startsWith(`function ${name}(`));
     assert.ok(line, `missing ${name}`);
@@ -70,7 +70,16 @@ test('retired category usage flags are not offered for bulk edits', () => {
 });
 
 test('new subcategories receive an automatic SUB code before save', () => {
-  assert.match(source, /if\(!editing\)\{\s*const nums=.*row\.subcategory_id[\s\S]*values\.subcategory_id='SUB-'/);
+  assert.match(source, /if\(!editing\)values\.subcategory_id=nextSequentialMasterCode\('SUB','subcategory_id',4\)/);
+});
+
+test('new employees receive the next internal employee id without reusing the staff code', () => {
+  const { scope } = context({
+    current: 'employees',
+    catalog: { idHeader: 'employee_id', rows: [{ employee_id: 'EMP-009' }, { employee_id: 'EMP-013' }] }
+  });
+  assert.equal(scope.nextSequentialMasterCode('EMP', 'employee_id', 3), 'EMP-014');
+  assert.match(source, /current==='employees'&&!editing\) values\.employee_id=nextSequentialMasterCode\('EMP','employee_id',3\)/);
 });
 
 test('retired category usage flags are hidden from the editor', () => {

@@ -287,6 +287,7 @@
     function formatValue(v,type){if(!v)return'';if(type==='date'){const text=String(v).trim();const thai=text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(thai){const year=Number(thai[3])>2400?Number(thai[3])-543:Number(thai[3]);return `${year}-${thai[2].padStart(2,'0')}-${thai[1].padStart(2,'0')}`}const d=new Date(v);return isNaN(d)?text.slice(0,10):d.toISOString().slice(0,10)}if(type==='time'){const text=String(v);const match=text.match(/(?:T|\s)(\d{2}:\d{2})/);return match?match[1]:text.slice(0,5)}return v}
     function closeEditor(){$('#editor').classList.add('hidden');editing=null;$('#relationsContent').innerHTML=''}
     function newMasterCode(prefix){return `${prefix}-${Date.now()}${String(Math.floor(Math.random()*100)).padStart(2,'0')}`}
+    function nextSequentialMasterCode(prefix,idHeader,width){const nums=(catalog.rows||[]).map(row=>Number(String(row[idHeader]||'').match(/(\d+)$/)?.[1]||-1));return `${prefix}-${String(Math.max(-1,...nums)+1).padStart(width,'0')}`}
     async function saveItemPurchaseSettings(itemId,baseUnitId,purchaseUnitId,conversion){
       let unitCatalog=referenceCache.itemUnits||await loadEntityCatalog('itemUnits');
       const links=(unitCatalog.rows||[]).filter(link=>String(link.item_id)===String(itemId));
@@ -313,6 +314,7 @@
       const values={};
       new FormData(e.target).forEach((value,key)=>{if(key!=='_store_scope')values[key]=value});
       if(current==='items'&&!editing) values.item_id=newMasterCode('ITEM');
+      if(current==='employees'&&!editing) values.employee_id=nextSequentialMasterCode('EMP','employee_id',3);
       catalog.headers.filter(header=>header&&!((catalog.readonlyHeaders||[]).includes(header))&&isBoolHeader(header)).forEach(header=>{
         const input=e.target.elements[header];
         if(input)values[header]=Boolean(input.checked);
@@ -354,13 +356,9 @@
       }
       if(current==='employees')values['เปิดใช้งาน']=!['พักงาน','ลาออก'].includes(values['สถานะการจ้าง']);
       if(current==='categories'){
-        if(!editing){
-          const nums=(catalog.rows||[]).map(row=>Number(String(row.subcategory_id||'').match(/(\d+)$/)?.[1]||0));
-          values.subcategory_id='SUB-'+String(Math.max(0,...nums)+1).padStart(4,'0');
-        }
+        if(!editing)values.subcategory_id=nextSequentialMasterCode('SUB','subcategory_id',4);
         if(values.category_id==='__new__'){
-          const nums=(catalog.rows||[]).map(row=>Number(String(row.category_id||'').match(/(\d+)$/)?.[1]||0));
-          values.category_id='CAT-'+String(Math.max(0,...nums)+1).padStart(3,'0');
+          values.category_id=nextSequentialMasterCode('CAT','category_id',3);
           if(!String(values['ชื่อประเภทหลัก']||'').trim()){alert('กรุณากรอกชื่อประเภทหลักใหม่');return}
         }else{
           const main=(catalog.rows||[]).find(row=>String(row.category_id)===String(values.category_id));
