@@ -82,6 +82,13 @@ test('new employees receive the next internal employee id without reusing the st
   assert.match(source, /current==='employees'&&!editing\) values\.employee_id=nextSequentialMasterCode\('EMP','employee_id',3\)/);
 });
 
+test('employee editor hides the internal id and prefills an editable login code', () => {
+  assert.match(source, /current==='employees'&&\['employee_id','เปิดใช้งาน'\]\.includes\(h\)/);
+  assert.match(source, /'รหัสพนักงาน':'รหัสเข้าระบบของพนักงาน'/);
+  assert.match(source, /generatedEmployeeCode=isEmployee&&!row\?nextSequentialMasterCode\('EMP','employee_id',3\)\.replace\(\/\^EMP-\/,''\):''/);
+  assert.match(source, /isEmployee&&h==='รหัสพนักงาน'\?generatedEmployeeCode:''/);
+});
+
 test('retired category usage flags are hidden from the editor', () => {
   assert.match(source, /current==='categories'.*\['ใช้กับรายจ่าย','ใช้กับการเบิก','ใช้กับสต็อก'\]\.includes\(h\)/);
 });
