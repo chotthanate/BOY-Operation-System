@@ -283,6 +283,7 @@
     async function loadEmployeeHistory(employeeId){const box=$('#employeeHistory');box.innerHTML='<div class="empty">กำลังโหลดประวัติ…</div>';try{const data=await api('employeeHistory',{employeeId});const s=data.summary||{};box.innerHTML=`<div class="history-summary"><div class="history-count"><strong>${s.leaves||0}</strong><span>การลา</span></div><div class="history-count"><strong>${s.payroll||0}</strong><span>เงินเดือน</span></div><div class="history-count"><strong>${s.transactions||0}</strong><span>รายการเกี่ยวข้อง</span></div></div><div class="history-section"><h3>ประวัติการลา</h3>${historyRows(data.leaves||[],r=>`<div class="history-row"><strong>${esc(r.type||'การลา')} · ${esc(r.startDate||'-')}${r.endDate&&r.endDate!==r.startDate?' ถึง '+esc(r.endDate):''}</strong><small>${r.days?'ลา '+r.days+' วัน':''}${r.hours?' · '+r.hours+' ชั่วโมง':''}${r.status?' · '+esc(r.status):''}${r.note?' · '+esc(r.note):''}</small></div>`)}</div><div class="history-section"><h3>ประวัติเงินเดือน</h3>${historyRows(data.payroll||[],r=>`<div class="history-row"><strong>${esc(r.period||'-')} · ${money(r.netPay)} บาท</strong><small>${r.workedDays?'ทำงาน '+r.workedDays+' วัน':''}${r.workedHours?' · '+r.workedHours+' ชั่วโมง':''}${r.status?' · '+esc(r.status):''}${r.paidDate?' · จ่าย '+esc(r.paidDate):''}</small></div>`)}</div><div class="history-section"><h3>รายการที่เกี่ยวข้อง</h3>${historyRows(data.transactions||[],r=>`<div class="history-row"><strong>${esc(r.type||r.mode||'รายการ')} · ${money(r.amount)} บาท</strong><small>${esc(r.date||'-')}${r.status?' · '+esc(r.status):''}${r.note?' · '+esc(r.note):''}</small></div>`)}</div>`}catch(err){box.innerHTML='<div class="empty">โหลดประวัติไม่สำเร็จ<br>'+esc(err.message)+'</div>'}}
     function money(value){return Number(value||0).toLocaleString('th-TH',{maximumFractionDigits:2})}
     function syncCategorySelects(selectedSubcategory=''){
+      if(!['items','expenseItems'].includes(current))return;
       const main=$('#form [name="category_id"]'),sub=$('#form [name="subcategory_id"]'),ref=referenceCache.categories;
       if(!main||!sub||!ref)return;
       const wanted=selectedSubcategory||sub.value,mainId=main.value;
@@ -308,14 +309,13 @@
       const links=(unitCatalog.rows||[]).filter(link=>String(link.item_id)===String(itemId));
       const desiredPurchaseId=purchaseUnitId||baseUnitId;
       const byUnit=new Map(links.map(link=>[String(link.unit_id),link]));
-      const saveLink=async(unitId,base,purchase,rate)=>{
+      const changes=[];
+      const saveLink=(unitId,base,purchase,rate)=>{
         const existing=byUnit.get(String(unitId));
         const values=existing?Object.fromEntries(Object.entries(existing).filter(([key])=>!key.startsWith('__'))):{item_unit_id:newMasterCode('IU'),item_id:itemId,unit_id:unitId,'ใช้หน่วยนี้ตอนเบิก':base,'เปิดใช้งาน':true};
         Object.assign(values,{'อัตราแปลงเป็นหน่วยฐาน':rate,'เป็นหน่วยฐาน':base,'ใช้หน่วยนี้ตอนซื้อ':purchase,'เปิดใช้งาน':base||purchase?true:values['เปิดใช้งาน']});
-        const legacySave=()=>api('sheetBulkSave',{sheetName:'M_หน่วยสินค้า',rows:[values],actor:actor()});
-        if(!window.BOY_MASTER_STORE?.save)throw new Error('ระบบ Supabase ไม่พร้อม จึงยังไม่บันทึกหน่วยซื้อ');
-        unitCatalog=await window.BOY_MASTER_STORE.save('M_หน่วยสินค้า',existing?.__rowNumber||null,values,actor().name,legacySave,unitCatalog);
-        referenceCache.itemUnits=unitCatalog;
+        if(existing?.__version)values.__version=existing.__version;
+        changes.push(values);
       };
       for(const link of links){
         const unitId=String(link.unit_id),shouldBeBase=unitId===baseUnitId,shouldPurchase=unitId===desiredPurchaseId;
@@ -323,6 +323,11 @@
       }
       if(!byUnit.has(baseUnitId))await saveLink(baseUnitId,true,desiredPurchaseId===baseUnitId,1);
       if(desiredPurchaseId!==baseUnitId&&!byUnit.has(desiredPurchaseId))await saveLink(desiredPurchaseId,false,true,conversion);
+      if(!changes.length)return;
+      if(!window.BOY_MASTER_STORE?.bulkSave)throw new Error('ระบบ Supabase ไม่พร้อม จึงยังไม่บันทึกหน่วยซื้อ');
+      const legacySave=()=>api('sheetBulkSave',{sheetName:'M_หน่วยสินค้า',rows:changes.map(({__version,...values})=>values),actor:actor()});
+      unitCatalog=await window.BOY_MASTER_STORE.bulkSave('M_หน่วยสินค้า',changes,actor().name,legacySave,unitCatalog);
+      referenceCache.itemUnits=unitCatalog;
     }
     async function save(e){
       e.preventDefault();
@@ -444,7 +449,7 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261102-4"></script>
-  <script src="assets/js/boy-master-store.js?v=20261024-1"></script>
+  <script src="assets/js/boy-master-store.js?v=20261117-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261102-4"></script>
   <script>

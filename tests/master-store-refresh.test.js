@@ -4,6 +4,24 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'boy-master-store.js'), 'utf8');
+const vm = require('node:vm');
+
+test('save result replaces only its source catalog without another database read', () => {
+  const start=source.indexOf('  function catalogFromSave('),end=source.indexOf('  async function save(',start);
+  const helpers=source.slice(source.indexOf('  function isExpenseRow('),source.indexOf('  function findCurrentRow('));
+  const scope={ITEM_SHEET:'M_สินค้า',EXPENSE_SHEET:'M_รายการค่าใช้จ่าย'};
+  vm.createContext(scope);vm.runInContext(helpers+source.slice(start,end),scope);
+  const items={sheetName:'M_สินค้า',rows:[{item_id:'ITEM-1'}]},expenses={sheetName:'M_รายการค่าใช้จ่าย',rows:[{expense_item_id:'EXP-1',__rowNumber:2}]};
+  const combined=scope.combineItemCatalog(items,expenses);
+  const result=scope.catalogFromSave('M_สินค้า','M_สินค้า',{...items,rows:[{item_id:'ITEM-2'}]},combined);
+  assert.equal(result.rows.length,2);assert.equal(result.rows[0].item_id,'ITEM-2');assert.equal(result.rows[1].expense_item_id,'EXP-1');
+  const expenseResult=scope.catalogFromSave('M_สินค้า','M_รายการค่าใช้จ่าย',{...expenses,rows:[{expense_item_id:'EXP-2',__rowNumber:3}]},result);
+  assert.equal(expenseResult.rows[0].item_id,'ITEM-2');assert.equal(expenseResult.rows[1].expense_item_id,'EXP-2');
+  for(const name of ['save','bulkSave']){
+    const body=source.slice(source.indexOf(`  async function ${name}(`),source.indexOf('\n  async function ',source.indexOf(`  async function ${name}(`)+1));
+    assert.doesNotMatch(body,/await fromSupabase/);
+  }
+});
 
 test('the unified item view reads both Supabase catalogs, never Sheet fallback', () => {
   assert.match(source, /combineItemCatalog\(\.\.\.await Promise\.all\(\[getCatalog\(ITEM_SHEET\), getCatalog\(EXPENSE_SHEET\)\]\)\)/);

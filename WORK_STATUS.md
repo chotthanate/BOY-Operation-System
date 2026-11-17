@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-17: Master save performance and category editor
+
+- Master single/bulk saves now reuse the catalog returned by `bulk_upsert_master_catalog_rows`; no additional `get_master_catalog` roundtrip after a successful write. Unified item/expense catalogs retain the unchanged half and its identity. Unit edits are batched once, with per-row version checks; item and unit writes are still separate transactions.
+- Item store/category filtering must not run in the category editor: it has no `_store_scope` inputs. Guard added to prevent empty main-category options and preserve the create-main option.
+- Pending: asynchronous **master catalog** Sheet mirroring is NOT enabled. Read-only production inspection found 323 `master_catalog_changes` rows labelled pending; this alone does not prove Sheet copies are absent because existing browser mirror calls do not acknowledge this table. `claim_mirror_jobs` handles finance/POS/BigC entities, not master catalog changes. Reconcile before replaying old changes; do not blindly resend or delete them. Current synchronous mirror remains in place, so no false async-success claim.
+- Pending: combine item + unit writes into one atomic backend operation if required; this round batches unit rows only. No new polling, schedules, tables, or production data mutations were introduced.
+
 ## 2026-11-15: Shared partial receiving + GRILL admin opening balances
 
 - Applied `20261115082922_shared_receiving_and_grill_admin_stock`. GRILL/Burger device RPC signatures remain unchanged and delegate to a single private line-receiving core. New authenticated web RPC uses branch access, receipt/stock locks, expected_received, request deduplication and proportional rounding. Existing GRILL/Burger audit action names remain intact, so both POS histories include web receipts.

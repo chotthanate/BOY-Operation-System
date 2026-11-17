@@ -26,6 +26,7 @@ test('the item editor reads an alternate purchase unit and its conversion', () =
 
 test('switching back to the base unit clears the old purchase choice', async () => {
   const saved = [];
+  let calls = 0;
   const catalog = { rows: [
     { __rowNumber: 2, item_unit_id: 'IU-1', item_id: 'ITEM-1', unit_id: 'UNIT-PIECE', 'เป็นหน่วยฐาน': true, 'ใช้หน่วยนี้ตอนซื้อ': false, 'อัตราแปลงเป็นหน่วยฐาน': 1, 'เปิดใช้งาน': true },
     { __rowNumber: 3, item_unit_id: 'IU-2', item_id: 'ITEM-1', unit_id: 'UNIT-PACK', 'เป็นหน่วยฐาน': false, 'ใช้หน่วยนี้ตอนซื้อ': true, 'อัตราแปลงเป็นหน่วยฐาน': 10, 'เปิดใช้งาน': true }
@@ -35,8 +36,9 @@ test('switching back to the base unit clears the old purchase choice', async () 
     active: row => row['เปิดใช้งาน'] !== false,
     actor: () => ({ name: 'tester' }),
     api: async () => ({}),
-    window: { BOY_MASTER_STORE: { save: async (_sheet, rowNumber, values) => {
-      saved.push({ rowNumber, values });
+    window: { BOY_MASTER_STORE: { bulkSave: async (_sheet, rows) => {
+      calls++;
+      saved.push(...rows.map(values => ({ values })));
       return catalog;
     } } }
   };
@@ -44,6 +46,7 @@ test('switching back to the base unit clears the old purchase choice', async () 
   vm.runInContext(saveSource, context);
   await context.saveItemPurchaseSettings('ITEM-1', 'UNIT-PIECE', '', 1);
   assert.equal(saved.length, 2);
+  assert.equal(calls, 1);
   assert.equal(saved.find(row => row.values.unit_id === 'UNIT-PACK').values['ใช้หน่วยนี้ตอนซื้อ'], false);
   assert.equal(saved.find(row => row.values.unit_id === 'UNIT-PIECE').values['ใช้หน่วยนี้ตอนซื้อ'], true);
 });

@@ -90,10 +90,19 @@ test('employee editor hides the internal id and prefills an editable login code'
 });
 
 test('item category choices follow selected store scopes while retaining an existing category', () => {
+  assert.match(source, /if\(!\['items','expenseItems'\]\.includes\(current\)\)return/);
   assert.match(source, /const scopes=\[\.\.\.\$\('#form'\)\.querySelectorAll\('\[name="_store_scope"\]:checked'\)\]/);
   assert.match(source, /!types\.length\|\|types\.some\(type=>scopes\.includes\(type\)\)/);
   assert.match(source, /String\(row\.subcategory_id\)===String\(wanted\)&&Boolean\(editing\)/);
   assert.match(source, /input\.onchange=\(\)=>syncCategorySelects\(sub\.value\)/);
+});
+
+test('editing a category never runs the item store filter or destroys main category options', () => {
+  const start=source.indexOf('    function syncCategorySelects(');
+  const end=source.indexOf('    function formatValue(',start);
+  const scope={current:'categories',$:()=>{throw new Error('category options must remain untouched')}};
+  vm.createContext(scope);vm.runInContext(source.slice(start,end),scope);
+  scope.syncCategorySelects('SUB-BEEF');
 });
 
 test('retired category usage flags are hidden from the editor', () => {

@@ -118,7 +118,8 @@
   function findCurrentRow(catalog, rowNumber, values) {
     const rows = catalog?.rows || [];
     return rows.find(row => rowNumber && String(row.__rowNumber) === String(rowNumber)) ||
-      rows.find(row => rowId(row) && rowId(row) === String(values?.item_id || "")) || null;
+      rows.find(row => catalog?.idHeader && values?.[catalog.idHeader] && String(row[catalog.idHeader]) === String(values[catalog.idHeader])) ||
+      rows.find(row => catalog?.idHeader === 'item_id' && rowId(row) && rowId(row) === String(values?.item_id || "")) || null;
   }
   function sourcePayload(sheetName, values, existing) {
     const clean = Object.fromEntries(Object.entries(values || {}).filter(([key]) => !key.startsWith("__")));
@@ -275,6 +276,17 @@
     return { ...currentCatalog, rows, _source: "device-cache", _pendingSync: true };
   }
 
+  function catalogFromSave(sheetName, targetSheet, data, currentCatalog) {
+    if (!data?.sheetName || !Array.isArray(data.rows)) throw new Error("ผลบันทึกจาก Supabase ไม่ครบ");
+    if (sheetName !== ITEM_SHEET) return data;
+    const items = targetSheet === ITEM_SHEET ? data : {
+      ...currentCatalog,
+      rows: (currentCatalog?.rows || []).filter(row => !isExpenseRow(row))
+    };
+    const expenses = targetSheet === EXPENSE_SHEET ? data : currentCatalog?._expenseCatalog;
+    return combineItemCatalog(items, expenses);
+  }
+
   async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog) {
     const central = client();
     const currentRow = findCurrentRow(currentCatalog, rowNumber, values);
@@ -290,14 +302,14 @@
           : currentRow;
         const payload = sourcePayload(targetSheet, values, { headers: sourceCatalog?.headers || [], row: sourceRow });
         if (sourceRow?.__version) payload.__version = sourceRow.__version;
-        const { error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+        const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
             target_sheet_name: targetSheet,
             rows: [payload],
             actor_name: actorName || "เจ้าของร้าน"
           }), 15000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
           if (error) throw error;
         committed = true;
-        const catalog = await fromSupabase(sheetName);
+        const catalog = catalogFromSave(sheetName, targetSheet, data, currentCatalog);
         try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
         catch (mirrorError) { catalog._mirrorStatus = "failed"; catalog._mirrorError = mirrorError?.message || String(mirrorError); }
         return remember(sheetName, catalog, "supabase");
@@ -342,6 +354,7 @@
   async function bulkSave(sheetName, rows, actorName, legacySave, currentCatalog) {
     const central = client();
     let committedGroups = 0;
+    let savedCatalog = currentCatalog;
     if (central) {
       try {
         const { data: sessionData } = await central.auth.getSession();
@@ -360,15 +373,16 @@
           groups.get(targetSheet).push(payload);
         }
         for (const [targetSheet, payloads] of groups) {
-          const { error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+          const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
             target_sheet_name: targetSheet,
             rows: payloads,
             actor_name: actorName || "เจ้าของร้าน"
           }), 30000, "นำเข้าข้อมูลใช้เวลานานเกินไป");
           if (error) throw error;
           committedGroups++;
+          savedCatalog = catalogFromSave(sheetName, targetSheet, data, savedCatalog);
         }
-        const catalog = await fromSupabase(sheetName);
+        const catalog = savedCatalog;
         try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
         catch (mirrorError) { catalog._mirrorStatus = "failed"; catalog._mirrorError = mirrorError?.message || String(mirrorError); }
         return remember(sheetName, catalog, "supabase");
