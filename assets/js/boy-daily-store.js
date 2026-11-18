@@ -56,6 +56,10 @@
   async function normalize(data){
     const c=await catalog();
     const exp=(data.exp||[]).map(row=>{
+      if(row.expense_class==='capital'){
+        if(!String(row.project_name||'').trim()||!row.investment_category)throw new Error('ระบุโครงการและหมวดลงทุน: '+row.i);
+        return {...row,item_id:null,expense_item_id:null,master_code:null,unit_id:null,q:0};
+      }
       // Existing UUID wins. Exact catalog lookup is only for an unsaved legacy
       // form; ambiguous names must never be auto-linked.
       const matches=c.items.filter(i=>row.item_id?(i.id===row.item_id&&!i.expense_item_id)||i.code===row.item_id:row.expense_item_id?i.expense_item_id===row.expense_item_id:row.master_code?i.code===row.master_code:i.name===String(row.i||'').trim());

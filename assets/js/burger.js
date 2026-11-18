@@ -51,7 +51,7 @@
   const optionHtml = (rows, selected, label = "name") => rows.map((row) => `<option value="${escapeHtml(row.id)}" ${row.id === selected ? "selected" : ""}>${escapeHtml(row[label])}</option>`).join("");
   const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   const monthNow = () => today().slice(0, 7);
-  const newLine = () => ({ id: crypto.randomUUID(), item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", subcategory_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, conversion_overridden: false, line_total: 0, supplier_name: "", note: "", expanded: true });
+  const newLine = () => ({ id: crypto.randomUUID(), is_investment:false,item_id: "", expense_item_id: "", source_expense_item_id: "", expense_search: "", category_id: "", subcategory_id: "", description: "", quantity: 0, unit_id: "", conversion_to_base: 1, conversion_overridden: false, line_total: 0, supplier_name: "", note: "", expanded: true });
 
   function toast(message) {
     const element = $("#toast");
@@ -353,7 +353,7 @@
     }
     const queuedIds = new Set(readOutbox().filter(row => row.type === 'expense' && row.meta?.transaction_date === $("#expenseDate").value).flatMap(row => row.meta?.line_ids || []));
     state.lines = Array.isArray(payload?.lines) ? payload.lines.filter(line => !queuedIds.has(line.id)).map((line) => ({ ...newLine(), ...line, expanded: false })) : [];
-    if (!state.lines.length) state.lines = [newLine()];
+    if (!state.lines.length) state.lines = [{...newLine(),is_investment:new URLSearchParams(location.search).get('investment')==='1'}];
     $("#expensePaymentMethod").value = payload?.payment_method || "cash";
     state.lines[0].expanded = true;
     renderLines();
@@ -516,6 +516,7 @@
     return item.track_stock ? item : null;
   }
   function lineRequirements(line, expense = expenseById(line.expense_item_id), item = itemById(line.item_id)) {
+    if(line.is_investment)return {quantity:false,unit:false};
     const stockItem = stockItemForPurchasedItem(item);
     const physicalItem = item && !["EXPENSE_ITEM", "SERVICE"].includes(item.item_type);
     return {
@@ -562,7 +563,7 @@
     $("#expenseCount").textContent = `${state.lines.length} รายการ`;
     $("#expenseLines").innerHTML = state.lines.map((line, index) => {
       const item = itemById(line.item_id);
-      const stockItem = stockItemForPurchasedItem(item);
+      const stockItem = line.is_investment?null:stockItemForPurchasedItem(item);
       const expense = expenseById(line.expense_item_id);
       const categoryId = lineMainCategoryId(line, expense);
       const selectedSubcategoryId = lineSubcategoryId(line, expense);
@@ -586,20 +587,21 @@
       return `<article class="expense-card ${line.expanded ? "expanded" : ""}" data-line-id="${line.id}">
         <button class="expense-summary" type="button" data-action="toggle-line" aria-expanded="${Boolean(line.expanded)}">
           <span class="line-number">${index + 1}</span>
-          <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
+          <span class="summary-copy"><strong>${escapeHtml(line.description || expense?.name || item?.name || "ยังไม่ระบุรายการ")}</strong><small>${escapeHtml(line.is_investment?'เงินลงทุน · '+(line.project_name||'ยังไม่ระบุโครงการ'):categoryId ? categoryName(categoryId) : "ยังไม่เลือกหมวดหลัก")}</small></span>
           <span class="summary-amount"><strong>${money.format(Number(line.line_total) || 0)}</strong><span class="stock-tag ${stockItem ? "" : "off"}">${stockItem ? `${line.receiving_mode==='delivery'?'รอรับ':'รับทันที'} ${escapeHtml(stockItem.name)}` : "ไม่เข้าสต็อก"}</span></span>
         </button>
         <div class="expense-detail">
+          ${window.BOY_EXPENSE_APP.investmentFields(line)}
           <div class="expense-picker">
             <label>รายการรายจ่าย<input class="typeable-select" data-field="expense_search" value="${escapeHtml(line.expense_search || line.description || expense?.name)}" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" autocomplete="off" aria-autocomplete="list" aria-expanded="false"></label>
             <div class="expense-picker-options" role="listbox" hidden></div>
           </div>
-          <div class="field-grid">
+          <div class="field-grid expense-category-fields">
             <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
             <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}</select></label>
           </div>
           <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
-          ${item ? `<label class="receiving-mode-field">การรับสินค้า<select data-field="receiving_mode"><option value="immediate" ${line.receiving_mode!=='delivery'?'selected':''}>รับสินค้าทันที</option><option value="delivery" ${line.receiving_mode==='delivery'?'selected':''}>รอจัดส่ง</option></select></label>` : ''}
+          ${item&&!line.is_investment ? `<label class="receiving-mode-field">การรับสินค้า<select data-field="receiving_mode"><option value="immediate" ${line.receiving_mode!=='delivery'?'selected':''}>รับสินค้าทันที</option><option value="delivery" ${line.receiving_mode==='delivery'?'selected':''}>รอจัดส่ง</option></select></label>` : ''}
           ${stockItem && unit ? `<div class="conversion-field ${line.conversion_overridden ? "is-editing" : ""}"><div><span>อัตราจากข้อมูลสินค้า</span><strong>1 ${escapeHtml(unit.name)} = ${escapeHtml(conversion)} ${escapeHtml(unitById(stockItem.base_unit_id)?.name || "หน่วยฐาน")} ใน ${escapeHtml(stockItem.name)}</strong><small>ใช้กับรายการซื้อครั้งนี้เท่านั้น ไม่แก้ข้อมูลสินค้า</small></div><label class="conversion-toggle"><input data-field="conversion_overridden" type="checkbox" ${line.conversion_overridden ? "checked" : ""}><span>ปรับครั้งนี้</span></label>${line.conversion_overridden ? `<input data-field="conversion_to_base" aria-label="จำนวนที่เพิ่มเข้าสต็อกครั้งนี้" type="number" min="0.000001" step="any" inputmode="decimal" value="${escapeHtml(conversion)}">` : ""}</div>` : ""}
           ${requirements.quantity ? `<div class="unit-price"><span>${stockEffect || "ราคาต่อหน่วย"}</span><strong>${money.format(perUnit)}${unit ? ` / ${escapeHtml(unit.name)}` : ""}</strong></div>` : ""}
           <div class="field-grid">
@@ -704,7 +706,7 @@
       scheduleDraftSave();
       return;
     }
-    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(value) : field === "conversion_overridden" ? Boolean(value) : value;
+    line[field] = ["quantity", "line_total", "conversion_to_base"].includes(field) ? Number(value) : ["conversion_overridden","is_investment"].includes(field) ? Boolean(value) : value;
     if (["quantity", "line_total", "supplier_name", "note"].includes(field)) {
       updateLineAmounts(card, line);
       scheduleDraftSave();
@@ -760,11 +762,12 @@
       const expense = expenseById(line.expense_item_id);
       const requirements = lineRequirements(line, expense, item);
       if (!line.description.trim()) errors.push(`รายการ ${index + 1}: ระบุชื่อรายการ`);
+      if(line.is_investment&&(!String(line.project_name||'').trim()||!line.investment_category))errors.push(`รายการ ${index+1}: ระบุโครงการและหมวดลงทุน`);
       if (!(Number(line.line_total) > 0)) errors.push(`รายการ ${index + 1}: ระบุยอดรวม`);
-      if (!lineMainCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
+      if (!line.is_investment && !lineMainCategoryId(line)) errors.push(`รายการ ${index + 1}: เลือกหมวดหลัก`);
       if (requirements.quantity && !(Number(line.quantity) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวน`);
       if (requirements.unit && !line.unit_id) errors.push(`รายการ ${index + 1}: เลือกหน่วย`);
-      if (stockItemForPurchasedItem(item) && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนที่เพิ่มเข้าสต็อกต่อหน่วยซื้อ`);
+      if (!line.is_investment && stockItemForPurchasedItem(item) && !(Number(line.conversion_to_base) > 0)) errors.push(`รายการ ${index + 1}: ระบุจำนวนที่เพิ่มเข้าสต็อกต่อหน่วยซื้อ`);
       if (expense?.requires_supplier && !line.supplier_name.trim()) errors.push(`รายการ ${index + 1}: ระบุ Supplier`);
     });
     return errors;
@@ -802,7 +805,7 @@
           lines: group.lines.map(line => {
             const supplier = state.suppliers.find(row => row.name.trim().toLocaleLowerCase("th") === line.supplier_name.trim().toLocaleLowerCase("th"));
             const requirements = lineRequirements(line);
-            return { item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, conversion_to_base: Number(line.conversion_to_base || 1), line_total: line.line_total, note: line.note || null };
+            return { expense_class:line.is_investment?'capital':'operating',project_name:line.project_name||'',investment_category:line.investment_category||'',item_id: line.item_id || null, expense_item_id: line.expense_item_id || null, category_id: lineCategoryId(line) || null, supplier_id: supplier?.id || null, supplier_name: supplier ? null : line.supplier_name || null, description: line.description, quantity: requirements.quantity ? line.quantity : 0, unit_id: requirements.unit ? line.unit_id || null : null, conversion_to_base: Number(line.conversion_to_base || 1), line_total: line.line_total, note: line.note || null };
           })
         });
         const ids = new Set(group.lines.map(line => line.id));

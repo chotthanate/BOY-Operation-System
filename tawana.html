@@ -592,9 +592,9 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261115-1">
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261118-1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
-  <script src="assets/js/expense-app.js?v=20261105-2"></script>
+  <script src="assets/js/expense-app.js?v=20261118-1"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -1956,12 +1956,15 @@
       if(receivingField) receivingField.hidden=window.BOY_CENTRAL_CONFIG?.financeCutover!==true||!meta.itemId||!!meta.expenseItemId;
       var paymentText = payment && payment.options[payment.selectedIndex] ? payment.options[payment.selectedIndex].text : 'เงินสด';
       var category = [mainType && mainType.value, subType && subType.value, paymentText].filter(Boolean).join(' · ');
+      if(wrapper.querySelector('.is-investment')?.checked)category='เงินลงทุน · '+(wrapper.querySelector('.investment-project')?.value||'ยังไม่ระบุโครงการ');
       wrapper.querySelector('.expense-summary-name').textContent = nameText || 'รายการใหม่';
       wrapper.querySelector('.expense-summary-category').textContent = category || 'ยังไม่เลือกหมวด';
       wrapper.querySelector('.expense-summary-amount').textContent = formatMoney(amountValue);
       var stock = wrapper.querySelector('.stock-status');
       stock.className = 'stock-status';
-      if (meta.useStock && qtyValue > 0) {
+      if (wrapper.querySelector('.is-investment')?.checked) {
+        stock.textContent='เงินลงทุน';
+      } else if (meta.useStock && qtyValue > 0) {
         stock.classList.add('tracked');
         stock.textContent = 'ติดตามสต็อก';
       } else if (meta.useStock) {
@@ -1998,6 +2001,7 @@
           '<span class="expense-summary-side"><strong class="expense-summary-amount">฿0.00</strong><span class="stock-status">ไม่เข้าสต็อก</span></span><span class="expense-chevron">⌄</span>' +
         '</div>' +
         '<div class="expense-details"><div class="exp-row">' +
+          window.BOY_EXPENSE_APP.investmentFields(identity) +
           '<div class="exp-field exp-item-field expense-typeable"><label>รายการรายจ่าย</label><div class="expense-typeable-control"><input type="text" class="i" placeholder="พิมพ์ค้นหาหรือเลือกรายการ" value="'+escapeHtml(i)+'" oninput="showSuggestions(this); updateExpenseCard(this.closest(\'.swipe-wrapper\'))" onclick="showSuggestions(this)" onchange="checkAutoFill(this)" onkeydown="nav(event, 0)" autocomplete="off" aria-autocomplete="list" aria-expanded="false"><button class="expense-picker-toggle" type="button" aria-label="เปิดรายการรายจ่าย" onclick="showSuggestions(this.previousElementSibling)">⌄</button></div><div class="expense-picker-options" role="listbox" hidden></div></div>' +
           '<div class="expense-category-row"><div class="exp-field exp-main-field"><label>ประเภทหลัก</label><select class="exp-main-type" onchange="updateSubTypeOptions(this.closest(\'.swipe-wrapper\')); updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div><div class="exp-field exp-sub-field"><label>ประเภทย่อย</label><select class="exp-sub-type" onchange="updateExpenseCard(this.closest(\'.swipe-wrapper\')); doSync()"></select></div></div>' +
           '<div class="expense-compact-row">' +
@@ -2077,6 +2081,7 @@
           var identity = JSON.parse(wrappers[w].dataset.centralIdentity || 'null');
           if (identity && identity.name !== itemInput.value) identity = null;
           exp.push({
+            ...window.BOY_EXPENSE_APP.readInvestment(wrappers[w]),
             item_id:identity?.item_id||meta.itemId||null,master_code:identity?.master_code||meta.masterCode||null,category_id:meta.categoryId||identity?.category_id||null,
             expense_item_id:identity?.expense_item_id||meta.expenseItemId||null,receiving_mode:wrappers[w].querySelector('.receiving-mode')?.value||'immediate',
             i: itemInput.value,
@@ -2245,7 +2250,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261115-1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261118-1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

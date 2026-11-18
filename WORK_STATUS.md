@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-18: Capital spending
+
+- Applied `20261118122414_capital_expense_classification_and_reports` (Supabase-generated version). Existing transactions default to operating; no history was reclassified. Optional per-line investment fields are persisted in shared and legacy daily forms, drafts and server mirrors. Payment postings are split by operating/capital as well as payment/receiving mode; no second payment is created. Capital posting is restricted to admin/manager branch access, strips stock identities, uses a dedicated investment category and stores project/category/source identity details.
+- Operating daily/monthly/branch dashboard queries exclude capital transactions; monthly/branch responses include separate investment totals. `investments.html` shows branch/month totals plus latest 100 lines and client-side project search; no polling or extra background fetch is added. Home and expense hamburger navigation expose the report. Existing synchronous **master** mirror limitation below is unrelated and unchanged.
+- Tests: Node suite 134 pass; daily-form fixtures at 390/1440px retain investment fields and have no horizontal overflow; investment report fixtures at 390/1440px pass. SQL investment, central-financial-flow and immediate/delivery regressions pass in BEGIN/ROLLBACK after production migration. Investment tests cover duplicate/conflicting retry, linked product without stock movement/receipt, mixed normal+capital daily document, Dashboard totals, authorization denial and void exclusion. No QA business records remain.
+- Scope: project names are text labels (no new project polling/catalog table). Depreciation schedules, fixed-asset register and automatic investment defaults on master items are not implemented; this is spending classification/project reporting, not a complete statutory accounting module. No tablet APK change in this task.
+
 ## 2026-11-17: Master save performance and category editor
 
 - Master single/bulk saves now reuse the catalog returned by `bulk_upsert_master_catalog_rows`; no additional `get_master_catalog` roundtrip after a successful write. Unified item/expense catalogs retain the unchanged half and its identity. Unit edits are batched once, with per-row version checks; item and unit writes are still separate transactions.

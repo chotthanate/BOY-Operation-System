@@ -38,3 +38,16 @@ body.expense-app{--store-accent:#0b8068;--store-accent-soft:#e8f5ef;--green:#0b8
 .expense-app .expense-detail>label.form-field input,.expense-app .expense-detail>label.form-field select{width:100%;box-sizing:border-box;grid-column:1/-1;grid-row:auto}
 .expense-app .expense-detail .item-field{grid-column:1/-1}
 @media(max-width:520px){.expense-app .expense-detail .qty-field{grid-column:1/4}.expense-app .expense-detail .unit-field{grid-column:4/7}.expense-app .expense-detail .amount-field,.expense-app .expense-detail .note-field{grid-column:1/-1}.expense-app .expense-detail .payment-field{grid-column:1/-1}}
+/* Optional investment fields do not add steps to an ordinary expense. */
+#filters.filters input{min-width:0;max-width:100%}
+.investment-fields{margin:10px 0;padding:12px;border:1px solid #dce7e3;border-radius:14px;background:#f7faf8;grid-column:1/-1}
+.investment-toggle{display:flex!important;align-items:center;gap:9px;min-height:44px;font-weight:700}
+.investment-toggle input{width:20px!important;height:20px!important;margin:0;flex:0 0 20px}
+.investment-details{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+.investment-details[hidden]{display:none}
+.investment-details label{display:grid;gap:6px;font-size:14px}
+.investment-details input,.investment-details select{width:100%;min-width:0;min-height:44px;font-size:16px;box-sizing:border-box}
+@media(max-width:600px){.investment-details{grid-template-columns:1fr}}
+.expense-card:has(.is-investment:checked) .expense-category-fields,
+.expense-row:has(.is-investment:checked) :is(.main-field,.sub-field,.qty-field,.unit-field,.receiving-mode-field,.type-hint),
+.swipe-wrapper:has(.is-investment:checked) :is(.expense-category-row,.expense-compact-row>.exp-field:not(:last-child),.receiving-mode-field,.unit-price-line){display:none!important}

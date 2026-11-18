@@ -37,6 +37,11 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แ�
   assert.equal(await mode.isVisible(),true);
   const snapshot=await page.evaluate(()=>location.pathname.endsWith('tawana.html')?collectFormDataSnapshot():collectSnapshot());
   assert.equal(snapshot.exp.at(-1).item_id,'fruit-id');assert.equal(snapshot.exp.at(-1).receiving_mode,'delivery');
+  await page.locator('.is-investment').last().check();
+  await page.locator('.investment-project').last().fill('เปิดร้านทดสอบ');
+  await page.locator('.investment-category').last().selectOption('construction');
+  const investment=await page.evaluate(()=>location.pathname.endsWith('tawana.html')?collectFormDataSnapshot():collectSnapshot());
+  assert.equal(investment.exp.at(-1).expense_class,'capital');assert.equal(investment.exp.at(-1).project_name,'เปิดร้านทดสอบ');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,`${name} overflow at ${width}`);
   await page.screenshot({path:`/private/tmp/boy-${name}-${width}.png`,fullPage:true});
   await page.evaluate(()=>{

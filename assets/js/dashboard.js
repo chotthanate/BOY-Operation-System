@@ -106,6 +106,7 @@
       const days = (data.dailyIncome || []).filter((row) => Number(row.total || row.income) > 0);
       const max = Math.max(1, ...days.map((row) => Number(row.total || row.income) || 0));
       target.innerHTML = `<div class="month-summary"><div class="month-stat"><span>รายรับ</span><strong>${money(summary.income)}</strong></div><div class="month-stat"><span>รายจ่าย</span><strong>${money(summary.expense)}</strong></div><div class="month-stat"><span>คงเหลือ</span><strong>${money(summary.profit)}</strong></div><div class="month-stat"><span>วันที่มียอดขาย</span><strong>${count(days.length)} วัน</strong></div></div><div class="bars">${days.slice(-14).map((row) => { const value = Number(row.total || row.income) || 0; return `<div class="bar-row"><span>${escapeHtml(row.label || `วันที่ ${row.day}`)}</span><div class="track"><div class="fill" style="width:${Math.max(3, value / max * 100)}%"></div></div><strong>${money(value)}</strong></div>`; }).join("") || '<div class="empty">ยังไม่มีรายรับในเดือนนี้</div>'}</div>`;
+      target.querySelector('.month-summary')?.insertAdjacentHTML('beforeend',`<div class="month-stat"><span>เงินลงทุน</span><strong>${money(summary.investment)}</strong></div><div class="month-stat"><span>รายจ่ายรวมเงินลงทุน</span><strong>${money(summary.totalSpending)}</strong></div>`);
     } catch (error) { target.innerHTML = `<div class="empty error">${escapeHtml(error.message)}</div>`; }
   }
 
@@ -171,6 +172,7 @@
     $("#metricGrid").innerHTML = [
       ["ยอดขายสุทธิ", money(totals.revenue), data.manualRevenue>0 ? "รวมยอดสรุปประจำวัน" : `${count(totals.orders)} ออเดอร์`, "accent"],
       ["รายจ่าย", money(totals.expenses), `${count(totals.expenseTransactions)} รายการ`, ""],
+      ["เงินลงทุน", money(totals.investment), "แยกจากรายจ่ายดำเนินงาน", ""],
       ["คงเหลือก่อนต้นทุน", money(totals.net), "ยอดขายหักรายจ่าย", ""],
       ["เฉลี่ยต่อบิล", money(totals.averageOrder), "ต่อออเดอร์", ""],
       ["ส่วนลด", money(totals.discount), "ส่วนลดรวม", ""],
