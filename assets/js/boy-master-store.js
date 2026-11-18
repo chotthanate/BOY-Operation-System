@@ -125,6 +125,7 @@
     const clean = Object.fromEntries(Object.entries(values || {}).filter(([key]) => !key.startsWith("__")));
     if (sheetName !== EXPENSE_SHEET) return clean;
     const allowed = new Set(existing?.headers || []);
+    allowed.add("store_types");
     clean["ชื่อรายการค่าใช้จ่าย"] = clean["ชื่อสินค้า"] || existing?.row?.["ชื่อรายการค่าใช้จ่าย"] || "";
     clean.expense_item_id ||= existing?.row?.expense_item_id || `EXP-${Date.now()}${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
     return Object.fromEntries(Object.entries(clean).filter(([key]) => allowed.has(key)));

@@ -125,7 +125,7 @@
     function branchIdsForStoreType(type){return(referenceCache.branches?.rows||[]).filter(r=>branchStoreType(r)===type).map(r=>String(r.branch_id))}
     function scopedItemId(row){return current==='expenseItems'?String(row.item_id||''):String(row.item_id||row[catalog.idHeader]||'')}
     function categoryStoreTypes(row){const fields={water:['ใช้กับร้านน้ำ','ร้านน้ำ'],grill:['ใช้กับร้านเนื้อย่าง','ร้านเนื้อย่าง'],burger:['ใช้กับร้านเบอร์เกอร์','ร้านเบอร์เกอร์']};return STORE_TYPES.filter(([type])=>fields[type].some(field=>field in (row||{})&&activeValue(row[field]))).map(([type])=>type)}
-    function itemStoreTypes(row){const itemId=scopedItemId(row);const branchIds=(referenceCache.branchItems?.rows||[]).filter(r=>active(r)&&String(r.item_id)===itemId).map(r=>String(r.branch_id)),direct=STORE_TYPES.filter(([type])=>branchIdsForStoreType(type).some(id=>branchIds.includes(id))).map(([type])=>type);return direct.length?direct:categoryStoreTypes(categoryInfo(row))}
+    function itemStoreTypes(row){if(Array.isArray(row?.store_types))return row.store_types.filter(type=>STORE_TYPES.some(([key])=>key===type));const itemId=scopedItemId(row);const branchIds=(referenceCache.branchItems?.rows||[]).filter(r=>active(r)&&String(r.item_id)===itemId).map(r=>String(r.branch_id)),direct=STORE_TYPES.filter(([type])=>branchIdsForStoreType(type).some(id=>branchIds.includes(id))).map(([type])=>type);return direct.length?direct:categoryStoreTypes(categoryInfo(row))}
     function storeTypeLabel(type){return STORE_TYPES.find(([key])=>key===type)?.[1]||type}
     function categoryInfo(row){const rows=referenceCache.categories?.rows||[];return rows.find(r=>String(r.subcategory_id)===String(row.subcategory_id))||rows.find(r=>String(r.category_id)===String(row.category_id))||{}}
     function storeTypeForBranchId(id){const row=(referenceCache.branches?.rows||[]).find(branch=>String(branch.branch_id)===String(id));return row?[branchStoreType(row)]:[]}
@@ -169,7 +169,7 @@
       'เงื่อนไขชำระเงิน':['เงินสด','ชำระทันที','เครดิต 7 วัน','เครดิต 15 วัน','เครดิต 30 วัน']
     };
     function customOptions(h,value){const values=SELECT_OPTIONS[h];if(!values)return'';return '<option value="">— เลือก —</option>'+values.map(v=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(h==='ประเภทข้อมูล'?dataTypeLabel(v):v)}</option>`).join('')}
-    function hiddenEditorField(h,row){if(h==='สถานะตรวจสอบ'||['วันที่สร้าง','แก้ไขล่าสุด','ชื่อเดิม'].includes(h))return true;if(current==='items'&&['ยี่ห้อ','ขนาดบรรจุ','หน่วยขนาดบรรจุ','ติดตามสต็อก','ingredient_id','ต้องระบุผู้ขาย','ต้องมีหลักฐาน','ลำดับแสดง','ซื้อได้','เบิกได้','ขายได้'].includes(h))return true;if(current==='expenseItems'&&['กระทบสต็อก','purchase_unit_id','อัตราเพิ่มสต็อกต่อหน่วยซื้อ','ต้องกรอกจำนวน','ต้องเลือกหน่วย'].includes(h))return true;if(current==='categories'&&(['ใช้กับรายจ่าย','ใช้กับการเบิก','ใช้กับสต็อก'].includes(h)||(h==='ชื่อประเภทหลัก'&&row)))return true;if(current==='employees'&&['employee_id','เปิดใช้งาน'].includes(h))return true;return false}
+    function hiddenEditorField(h,row){if(h==='store_types')return true;if(h==='สถานะตรวจสอบ'||['วันที่สร้าง','แก้ไขล่าสุด','ชื่อเดิม'].includes(h))return true;if(current==='items'&&['ยี่ห้อ','ขนาดบรรจุ','หน่วยขนาดบรรจุ','ติดตามสต็อก','ingredient_id','ต้องระบุผู้ขาย','ต้องมีหลักฐาน','ลำดับแสดง','ซื้อได้','เบิกได้','ขายได้'].includes(h))return true;if(current==='expenseItems'&&['กระทบสต็อก','purchase_unit_id','อัตราเพิ่มสต็อกต่อหน่วยซื้อ','ต้องกรอกจำนวน','ต้องเลือกหน่วย'].includes(h))return true;if(current==='categories'&&(['ใช้กับรายจ่าย','ใช้กับการเบิก','ใช้กับสต็อก'].includes(h)||(h==='ชื่อประเภทหลัก'&&row)))return true;if(current==='employees'&&['employee_id','เปิดใช้งาน'].includes(h))return true;return false}
     function itemPurchaseSettings(row){
       const links=(referenceCache.itemUnits?.rows||[]).filter(link=>active(link)&&String(link.item_id)===String(row?.item_id||''));
       const base=String(row?.base_unit_id||'');
@@ -387,7 +387,7 @@
       }
       if(current==='itemUnits'&&!confirm('บันทึกหน่วยซื้อในข้อมูลกลาง? ค่าใน POS เบอร์เกอร์ยังไม่เปลี่ยนตามอัตโนมัติ'))return;
       const storeTypes=[...e.target.querySelectorAll('[name="_store_scope"]:checked')].map(input=>input.value);
-      const branchIds=storeTypes.flatMap(branchIdsForStoreType);
+      if(current==='items'||current==='expenseItems')values.store_types=storeTypes;
       const savedRowNumber=editing?.__rowNumber||'';
       const savedVersion=editing?.__version||'';
       const savedEntity=current;
@@ -449,7 +449,7 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261102-4"></script>
-  <script src="assets/js/boy-master-store.js?v=20261117-1"></script>
+  <script src="assets/js/boy-master-store.js?v=20261119-scope1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261102-4"></script>
   <script>

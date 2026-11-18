@@ -6,6 +6,22 @@ const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'boy-master-store.js'), 'utf8');
 const vm = require('node:vm');
 
+test('shop scope is saved explicitly, including empty shared scope, and overrides category defaults', () => {
+  const page=fs.readFileSync(path.join(__dirname,'..','master-data.html'),'utf8');
+  assert.match(page,/values\.store_types=storeTypes/);
+  const line=page.split('\n').find(line=>line.includes('function itemStoreTypes('));
+  const context={STORE_TYPES:[['water'],['grill'],['burger']]};
+  vm.createContext(context);vm.runInContext(line,context);
+  assert.deepEqual(Array.from(context.itemStoreTypes({store_types:['water']})),['water']);
+  assert.deepEqual(Array.from(context.itemStoreTypes({store_types:[]})),[]);
+  assert.match(page,/if\(h==='store_types'\)return true/);
+  const start=source.indexOf('  function sourcePayload('),end=source.indexOf('  function isRetryable(',start);
+  const payloadContext={EXPENSE_SHEET:'M_รายการค่าใช้จ่าย'};
+  vm.createContext(payloadContext);vm.runInContext(source.slice(start,end),payloadContext);
+  const payload=payloadContext.sourcePayload('M_รายการค่าใช้จ่าย',{expense_item_id:'EXP-1',store_types:['water']},{headers:['expense_item_id']});
+  assert.deepEqual(Array.from(payload.store_types),['water']);
+});
+
 test('save result replaces only its source catalog without another database read', () => {
   const start=source.indexOf('  function catalogFromSave('),end=source.indexOf('  async function save(',start);
   const helpers=source.slice(source.indexOf('  function isExpenseRow('),source.indexOf('  function findCurrentRow('));

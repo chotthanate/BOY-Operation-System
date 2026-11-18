@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-19: Product shop-scope persistence
+
+- Applied Supabase-generated migration `20261118220640_persist_master_item_store_scope`. The editor previously collected `_store_scope` but discarded it on save; canonical item/expense rows now persist explicit `store_types`, and reads prefer this over category defaults. Empty selection retains the existing meaning: shared by all shop types.
+- A private, non-callable trigger validates company-admin scope and updates normalized branch mappings atomically with the product save. Item branch master rows are updated through the existing versioned/audited bulk writer. Existing rows are not mass-reassigned; no balances or transaction history are changed. Existing browser Sheet mirror behavior is unchanged; branch-link change audit records remain subject to the master mirror reconciliation limitation below.
+- Node tests: 135 passed. Rollback SQL tests verify water-only assignment, reload, shared assignment, unchanged stock-history count and rejected stale/invalid edits. Production function execute privileges are revoked from anon/authenticated; only trigger invocation is used.
+- Earlier work in this same chat remains uncommitted and NOT deployed: shared daily drafts/recovery and Supabase reimbursements (`supabase/pending/daily_recovery_and_reimbursements.sql`, related frontend files and SQL tests). Do not discard those edits. Coconut base-unit change to ลูก is user-approved but not applied yet. Do not claim the Tawana pending submit or iPhone local queue has been reconciled.
+
 ## 2026-11-18: Capital spending
 
 - Applied `20261118122414_capital_expense_classification_and_reports` (Supabase-generated version). Existing transactions default to operating; no history was reclassified. Optional per-line investment fields are persisted in shared and legacy daily forms, drafts and server mirrors. Payment postings are split by operating/capital as well as payment/receiving mode; no second payment is created. Capital posting is restricted to admin/manager branch access, strips stock identities, uses a dedicated investment category and stores project/category/source identity details.
