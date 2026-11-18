@@ -1683,7 +1683,7 @@
       location.replace(next && /^bigc-v2\.html(?:[?#].*)?$/.test(next) ? next : "bigc-v2.html?online=1");
       return;
     }
-    if (next && /^(index|expenses|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && /^(index|expenses|investments|reimbursements|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
       location.replace(next);
       return;
     }
@@ -1720,7 +1720,7 @@
     state.profile = readCache(profileCacheKey()) || { display_name: "Chotthanate", company_role: "admin" };
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(index|expenses|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
+    if (next && /^(index|expenses|investments|reimbursements|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";

@@ -594,7 +594,7 @@
   </style>
   <link rel="stylesheet" href="assets/css/expense-app.css?v=20261118-1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
-  <script src="assets/js/expense-app.js?v=20261118-1"></script>
+  <script src="assets/js/expense-app.js?v=20261119-recovery1"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -1017,7 +1017,10 @@
     }
 
     function closeSubmitReview() { document.getElementById('reviewOverlay').classList.add('hidden'); }
-    async function confirmSubmitReview() { closeSubmitReview(); await submitToSheet(); }
+    async function confirmSubmitReview() {
+      if(!String(document.getElementById('val-transfer').value).trim()&&!confirm('ยังไม่ได้กรอกเงินโอน ต้องการยืนยันบันทึกโดยถือว่าเงินโอนเป็น 0 บาทหรือไม่?'))return;
+      closeSubmitReview(); await submitToSheet();
+    }
 
     document.addEventListener('keydown', function(event) {
       if (event.key === 'Escape') closeAppSwitcher();
@@ -2184,9 +2187,9 @@
           await apiCall('autoSave', { date: date, data: data });
           setSaveState('saved', 'บันทึกร่างแล้ว');
         } catch (error) {
-          setSaveState('error', 'บันทึกร่างไม่สำเร็จ');
+          setSaveState('error', 'ร่างอยู่ในเครื่อง · ส่งฐานกลางไม่สำเร็จ: '+error.message);
         }
-      }, 8000);
+      }, 1500);
     }
 
     async function loadData() {
@@ -2241,6 +2244,9 @@
         }
       }
     }
+
+    document.getElementById('expenseList').addEventListener('input',()=>{if(appStarted&&!isLoadingData)doSync();});
+    ['val-cash','val-transfer','otherIncomeVal','otherIncomeNote'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>{if(appStarted&&!isLoadingData)doSync();}));
     
     window.addEventListener('online', function() {
       if (document.getElementById('mainDate').value) doSync();
@@ -2250,7 +2256,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261118-1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261119-recovery1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

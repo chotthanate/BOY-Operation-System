@@ -52,13 +52,20 @@
     dialog.setAttribute("aria-labelledby", "expenseNavigationTitle");
     dialog.innerHTML = `<div class="expense-nav-heading"><div><small>BOY OPERATION</small><h2 id="expenseNavigationTitle">เลือกสาขา</h2></div><button type="button" data-expense-nav-close aria-label="ปิดเมนู">×</button></div><nav aria-label="เลือกสาขา"><div class="expense-nav-label">สาขา</div>${branches.map(branch => `<a href="${branch.path}" ${branch.code === branchCode ? 'aria-current="page"' : ""}><span>${branch.mark}</span><strong>${branch.name}</strong>${branch.code === branchCode ? '<b aria-hidden="true">✓</b>' : ""}</a>`).join("")}<div class="expense-nav-label">เมนูอื่น</div><a href="investments.html?branch=${encodeURIComponent(branchCode)}"><span>▤</span><strong>เงินลงทุนและโครงการ</strong></a><a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong></a><a href="dashboard.html"><span>▥</span><strong>Dashboard รวม</strong></a><a href="master-data.html?entity=items"><span>▦</span><strong>ข้อมูลกลาง</strong></a></nav>`;
     document.body.appendChild(dialog);
+    dialog.querySelector('nav').insertAdjacentHTML('beforeend','<a href="reimbursements.html"><span>฿</span><strong>รอเบิกค่าใช้จ่าย</strong></a>');
     dialog.querySelector("[data-expense-nav-close]").addEventListener("click", () => dialog.close());
     dialog.addEventListener("click", event => { if (event.target === dialog && event.clientX >= dialog.getBoundingClientRect().right) dialog.close(); });
     dialog.addEventListener("close", () => document.querySelector("[data-expense-menu]")?.setAttribute("aria-expanded", "false"));
-    dialog.querySelectorAll("a").forEach(link => link.addEventListener("click", () => {
+    dialog.querySelectorAll("a").forEach(link => link.addEventListener("click", async event => {
       // Flush the current field to the existing branch draft before navigating.
       document.activeElement?.blur();
       window.dispatchEvent(new Event("expense-before-navigate"));
+      if(window.BOY_DAILY_STORE){
+        event.preventDefault();
+        try{await window.BOY_DAILY_STORE.flushLocalDraft();}
+        catch(error){if(!confirm('ร่างยังส่งฐานกลางไม่สำเร็จ แต่เก็บไว้ในเครื่องแล้ว ต้องการไปหน้าถัดไปหรือไม่?\n'+error.message))return;}
+        location.href=link.href;
+      }
     }));
     if (new URLSearchParams(location.search).get('mode') === 'test') dialog.querySelectorAll('nav a').forEach(link => {
       const url = new URL(link.href);

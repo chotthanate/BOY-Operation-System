@@ -5,6 +5,8 @@
   const state={client:null,catalog:null,contexts:new Map(),drafts:new Map()};
   const read=(key,fallback=null)=>{try{return JSON.parse(localStorage.getItem(key)||'null')??fallback;}catch{return fallback;}};
   const write=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
+  function stable(value){if(Array.isArray(value))return '['+value.map(stable).join(',')+']';if(value&&typeof value==='object')return '{'+Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stable(value[k])).join(',')+'}';return JSON.stringify(value);}
+  async function draftFingerprint(data){try{return stable(await normalize(data));}catch{return stable(data);}}
   // Launch only after the catalog/legacy reconciliation and mirror deployment
   // checklist is signed off. Loading this asset must not cut over a live form.
   const handles=action=>window.BOY_CENTRAL_CONFIG?.financeCutover===true&&['submit','autoSave','loadData','unlockDate','bigcExpenseSubmit','bigcExpenseAutoSave','bigcExpenseLoadData','bigcExpenseUnlockDate','shared_loadDB','pullItems','branchHistory','branchStock'].includes(action);
@@ -32,7 +34,7 @@
   async function catalog(force=false){
     const {data:{session}}=await client().auth.getSession();
     if(!session)throw new Error('ต้องเข้าสู่ระบบออนไลน์เพื่อโหลดรายการ');
-    const catalogKey=prefix+'catalog:'+session.user.id;
+    const catalogKey=prefix+'catalog:v2:'+session.user.id;
     const cached=(state.catalogUser===session.user.id&&state.catalog)||read(catalogKey);
     state.catalogUser=session.user.id;
     if(cached&&!force&&Date.now()-cached.fetchedAt<15*60*1000){state.catalog=cached;return cached;}
@@ -75,6 +77,7 @@
     });return {...data,exp};
   }
   async function load(date){
+    state.currentDate=date;
     const data=await rpc('get_daily_document',{target_branch_code:branch,target_date:date});
     // History is an explicitly labelled archive, not a save fallback. Never
     // replace an old submitted Sheet day with an empty new central document.
@@ -90,12 +93,23 @@
     }
     const localKey=branch==='TAWANA'?'BOY_TAWANA_DRAFT_':'BOY_BIGC_EXPENSE_DRAFT_';
     const local=read(localKey+date),cloud=JSON.parse(data.draft||'{}');
-    if(local&&Object.keys(local).length&&JSON.stringify(local)!==JSON.stringify(cloud)){
-      write(prefix+'recovered:'+date+':'+Date.now(),local);
-      if(!data.archive&&(!Object.keys(cloud).length||confirm('มีร่างในเครื่องนี้ต่างจากฐานกลาง ต้องการใช้ร่างในเครื่องนี้ไหม?\nยกเลิก = เปิดข้อมูลฐานกลาง โดยยังเก็บสำเนาร่างเดิมไว้'))){
-        data.draft=JSON.stringify(local);data.submitted=false;
+    if(local&&Object.keys(local).length){
+      const localFp=await draftFingerprint(local),cloudFp=await draftFingerprint(cloud);
+      if(localFp!==cloudFp){
+        const decisionKey=prefix+'draft-choice:'+date,previous=read(decisionKey);
+        const same=previous?.local===localFp&&previous?.cloud===cloudFp;
+        if(!same)write(prefix+'recovered:'+date+':'+Date.now(),{local,cloud});
+        const acknowledged=read(prefix+'synced:'+date);
+        const wasSynced=acknowledged?.fingerprint===localFp;
+        const useLocal=!data.archive&&!wasSynced&&(same?previous.useLocal:!Object.keys(cloud).length||confirm('มีการแก้ไขที่ยังไม่ตรงกัน: เครื่องนี้ '+(local.exp||[]).length+' รายการ / ฐานกลาง '+(cloud.exp||[]).length+' รายการ\nต้องการใช้ร่างเครื่องนี้ทั้งชุดแทนฐานกลางไหม?\nยกเลิก = เปิดฐานกลาง เก็บสำเนาทั้งสองชุดไว้ และไม่รวมรายการอัตโนมัติ'));
+        write(decisionKey,{local:localFp,cloud:cloudFp,useLocal});
+        if(useLocal){data.draft=JSON.stringify(local);data.submitted=false;}
+        else if(!data.archive)write(localKey+date,cloud);
       }
+      if(localFp===cloudFp||stable(JSON.parse(data.draft||'{}'))===stable(cloud))write(prefix+'synced:'+date,{fingerprint:cloudFp});
     }
+    data.remoteFingerprint=await draftFingerprint(cloud);
+    if(!local)write(prefix+'synced:'+date,{fingerprint:data.remoteFingerprint});
     state.contexts.set(date,data);write(prefix+'context:'+date,data);return data;
   }
   async function saveDraft(date,data){
@@ -103,23 +117,43 @@
     const task=previous.catch(()=>{}).then(async()=>{
       const context=state.contexts.get(date)||await load(date);
       if(context.archive)throw new Error('ข้อมูลเดิมจากชีตเป็นแบบอ่านอย่างเดียว ยังไม่ส่งทับประวัติเดิม');
+      if(await draftFingerprint(data)===context.remoteFingerprint)return {status:'unchanged',revision:context.draft_revision||0};
       const result=await rpc('save_daily_draft',{payload:{branch_code:branch,business_date:date,data,expected_revision:context.draft_revision||0,expected_document_revision:context.revision||0}});
-      context.draft_revision=result.revision;return result;
+      context.draft_revision=result.revision;context.remoteFingerprint=await draftFingerprint(data);write(prefix+'synced:'+date,{fingerprint:context.remoteFingerprint});return result;
     });state.drafts.set(date,task);return task;
   }
   async function submit(date,data){
     await (state.drafts.get(date)||Promise.resolve()).catch(()=>{});
-    const normalized=await normalize(data),fp=JSON.stringify(normalized),key=prefix+'request:'+date;
+    const normalized=await normalize(data),fp=stable(normalized),key=prefix+'request:'+date;
     let queued=read(key);
-    if(queued&&queued.fingerprint!==fp)throw new Error('มีรายการก่อนหน้ารอส่งอยู่ กรุณาส่งรายการเดิมให้สำเร็จก่อนแก้ไข');
-    const context=state.contexts.get(date)||await load(date);
+    let context=state.contexts.get(date)||await load(date);
     if(context.archive)throw new Error('วันที่นี้มีข้อมูลเดิมจากชีต ต้องตรวจเทียบก่อนนำเข้า ไม่บันทึกทับอัตโนมัติ');
-    if(!queued){queued={fingerprint:fp,payload:{request_id:crypto.randomUUID(),branch_code:branch,business_date:date,expected_revision:context.revision||0,data:normalized}};write(key,queued);}
+    if(queued&&stable(queued.payload?.data)!==fp){
+      const args={branch_code:branch,business_date:date,request_id:queued.payload.request_id,expected_data:queued.payload.data,expected_revision:queued.payload.expected_revision};
+      let recovery=await rpc('resolve_daily_request',{payload:{...args,supersede:false}}),consented=false;
+      if(recovery.state==='not_found'){
+        if(!confirm('มีรายการก่อนหน้ารอส่ง แต่ฐานกลางยังไม่ได้บันทึก ต้องการเก็บสำเนารายการเดิม แล้วส่งข้อมูลที่แก้ไขอยู่ตอนนี้แทนหรือไม่?'))throw new Error('ยังเก็บคำขอเดิมไว้ ไม่ได้ส่งข้อมูลซ้ำ');
+        consented=true;recovery=await rpc('resolve_daily_request',{payload:{...args,supersede:true}});
+      }
+      if(!['committed','superseded'].includes(recovery.state))throw new Error('มีรายการก่อนหน้ารอส่งอยู่ ยังตรวจยืนยันกับฐานกลางไม่ได้');
+      if(recovery.state==='committed'&&stable(recovery.document_data)!==fp){
+        if(Number(recovery.revision)!==Number(recovery.result?.revision))throw new Error('รายการเดิมบันทึกแล้ว แต่มีข้อมูลใหม่จากอีกเครื่อง กรุณาเปิดวันที่นี้ใหม่เพื่อเทียบข้อมูล');
+        if(!consented&&!confirm('คำขอก่อนหน้าบันทึกลงฐานกลางแล้ว ต้องการบันทึกการแก้ไขปัจจุบันต่อหรือไม่?'))throw new Error('รายการเดิมบันทึกแล้ว ข้อมูลที่แก้ไขยังอยู่ในเครื่อง');
+      }
+      if(read(key)?.payload?.request_id!==queued.payload.request_id)throw new Error('คิวในเครื่องเปลี่ยนจากอีกแท็บ กรุณาเปิดวันที่นี้ใหม่');
+      write(prefix+'recovered-request:'+date+':'+queued.payload.request_id,{queued,current:data});
+      localStorage.removeItem(key);queued=null;
+      context={...context,revision:recovery.revision,draft_revision:recovery.draft_revision||0};state.contexts.set(date,context);
+      if(recovery.state==='committed'&&stable(recovery.document_data)===fp){context.submitted=true;context.draft=JSON.stringify(normalized);write(prefix+'context:'+date,context);write(prefix+'synced:'+date,{fingerprint:fp});return {...recovery.result,message:'รายการนี้บันทึกฐานกลางแล้ว · ไม่ส่งซ้ำ'};}
+    }
+    if(!queued){queued={fingerprint:fp,payload:{request_id:crypto.randomUUID(),branch_code:branch,business_date:date,expected_revision:context.revision||0,expected_draft_revision:context.draft_revision||0,data:normalized}};write(key,queued);}
+    else if(queued.payload.expected_draft_revision===undefined){queued.payload.expected_draft_revision=context.draft_revision||0;write(key,queued);}
     const result=await rpc('post_daily_document',{payload:queued.payload});
     if(result.status!=='Success')throw new Error('ฐานกลางยังไม่ยืนยันการบันทึก');
     localStorage.removeItem(key);
     state.contexts.set(date,{...context,revision:result.revision,draft_revision:0,submitted:true,draft:JSON.stringify(normalized)});
     write(prefix+'context:'+date,state.contexts.get(date));
+    write(prefix+'synced:'+date,{fingerprint:fp});
     return {...result,message:'บันทึกฐานกลางแล้ว · สำเนาชีตรอส่ง'};
   }
   async function call(action,args={}){
@@ -139,5 +173,23 @@
       if(error)throw error;return {rows:(data||[]).map(x=>({name:x.item_name,itemId:x.item_code,quantity:x.quantity_on_hand,unit:x.base_unit_name}))};
     }throw new Error('unsupported central action');
   }
-  window.BOY_DAILY_STORE={handles,call,catalog,normalize,state};
+  async function flushLocalDraft(){const date=state.currentDate;if(!date||state.contexts.get(date)?.submitted||state.contexts.get(date)?.archive)return;const local=read((branch==='TAWANA'?'BOY_TAWANA_DRAFT_':'BOY_BIGC_EXPENSE_DRAFT_')+date);if(local)await saveDraft(date,local);}
+  let checking=false,lastCheck=0;
+  async function checkRemoteDraft(){
+    if(checking||document.visibilityState==='hidden'||!navigator.onLine||Date.now()-lastCheck<10000)return;
+    const date=state.currentDate,context=state.contexts.get(date);if(!date||!context||read(prefix+'request:'+date))return;
+    checking=true;lastCheck=Date.now();
+    try{
+      const version=await rpc('get_daily_sync_version',{target_branch_code:branch,target_date:date});
+      if(Number(version.revision)===Number(context.revision||0)&&Number(version.draft_revision)===Number(context.draft_revision||0))return;
+      const local=read((branch==='TAWANA'?'BOY_TAWANA_DRAFT_':'BOY_BIGC_EXPENSE_DRAFT_')+date);
+      const fingerprint=local?await draftFingerprint(local):context.remoteFingerprint;
+      if(fingerprint===context.remoteFingerprint&&typeof window.loadData==='function')await window.loadData();
+      else{const status=document.querySelector('#saveStatus')||document.querySelector('#draftStatus');if(status)status.textContent='มีร่างใหม่จากอีกเครื่อง · ร่างในเครื่องนี้ยังไม่ถูกทับ กรุณาเปิดวันที่นี้ใหม่เพื่อเทียบข้อมูล';}
+    }catch(_){}finally{checking=false;}
+  }
+  window.addEventListener?.('focus',checkRemoteDraft);
+  document.addEventListener?.('visibilitychange',()=>{if(document.visibilityState==='visible')checkRemoteDraft();else void flushLocalDraft().catch(()=>{});});
+  window.setInterval?.(checkRemoteDraft,60000);
+  window.BOY_DAILY_STORE={handles,call,catalog,normalize,state,flushLocalDraft,checkRemoteDraft};
 })();

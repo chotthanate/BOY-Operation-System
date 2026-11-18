@@ -22,6 +22,46 @@ test('an unresolved request cannot be silently replaced with edited amounts',asy
 test('offline loading does not call Google Sheet or claim a save',async()=>{const h=harness({online:false});await assert.rejects(h.app.call('loadData',{date:'2026-11-05'}),/ออฟไลน์/);assert.equal(h.calls.length,0);});
 test('catalog is cached for the same authenticated user instead of re-downloaded per edit',async()=>{const h=harness();await h.app.catalog();await h.app.catalog();await h.app.normalize({exp:[]});assert.equal(h.calls.filter(c=>c.name==='get_daily_catalog').length,1);});
 test('cloud/local draft disagreement keeps a recovery copy without overwriting cloud',async()=>{const h=harness();h.values.set('BOY_TAWANA_DRAFT_2026-11-05',JSON.stringify({exp:[{i:'local'}]}));h.responses.push(()=>({data:{revision:3,draft:'{"exp":[{"i":"cloud"}]}'}}));const x=await h.app.call('loadData',{date:'2026-11-05'});assert.equal(JSON.parse(x.draft).exp[0].i,'cloud');assert.ok([...h.values.keys()].some(k=>k.includes('recovered:')));});
+test('choosing central draft replaces only the active cache and does not prompt again',async()=>{
+ const h=harness();let prompts=0;h.context.confirm=()=>{prompts++;return false;};
+ h.values.set('BOY_TAWANA_DRAFT_2026-11-05',JSON.stringify({exp:[],cash:{v:10}}));
+ await h.app.catalog();const cloud={exp:[],cash:{v:20}};
+ h.responses.push(()=>({data:{revision:0,draft_revision:2,draft:JSON.stringify(cloud)}}));
+ await h.app.call('loadData',{date:'2026-11-05'});
+ h.responses.push(()=>({data:{revision:0,draft_revision:2,draft:JSON.stringify(cloud)}}));
+ await h.app.call('loadData',{date:'2026-11-05'});
+ assert.equal(prompts,1);assert.equal(JSON.parse(h.values.get('BOY_TAWANA_DRAFT_2026-11-05')).cash.v,20);
+ assert.ok([...h.values.keys()].some(k=>k.includes('recovered:')));
+});
+test('an acknowledged old cache follows the newer shared draft without a conflict prompt',async()=>{
+ const h=harness();let prompts=0;h.context.confirm=()=>{prompts++;return false;};await h.app.catalog();
+ const old={exp:[],cash:{v:10}};h.responses.push(()=>({data:{revision:0,draft_revision:1,draft:JSON.stringify(old)}}));
+ await h.app.call('loadData',{date:'2026-11-05'});h.values.set('BOY_TAWANA_DRAFT_2026-11-05',JSON.stringify(old));
+ h.responses.push(()=>({data:{revision:0,draft_revision:2,draft:JSON.stringify({exp:[],cash:{v:30}})}}));
+ const result=await h.app.call('loadData',{date:'2026-11-05'});assert.equal(JSON.parse(result.draft).cash.v,30);assert.equal(prompts,0);
+});
+test('unchanged drafts and reordered object keys do not cause extra writes',async()=>{
+ const h=harness();await h.app.catalog();h.responses.push(()=>({data:{revision:0,draft_revision:3,draft:'{"exp":[],"cash":{"v":10}}'}}));
+ await h.app.call('loadData',{date:'2026-11-05'});const result=await h.app.call('autoSave',{date:'2026-11-05',data:{cash:{v:10},exp:[]}});
+ assert.equal(result.status,'unchanged');assert.equal(h.calls.filter(x=>x.name==='save_daily_draft').length,0);
+});
+test('failed old submission is fenced before a changed request replaces it, with both copies retained',async()=>{
+ const h=harness();await h.app.catalog();await h.app.call('loadData',{date:'2026-11-05'});
+ h.responses.push(()=>{throw new Error('network');});await assert.rejects(h.app.call('submit',{date:'2026-11-05',data:{exp:[]}}));
+ const old=JSON.parse(h.values.get('BOY_CENTRAL_DAILY:TAWANA:request:2026-11-05'));h.context.confirm=()=>true;
+ h.responses.push((name)=>{assert.equal(name,'resolve_daily_request');return{data:{state:'not_found',revision:0}};},
+ (name,args)=>{assert.equal(name,'resolve_daily_request');assert.equal(args.payload.supersede,true);return{data:{state:'superseded',revision:0,draft_revision:5}};},
+ (name,args)=>{assert.equal(name,'post_daily_document');assert.notEqual(args.payload.request_id,old.payload.request_id);assert.equal(args.payload.expected_draft_revision,5);return{data:{status:'Success',revision:1}};});
+ await h.app.call('submit',{date:'2026-11-05',data:{exp:[],cash:{v:500}}});
+ assert.ok([...h.values.keys()].some(k=>k.includes('recovered-request:')));assert.equal(h.values.has('BOY_CENTRAL_DAILY:TAWANA:request:2026-11-05'),false);
+});
+test('a newer committed edit on another device stops recovery without discarding its queue',async()=>{
+ const h=harness();await h.app.catalog();await h.app.call('loadData',{date:'2026-11-05'});
+ h.responses.push(()=>{throw new Error('network');});await assert.rejects(h.app.call('submit',{date:'2026-11-05',data:{exp:[]}}));
+ const key='BOY_CENTRAL_DAILY:TAWANA:request:2026-11-05',before=h.values.get(key);
+ h.responses.push(()=>({data:{state:'committed',revision:3,result:{revision:1},document_data:{exp:[],cash:{v:200}}}}));
+ await assert.rejects(h.app.call('submit',{date:'2026-11-05',data:{exp:[],cash:{v:500}}}),/อีกเครื่อง/);assert.equal(h.values.get(key),before);
+});
 test('modified pages and scripts have valid JavaScript syntax',()=>{for(const file of ['assets/js/boy-daily-store.js','assets/js/bigc-v2.js','assets/js/dashboard.js','apps-script/Code.js'])new vm.Script(fs.readFileSync(path.join(root,file),'utf8'),{filename:file});for(const file of ['tawana.html','bigc.html'])for(const match of fs.readFileSync(path.join(root,file),'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(match[1],{filename:file});});
 test('expense definitions retain their UUID without masquerading as stock items',async()=>{
  const h=harness();h.catalog.items.push({id:'expense-uuid',expense_item_id:'expense-uuid',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat'});

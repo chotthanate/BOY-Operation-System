@@ -248,7 +248,7 @@
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
   <link rel="stylesheet" href="assets/css/expense-app.css?v=20261118-1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
-  <script src="assets/js/expense-app.js?v=20261118-1"></script>
+  <script src="assets/js/expense-app.js?v=20261119-recovery1"></script>
 </head>
 <body>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
@@ -740,8 +740,8 @@
       const data = collectSnapshot();
       localStorage.setItem('BOY_BIGC_EXPENSE_DRAFT_'+date,JSON.stringify(data));
       timer = setTimeout(function() {
-        apiCall('bigcExpenseAutoSave', { date, data }).catch(function() {});
-      }, 8000);
+        apiCall('bigcExpenseAutoSave', { date, data }).then(()=>setStatus('บันทึกร่างฐานกลางแล้ว')).catch(error=>setStatus('ร่างอยู่ในเครื่อง · ส่งฐานกลางไม่สำเร็จ: '+error.message));
+      }, 1500);
     }
 
     async function loadData() {
@@ -825,7 +825,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261118-1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261119-recovery1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

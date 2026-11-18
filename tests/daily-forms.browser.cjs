@@ -23,6 +23,18 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แ�
    return route.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
   });
   await page.goto(`http://fixture.local/${name}.html`);await page.waitForFunction(()=>window.BOY_DAILY_STORE&&typeof itemMetaDict!=='undefined'&&Object.keys(itemMetaDict).length>0);
+  await page.evaluate(()=>window.BOY_EXPENSE_APP.toggleMenu());
+  assert.equal(await page.locator('#expenseNavigation a[href="reimbursements.html"]').isVisible(),true);
+  await page.locator('#expenseNavigation [data-expense-nav-close]').click();
+  if(name==='tawana'){
+   const result=await page.evaluate(async()=>{
+    let confirmations=0,submissions=0;const oldSubmit=submitToSheet,oldConfirm=window.confirm;
+    document.getElementById('val-transfer').value='';window.confirm=()=>{confirmations++;return false;};submitToSheet=async()=>{submissions++;};
+    await confirmSubmitReview();const cancelled=submissions===0;window.confirm=()=>{confirmations++;return true;};await confirmSubmitReview();
+    submitToSheet=oldSubmit;window.confirm=oldConfirm;return{confirmations,submissions,cancelled};
+   });
+   assert.deepEqual(result,{confirmations:2,submissions:1,cancelled:true});
+  }
   await page.evaluate(()=>{
    const identity={item_id:'fruit-id',receiving_mode:'delivery'};
    if(location.pathname.endsWith('tawana.html'))addRow('แตงโม',2,'กก.',100,'วัตถุดิบ','','','','cash',identity);
