@@ -42,7 +42,7 @@ test('save result replaces only its source catalog without another database read
 test('the unified item view reads both Supabase catalogs, never Sheet fallback', () => {
   assert.match(source, /combineItemCatalog\(\.\.\.await Promise\.all\(\[getCatalog\(ITEM_SHEET\), getCatalog\(EXPENSE_SHEET\)\]\)\)/);
   const refresh = source.slice(source.indexOf('async function refresh('), source.indexOf('async function load(', source.indexOf('async function refresh(')));
-  assert.match(refresh, /catalog = await fromSupabase\(sheetName\)/);
+  assert.match(refresh, /catalog = await fromSupabase\(sheetName,false,old\?\.catalog,knownVersions\)/);
   assert.doesNotMatch(refresh, /legacyLoad\(/);
 });
 

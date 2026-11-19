@@ -196,12 +196,20 @@
     return supabaseClient;
   }
 
-  async function fromSupabase(sheetName, overlayPending = false) {
+  async function fromSupabase(sheetName, overlayPending = false, previous = null, knownVersions = null) {
     const central = client();
     if (!central) throw new Error("Supabase ยังไม่พร้อม");
     const { data: sessionData } = await withTimeout(central.auth.getSession(), 2500, "Supabase ใช้เวลาตอบกลับนานเกินไป");
     if (!sessionData?.session) throw new Error("ยังไม่มีเซสชัน Supabase — กรุณาเข้าสู่ระบบออนไลน์");
+    const names=sheetName===ITEM_SHEET?[ITEM_SHEET,EXPENSE_SHEET]:[sheetName];
+    let versions=knownVersions;
+    if(previous&&!versions){
+      const response=await withTimeout(central.schema('boy_central').rpc('get_master_catalog_versions',{sheet_names:names}),8000,'ตรวจเวอร์ชันข้อมูลไม่สำเร็จ');
+      if(response.error)throw response.error;versions=response.data;
+    }
     async function getCatalog(name) {
+      const old=name===EXPENSE_SHEET&&sheetName===ITEM_SHEET?previous?._expenseCatalog:name===ITEM_SHEET&&previous?{...previous,rows:(previous.rows||[]).filter(row=>!isExpenseRow(row))}:previous;
+      if(old&&versions?.[name]&&String(versions[name].version)===String(old.sourceRevision))return {...old,serverMirror:versions[name].serverMirror};
       const { data, error } = await withTimeout(central.schema("boy_central").rpc("get_master_catalog", { target_sheet_name: name }), 8000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
       if (error) throw error;
       if (!data?.sheetName) throw new Error(`ไม่พบ ${name} ใน Supabase`);
@@ -213,13 +221,16 @@
     return overlayPending ? mergePendingOperations(sheetName, catalog) : catalog;
   }
 
-  async function refresh(sheetName, legacyLoad, notify = true) {
+  async function refresh(sheetName, legacyLoad, notify = true, knownVersions = null) {
     if (pending.has(sheetName)) return pending.get(sheetName);
     const task = (async () => {
       let catalog;
       let source = "supabase";
       try {
-        catalog = await fromSupabase(sheetName);
+        const old=await cached(sheetName);
+        catalog = await fromSupabase(sheetName,false,old?.catalog,knownVersions);
+        catalog._validatedAt=Date.now();
+        delete catalog._supabaseError;
       }
       catch (supabaseError) {
         const local = await cached(sheetName);
@@ -242,7 +253,7 @@
     const entry = await cached(sheetName);
     if (entry?.catalog && !options.force) {
       const catalog = { ...entry.catalog, _source: "device-cache", _originSource: entry.source, _stale: Date.now() - entry.cachedAt > SOFT_TTL };
-      refresh(sheetName, legacyLoad, true).catch(() => {});
+      if(Date.now()-Number(catalog._validatedAt||0)>30000)refresh(sheetName, legacyLoad, true).catch(() => {});
       return catalog;
     }
     return refresh(sheetName, legacyLoad, false);
@@ -311,7 +322,8 @@
           if (error) throw error;
         committed = true;
         const catalog = catalogFromSave(sheetName, targetSheet, data, currentCatalog);
-        try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
+        if(data.serverMirror===true){catalog._mirrorStatus='queued';delete catalog._mirrorError;}
+        else try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
         catch (mirrorError) { catalog._mirrorStatus = "failed"; catalog._mirrorError = mirrorError?.message || String(mirrorError); }
         return remember(sheetName, catalog, "supabase");
       } catch (error) {
@@ -384,7 +396,9 @@
           savedCatalog = catalogFromSave(sheetName, targetSheet, data, savedCatalog);
         }
         const catalog = savedCatalog;
-        try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
+        const serverMirror=[...groups.keys()].every(name=>name===EXPENSE_SHEET&&sheetName===ITEM_SHEET?catalog._expenseCatalog?.serverMirror===true:catalog.serverMirror===true);
+        if(serverMirror){catalog._mirrorStatus='queued';delete catalog._mirrorError;}
+        else try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
         catch (mirrorError) { catalog._mirrorStatus = "failed"; catalog._mirrorError = mirrorError?.message || String(mirrorError); }
         return remember(sheetName, catalog, "supabase");
       } catch (error) {
@@ -407,6 +421,15 @@
       if (await cached(sheetName)) continue;
       try { await refresh(sheetName, () => legacyLoader(entry[0]), false); } catch (_) {}
     }
+  }
+
+  async function revalidate(sheetNames){
+    const names=[...new Set(sheetNames.flatMap(name=>name===ITEM_SHEET?[ITEM_SHEET,EXPENSE_SHEET]:[name]))];
+    const central=client();if(!central||!navigator.onLine)return;
+    const {data:sessionData}=await central.auth.getSession();if(!sessionData?.session)return;
+    const {data,error}=await withTimeout(central.schema('boy_central').rpc('get_master_catalog_versions',{sheet_names:names}),8000,'ตรวจเวอร์ชันข้อมูลไม่สำเร็จ');
+    if(error)throw error;
+    await Promise.all([...new Set(sheetNames)].map(name=>refresh(name,null,true,data)));
   }
 
   async function syncPending(sheetName) {
@@ -464,5 +487,5 @@
 
   window.addEventListener("online", () => window.dispatchEvent(new CustomEvent("boy-master-connectivity-restored")));
 
-  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, refresh, prefetch, cached, pendingCount, pendingDetails, syncPending, syncAllPending };
+  window.BOY_MASTER_STORE = { load, save, bulkSave, setActive, refresh, prefetch, revalidate, cached, pendingCount, pendingDetails, syncPending, syncAllPending };
 })();

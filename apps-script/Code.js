@@ -3422,13 +3422,16 @@ function handleCentralMirrorPayload_(payload) {
   if(!Number.isFinite(version)) throw new Error('invalid mirror revision');
   const scriptLock=lock_();scriptLock.waitLock(30000);
   try{
-    const ss=ss_(CONFIG.spreadsheets.transactions);
-    const sh=ss.getSheetByName('T_Central_Mirror')||ss.insertSheet('T_Central_Mirror');
+    const isMaster=payload.entity_type==='master_row';
+    const ss=ss_(isMaster?CONFIG.spreadsheets.master:CONFIG.spreadsheets.transactions);
+    const mirrorTab=isMaster?'T_Master_Mirror':'T_Central_Mirror';
+    const sh=ss.getSheetByName(mirrorTab)||ss.insertSheet(mirrorTab);
     if(!sh.getLastRow()) sh.appendRow(['entity_id','entity_type','branch_code','business_date','revision','mirrored_at','payload_json']);
     const match=sh.getLastRow()>1?sh.getRange(2,1,sh.getLastRow()-1,1).createTextFinder(id).matchEntireCell(true).findNext():null;
     const targetRow=match?match.getRow():sh.getLastRow()+1;
     const existing=match?sh.getRange(targetRow,1,1,5).getValues()[0]:null;
     if(existing&&Number(existing[4])>version) return {status:'success',stale:true};
+    if(isMaster) writeCentralMasterCopy_(ss,payload);
     // Keep the familiar income/expense tabs as a readable copy, but never run
     // the old stock-writing routines. Stock comes from canonical movements.
     if(payload.entity_type==='daily_document'){
@@ -3452,6 +3455,32 @@ function handleCentralMirrorPayload_(payload) {
     if(verified!==json)throw new Error('mirror read-back verification failed');
     return {status:'success',entity_id:id,revision:version};
   }finally{scriptLock.releaseLock();}
+}
+
+// Signed central snapshots only. Never run legacy stock/expense side effects.
+function writeCentralMasterCopy_(ss,payload) {
+  const name=String(payload.sheet_name||''),idHeader=String(payload.id_header||''),data=payload.data||{},record=String(payload.record_key||'');
+  if(!/^M_/.test(name)||!idHeader||!record||String(data[idHeader]||'')!==record)throw new Error('invalid master snapshot');
+  const readonly=Array.isArray(payload.readonly_headers)?payload.readonly_headers:[];
+  const keys=Object.keys(data).filter(function(key){return key.indexOf('__')!==0&&readonly.indexOf(key)<0;});
+  const target=ss.getSheetByName(name)||ss.insertSheet(name);
+  let headers=target.getLastRow()?target.getRange(1,1,1,Math.max(1,target.getLastColumn())).getValues()[0]:[];
+  keys.forEach(function(key){if(headers.indexOf(key)<0)headers.push(key);});
+  if(headers.indexOf(idHeader)<0)throw new Error('missing master identity');
+  if(headers.length>target.getMaxColumns())target.insertColumnsAfter(target.getMaxColumns(),headers.length-target.getMaxColumns());
+  target.getRange(1,1,1,headers.length).setValues([headers]);
+  const idColumn=headers.indexOf(idHeader)+1;
+  const match=target.getLastRow()>1?target.getRange(2,idColumn,target.getLastRow()-1,1).createTextFinder(record).matchEntireCell(true).findNext():null;
+  const row=match?match.getRow():Math.max(2,target.getLastRow()+1);
+  const values=match?target.getRange(row,1,1,headers.length).getValues()[0]:headers.map(function(){return '';});
+  const cell=function(value){return value===null||value===undefined?'':typeof value==='object'?JSON.stringify(value):value;};
+  keys.forEach(function(key){values[headers.indexOf(key)]=cell(data[key]);});
+  // Preserve any computed columns in the existing sheet.
+  const formulas=match?target.getRange(row,1,1,headers.length).getFormulas()[0]:[];
+  formulas.forEach(function(formula,index){if(formula&&keys.indexOf(headers[index])<0)values[index]=formula;});
+  target.getRange(row,1,1,headers.length).setValues([values]);
+  const actual=target.getRange(row,1,1,headers.length).getValues()[0];
+  keys.forEach(function(key){const expected=cell(data[key]),value=actual[headers.indexOf(key)];let verified=value;if(value instanceof Date&&typeof expected==='string'){if(/^\d{4}-\d{2}-\d{2}$/.test(expected))verified=Utilities.formatDate(value,'Asia/Bangkok','yyyy-MM-dd');else if(/^\d{4}-\d{2}-\d{2}T/.test(expected))verified=value.toISOString();}if(String(verified)!==String(expected))throw new Error('master copy read-back mismatch: '+key);});
 }
 
 function handleBigcV2MirrorWorkflow_(payload) {
