@@ -1,5 +1,12 @@
 # Work Status
 
+## 2026-11-19: Controlled base-unit edits
+
+- Applied `controlled_one_to_one_base_unit_change`: admin-only public invoker/private checked helper, no anonymous execution. The item editor explicitly confirms 1 old count unit = 1 new count unit; product and unit mappings are updated atomically, old unit stays at rate 1 and historical transactions/stock movements are not rewritten. Fresh item-unit versions return with the save so the subsequent purchase-unit panel does not send stale versions. No offline queuing for unit conversions.
+- This supports semantic 1:1 count-unit changes across items, not numeric rescaling (kg to grams) or changing one member of a shared stock pool. Those paths remain blocked with an actionable message. Normal edits/imports still use their existing version guards; the old raw base-unit guard is not disabled.
+- Owner-requested pork milk ITEM-0324 and red chicken ITEM-0326 now use ไม้, with ชิ้น retained at rate 1. Both have the same two original stock movements. No other item units were changed in production. A new UI version/reload is required for other self-service conversions; do not clear browser storage.
+- Tests: 150 Node tests; SQL rollback RPC checks under authenticated role (history, old/new unit links, stale edits, non-count conversion, pool changes and non-admin denial); 390/1440px browser form tests exercise cancel/confirm and purchase pack rate 52.
+
 ## 2026-11-19: Master catalog performance and durable copies
 
 - Applied `20261119104128_master_catalog_performance_and_durable_mirrors`. Authenticated, company-scoped version RPC returns only revision/capability metadata. Warm catalogs reuse unchanged data; the item/expense union downloads only the changed half. Cached reads are displayed immediately, validation is deduplicated/throttled, and focus checks batch metadata. No new polling interval was added.

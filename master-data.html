@@ -349,7 +349,7 @@
       const itemEditor=current==='items'&&editing?.__sourceSheet!=='M_รายการค่าใช้จ่าย'&&values['ประเภทข้อมูล']!=='EXPENSE_ITEM';
       const purchasePanel=$('#itemPurchaseSettings');
       const managePurchase=itemEditor&&purchasePanel&&!purchasePanel.hidden;
-      let purchaseBase='',purchaseUnit='',purchaseConversion=1;
+      let purchaseBase='',purchaseUnit='',purchaseConversion=1,baseUnitOneToOne=false;
       if(itemEditor){
         const mode=values['รูปแบบสต็อก']||'ไม่เก็บสต็อก';
         values['ติดตามสต็อก']=mode==='นับเป็นรายการนี้';
@@ -371,7 +371,12 @@
           if(!same&&(!purchaseUnit||purchaseUnit===purchaseBase||!Number.isFinite(purchaseConversion)||purchaseConversion<=0)){
             alert('เลือกหน่วยซื้อที่ต่างจากหน่วยฐาน และระบุว่า 1 หน่วยซื้อเท่ากับกี่หน่วยฐาน');return;
           }
-          if(editing?.base_unit_id&&String(editing.base_unit_id)!==purchaseBase&&!confirm('เปลี่ยนหน่วยฐาน? ยอดสต็อกและสูตรเก่าจะไม่แปลงจำนวนย้อนหลังอัตโนมัติ กรุณาตรวจสอบยอดและสูตรหลังบันทึก'))return;
+          if(editing?.base_unit_id&&String(editing.base_unit_id)!==purchaseBase){
+            const units=referenceCache.units?.rows||[],oldUnit=units.find(u=>String(u.unit_id)===String(editing.base_unit_id)),newUnit=units.find(u=>String(u.unit_id)===purchaseBase);
+            if(!oldUnit||!newUnit){alert('ข้อมูลหน่วยยังไม่ครบ กรุณาเปิดรายการใหม่');return}
+            if(!confirm(`เปลี่ยนหน่วยฐาน: ${oldUnit['ชื่อหน่วย']} → ${newUnit['ชื่อหน่วย']}\n\nยืนยันว่า 1 ${oldUnit['ชื่อหน่วย']}เดิม = 1 ${newUnit['ชื่อหน่วย']} ใช่ไหม?\nยอดสต็อกและจำนวนย้อนหลังจะไม่เปลี่ยน\n\nหากจำนวนไม่เท่ากัน ให้ยกเลิกและตั้งหน่วยซื้อพร้อมอัตราแปลงแทน`))return;
+            baseUnitOneToOne=true;
+          }
         }
       }
       if(current==='expenseItems'){
@@ -404,10 +409,11 @@
       setStatus('กำลังบันทึก…');
       try{
         if(!window.BOY_MASTER_STORE?.save)throw new Error('ระบบ Supabase ไม่พร้อม จึงยังไม่บันทึกออนไลน์');
-        catalog=await window.BOY_MASTER_STORE.save(savedSheet,savedRowNumber||null,values,actor().name,legacySave,catalog);
+        catalog=await window.BOY_MASTER_STORE.save(savedSheet,savedRowNumber||null,values,actor().name,legacySave,catalog,{baseUnitOneToOne});
         catalog.headers=[...new Set([...(catalog.headers||[]),...(EXTRA_HEADERS[current]||[])])];
         referenceCache[current]=catalog;
         Object.assign(referenceCache,catalog.references||{});
+        if(catalog.unitCatalog)referenceCache.itemUnits=catalog.unitCatalog;
         if(managePurchase){
           editing=(catalog.rows||[]).find(row=>String(row.item_id)===String(values.item_id||editing?.item_id))||editing;
           setStatus('กำลังบันทึกหน่วยซื้อ…');
@@ -456,7 +462,7 @@
   <script src="assets/js/boy-master-excel.js?v=20260929-1"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261102-4"></script>
-  <script src="assets/js/boy-master-store.js?v=20261119-perf1"></script>
+  <script src="assets/js/boy-master-store.js?v=20261119-unit-change1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261102-4"></script>
   <script>

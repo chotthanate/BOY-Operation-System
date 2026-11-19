@@ -299,7 +299,7 @@
     return combineItemCatalog(items, expenses);
   }
 
-  async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog) {
+  async function save(sheetName, rowNumber, values, actorName, legacySave, currentCatalog, options = {}) {
     const central = client();
     const currentRow = findCurrentRow(currentCatalog, rowNumber, values);
     const targetSheet = sheetName === ITEM_SHEET ? sourceSheetFor(currentRow, values) : sheetName;
@@ -314,14 +314,18 @@
           : currentRow;
         const payload = sourcePayload(targetSheet, values, { headers: sourceCatalog?.headers || [], row: sourceRow });
         if (sourceRow?.__version) payload.__version = sourceRow.__version;
-        const { data, error } = await withTimeout(central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
+        const request = options.baseUnitOneToOne === true && targetSheet === ITEM_SHEET
+          ? central.schema("boy_central").rpc("change_master_base_unit_one_to_one", { payload, actor_name: actorName || "เจ้าของร้าน" })
+          : central.schema("boy_central").rpc("bulk_upsert_master_catalog_rows", {
             target_sheet_name: targetSheet,
             rows: [payload],
             actor_name: actorName || "เจ้าของร้าน"
-          }), 15000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
+          });
+        const { data, error } = await withTimeout(request, 15000, "Supabase ใช้เวลาตอบกลับนานเกินไป");
           if (error) throw error;
         committed = true;
         const catalog = catalogFromSave(sheetName, targetSheet, data, currentCatalog);
+        if (data.unitCatalog) catalog.unitCatalog = await remember('M_หน่วยสินค้า', data.unitCatalog, 'supabase');
         if(data.serverMirror===true){catalog._mirrorStatus='queued';delete catalog._mirrorError;}
         else try { await legacySave("mirror"); catalog._mirrorStatus = "synced"; }
         catch (mirrorError) { catalog._mirrorStatus = "failed"; catalog._mirrorError = mirrorError?.message || String(mirrorError); }
@@ -329,9 +333,10 @@
       } catch (error) {
         if (committed) throw new Error(`บันทึกใน Supabase แล้ว แต่โหลดผลกลับไม่สำเร็จ: ${error?.message || error} — อย่ากดบันทึกซ้ำ ให้รีเฟรชตรวจรายการก่อน`);
         if (/เซสชัน|เข้าสู่ระบบออนไลน์/.test(error?.message || "")) throw error;
-        if (!isRetryable(error)) throw error;
+        if (options.baseUnitOneToOne === true || !isRetryable(error)) throw error;
       }
     }
+    if (options.baseUnitOneToOne === true) throw new Error("การเปลี่ยนหน่วยฐานต้องเชื่อมต่อออนไลน์ กรุณาลองใหม่เมื่อมีอินเทอร์เน็ต");
     if (navigator.onLine && !central) throw new Error("Supabase ไม่พร้อม — ยังไม่ได้บันทึกออนไลน์ กรุณาลองใหม่");
     const operationId = localOperationId();
     const previousLocal = isLocalRowNumber(rowNumber) ? String(rowNumber) : "";
