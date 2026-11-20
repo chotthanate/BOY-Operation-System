@@ -592,9 +592,9 @@
       .expense-category-row, .expense-extra-row { grid-template-columns: 1fr; }
     }
   </style>
-  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261118-1">
+  <link rel="stylesheet" href="assets/css/expense-app.css?v=20261121-expense1">
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
-  <script src="assets/js/expense-app.js?v=20261119-recovery1"></script>
+  <script src="assets/js/expense-app.js?v=20261121-expense1"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 </head>
 <body>
@@ -1578,7 +1578,7 @@
       var mainType = mainSelect.value;
       var currentSubType = preferredSubType !== undefined ? String(preferredSubType || '').trim() : subSelect.value;
       var subTypes = expenseCategories.subTypesByMain[mainType] || [];
-      subSelect.innerHTML = buildOptions(subTypes, currentSubType, 'ประเภทย่อย');
+      subSelect.innerHTML = buildOptions(subTypes, currentSubType, 'ประเภทย่อย')+window.BOY_EXPENSE_APP.addCategoryOption('sub');
       if (currentSubType && subTypes.indexOf(currentSubType) === -1) {
         subSelect.innerHTML += '<option value="' + escapeHtml(currentSubType) + '" selected>' + escapeHtml(currentSubType) + '</option>';
       }
@@ -1590,7 +1590,7 @@
       var mainSelect = wrapper.querySelector('.exp-main-type');
       if (!mainSelect) return;
       var currentMainType = preferredMainType !== undefined ? String(preferredMainType || '').trim() : mainSelect.value;
-      mainSelect.innerHTML = buildOptions(expenseCategories.mainTypes, currentMainType, 'ประเภทหลัก');
+      mainSelect.innerHTML = buildOptions(expenseCategories.mainTypes, currentMainType, 'ประเภทหลัก')+window.BOY_EXPENSE_APP.addCategoryOption('main');
       if (currentMainType && expenseCategories.mainTypes.indexOf(currentMainType) === -1) {
         mainSelect.innerHTML += '<option value="' + escapeHtml(currentMainType) + '" selected>' + escapeHtml(currentMainType) + '</option>';
       }
@@ -2256,7 +2256,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261119-recovery1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261121-expense1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js"></script>
 </body>

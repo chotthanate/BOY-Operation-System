@@ -597,8 +597,8 @@
             <div class="expense-picker-options" role="listbox" hidden></div>
           </div>
           <div class="field-grid expense-category-fields">
-            <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}</select></label>
-            <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}</select></label>
+            <label>หมวดหลัก<select data-field="category_id"><option value="">เลือกหมวด</option>${optionHtml(mainCategories(), categoryId)}${window.BOY_EXPENSE_APP.addCategoryOption('main')}</select></label>
+            <label>หมวดย่อย<select data-field="subcategory_id"><option value="">ไม่ระบุหมวดย่อย</option>${optionHtml(subcategories(categoryId), selectedSubcategoryId)}${window.BOY_EXPENSE_APP.addCategoryOption('sub')}</select></label>
           </div>
           <div class="field-grid expense-fields fields-${fields.length}">${fields.join("")}</div>
           ${item&&!line.is_investment ? `<label class="receiving-mode-field">การรับสินค้า<select data-field="receiving_mode"><option value="immediate" ${line.receiving_mode!=='delivery'?'selected':''}>รับสินค้าทันที</option><option value="delivery" ${line.receiving_mode==='delivery'?'selected':''}>รอจัดส่ง</option></select></label>` : ''}
@@ -972,7 +972,7 @@
     const [branchResult, unitsResult, categoriesResult] = await Promise.all([
       client.schema("boy_central").from("branches").select("id,company_id,code,name,active").eq("code", branchApp.branchCode).single(),
       client.schema("boy_central").from("units").select("id,name,code").eq("active", true).order("name"),
-      client.schema("boy_central").from("categories").select("id,name,code,parent_id,category_type").eq("active", true).order("sort_order")
+      client.schema("boy_central").rpc("get_expense_category_options", { branch_code: branchApp.branchCode })
     ]);
     if (branchResult.error) throw branchResult.error;
     if (unitsResult.error) throw unitsResult.error;
@@ -980,6 +980,9 @@
     state.branch = branchResult.data;
     state.units = unitsResult.data || [];
     state.categories = categoriesResult.data || [];
+    window.BOY_EXPENSE_APP.configureCategories({branchCode:branchApp.branchCode,categories:async()=>state.categories,
+      rpc:async(name,args)=>{const {data,error}=await client.schema('boy_central').rpc(name,args);if(error)throw error;return data;},
+      onCreated:async(result,context)=>{state.categories=result.categories;const line=state.lines.find(x=>x.id===context.lineId);if(line&&result.categories.some(c=>c.id===result.id)){line.category_id=result.parent_id||result.id;line.subcategory_id=result.parent_id?result.id:'';}renderLines();saveMasterCache();scheduleDraftSave();}});
     const [itemLinksResult, expenseLinksResult, supplierLinksResult, linksResult] = await Promise.all([
       client.schema("boy_central").from("branch_items").select("item_id,minimum_stock,reorder_point,target_stock,preferred_supplier_id,default_purchase_unit_id,default_issue_unit_id,notes,active").eq("branch_id", state.branch.id),
       client.schema("boy_central").from("branch_expense_items").select("expense_item_id,sort_order,active").eq("branch_id", state.branch.id).order("sort_order"),

@@ -34,7 +34,7 @@
   async function catalog(force=false){
     const {data:{session}}=await client().auth.getSession();
     if(!session)throw new Error('ต้องเข้าสู่ระบบออนไลน์เพื่อโหลดรายการ');
-    const catalogKey=prefix+'catalog:v2:'+session.user.id;
+    const catalogKey=prefix+'catalog:v3:'+session.user.id;
     const cached=(state.catalogUser===session.user.id&&state.catalog)||read(catalogKey);
     state.catalogUser=session.user.id;
     if(cached&&!force&&Date.now()-cached.fetchedAt<15*60*1000){state.catalog=cached;return cached;}
@@ -43,6 +43,10 @@
     write(catalogKey,state.catalog);return state.catalog;
   }
   function legacyCatalog(c){
+    window.BOY_EXPENSE_APP?.configureCategories({branchCode:branch,categories:async()=>state.catalog?.categories||[],rpc,
+      onCreated:async(result,context)=>{await catalog(true);await window.pullItems?.(false);if(!result.categories.some(c=>c.id===result.id))return;const main=context.row?.querySelector('.exp-main-type,.main-type'),sub=context.row?.querySelector('.exp-sub-type,.sub-type');
+        if(main){main.value=result.main_name;main.dispatchEvent(new Event('change',{bubbles:true}));}
+        if(context.kind==='sub'&&sub){sub.value=result.name;sub.dispatchEvent(new Event('change',{bubbles:true}));}window.doSync?.();}});
     const units=new Map(c.units.map(u=>[u.id,u.name])),categories={},itemMeta={};
     const mains=c.categories.filter(x=>!x.parent_id).map(x=>x.name),subs={};
     c.categories.filter(x=>x.parent_id).forEach(x=>{const parent=c.categories.find(p=>p.id===x.parent_id);if(parent)(subs[parent.name]||=[]).push(x.name);});
