@@ -6,8 +6,8 @@ PINs are verified by Supabase Auth against separate owner and dedicated staff ac
 | --- | --- | --- |
 | Order, receive, return, daily summary | Yes | Yes |
 | Display size, order/receipt history | Yes | Yes |
-| Product list | Edit | Read only |
-| Units, costing, master mapping, stock settings | Edit | Hidden and write denied |
+| Product list | Full edit | Edit existing name, category, unit and visibility |
+| Receiving rules, costing, master mapping, stock settings | Edit | Hidden and write denied |
 | Default return items | Edit | Edit through restricted RPC |
 | Sorting | Shared settings | Current device |
 | Staff-link panel | Visible | Hidden |
@@ -27,3 +27,5 @@ node --test tests/boy-pin-auth.test.cjs tests/boy-staff-page-guard.test.cjs test
 ```
 
 `tests/bigc-staff-permissions.sql` tests the real dedicated staff identity inside a transaction and rolls back every preference change.
+
+- Staff product edits use `edit_bigc_v2_product`: one existing product, four basic fields, optimistic conflict check, no add/delete or protected settings. Both BigC branches route through the same branch authorization checks.

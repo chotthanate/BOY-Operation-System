@@ -185,6 +185,7 @@
     catch (_) { return null; }
   }
   function isStaffView() { return state.access ? !state.access.canManage : REQUESTED_VIEW === "staff"; }
+  function canEditProducts() { return !DEMO_MODE && Boolean(state.access && (state.access.canManage || state.session)); }
   function staffLink() {
     const url = new URL("bigc-v2.html", location.href);
     url.search = "?view=staff&online=1";
@@ -983,7 +984,7 @@
     const manage = !DEMO_MODE && !isStaffView() && state.access?.canManage;
     $$(".manager-settings").forEach((section) => { section.hidden = !manage; });
     $$("[data-manage-only]").forEach((section) => { section.hidden = !manage; });
-    $("#itemsSettingsHint").textContent = manage ? "เพิ่ม แก้ไข ลบ และเลือกแสดงในหน้าสั่งของ" : "ดูรายการสินค้า";
+    $("#itemsSettingsHint").textContent = manage ? "เพิ่ม แก้ไข ลบ และเลือกแสดงในหน้าสั่งของ" : canEditProducts() ? "แก้ไขรายการสินค้า" : "ดูรายการสินค้า";
     $("#logoutSettingsButton").hidden = DEMO_MODE;
     $("#settingsModal").classList.remove("hidden"); $("#settingsSearch").value = "";
     showSettingsSection("");
@@ -1257,7 +1258,7 @@
       const returnControl = mode === "returns" ? `<label class="setting-check"><input data-setting="defaultReturn" data-key="${escapeHtml(item.key)}" type="checkbox" ${item.defaultReturn ? "checked" : ""} aria-label="ขึ้นหน้าคืนอัตโนมัติ"><small>ขึ้นหน้าคืน</small></label>` : "";
       const selecting = manage && mode === "items" && state.selectingSettings;
       const selection = selecting ? `<label class="setting-select"><input data-select-settings-item="${escapeHtml(item.key)}" type="checkbox" aria-label="เลือก ${escapeHtml(item.displayName)}"></label>` : "";
-      const actions = manage ? `<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button></span>` : "";
+      const actions = (manage || (mode === "items" && canEditProducts())) ? `<span class="setting-actions"><button data-edit-item="${escapeHtml(item.key)}" type="button" aria-label="แก้ไข ${escapeHtml(item.displayName)}">✎</button></span>` : "";
       return `<div class="setting-row${selecting ? " setting-row-selectable" : ""}${manage ? "" : " setting-row-readonly"}">${selection}<span><strong>${escapeHtml(item.displayName)}</strong><small>${escapeHtml(detail)}</small></span>${weightControl}${returnControl}${actions}</div>`;
     }).join("")}</section>`).join("") || `<div class="empty-state">ไม่พบรายการ</div>`;
     $$('[data-settings-category]').forEach((button) => { button.onclick = () => $("#settings-category-" + button.dataset.settingsCategory)?.scrollIntoView({ behavior: "smooth", block: "start" }); });
@@ -1337,7 +1338,7 @@
     $("#addItemModal").classList.add("hidden"); renderSettings();
   }
   async function openEditItem(key, focusMapping = false) {
-    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
+    if (!canEditProducts()) return;
     const item = state.menu.find((row) => row.key === key); if (!item) return;
     state.editingKey = key; $("#editItemName").value = item.name || item.displayName; $("#editItemUnit").value = item.unit || "";
     const category = item.category || "อื่นๆ";
@@ -1357,6 +1358,11 @@
     $("#editItemMasterList").innerHTML = `<div class="empty-state">กำลังโหลดสินค้ากลาง…</div>`;
     $("#editItemError").textContent = "";
     $("#editItemModal").classList.remove("hidden");
+    const manage = Boolean(state.access?.canManage);
+    ["editItemHandlingType","editItemStockBigc","editItemStockTawana","editItemMappingSearch"].forEach(id => $("#" + id).closest("label").style.display = manage ? "" : "none");
+    $("#editItemMasterList").closest(".mapping-field").style.display = manage ? "" : "none";
+    $("#editItemMappingStatus").style.display = manage ? "" : "none";
+    if (!manage) return;
     try { await loadMasterItems(); renderMasterItemOptions(); }
     catch (error) {
       $("#editItemMappingStatus").textContent = `โหลดสินค้าข้อมูลกลางไม่สำเร็จ: ${error.message}`;
@@ -1364,12 +1370,28 @@
     }
   }
   async function saveEditedItem() {
-    if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
+    if (!canEditProducts()) return;
     const item = state.menu.find((row) => row.key === state.editingKey); if (!item) return;
     const name = $("#editItemName").value.trim(); const unit = $("#editItemUnit").value.trim();
     const category = $("#editItemCategory").value === "__new__" ? $("#editItemNewCategory").value.trim() : $("#editItemCategory").value.trim();
     const handlingType = $("#editItemHandlingType").value;
     if (!name || !category) { $("#editItemError").textContent = "กรุณากรอกชื่อรายการและหมวดหมู่"; return; }
+    if (!state.access?.canManage) {
+      if (!state.session || !navigator.onLine) { $("#editItemError").textContent = "เชื่อมต่อออนไลน์ก่อนบันทึก"; return; }
+      const fields = value => ({name:value.name || value.displayName,category:value.category,unit:value.unit || "",active:value.active !== false});
+      loading("กำลังบันทึกรายการ");
+      try {
+        const {data,error} = await workflowApi.rpc("edit_bigc_v2_product", {payload:{
+          key:item.key,name,category,unit,active:$("#editItemActive").checked,expected:fields(item)
+        }});
+        if (error) throw error;
+        state.menu = applyStaffSort(settingsMenu(data,state.menu)); cacheSettings(data,false);
+        renderAll(); saveDraft(); $("#editItemModal").classList.add("hidden"); renderSettings();
+        showActionToast("แก้ไขรายการแล้ว");
+      } catch (error) { $("#editItemError").textContent = "บันทึกไม่สำเร็จ: " + error.message; }
+      finally { loading("",false); }
+      return;
+    }
     const previous = { ...item };
     item.name = name; item.unit = unit; item.category = category; item.displayName = unit ? `${name} (${unit})` : name;
     item.handlingType = handlingType; item.costingBasis = receiveCostingBasis({ ...item, costingBasis: "" }, handlingType);
@@ -1601,7 +1623,13 @@
     }; });
     $("#refreshButton").onclick = loadPage;
     $("#settingsButton").onclick = openSettings; $("#staffSortButton").onclick = openSortSettings; $("#addReceiveButton").onclick = () => openPicker("receive"); $("#addReturnButton").onclick = () => openPicker("returns");
-    $("#submitReceive").onclick = () => submitWorkflow("receive"); $("#submitReturn").onclick = () => submitWorkflow("return");
+    $("#submitReceive").onclick = async () => {
+      if (state.saving) { showActionToast("กำลังบันทึก กรุณารอสักครู่", "warning"); return; }
+      try {
+        const saved = await submitWorkflow("receive");
+        showActionToast(saved ? (DEMO_MODE ? "บันทึกรับของทดลองแล้ว" : "บันทึกรับของแล้ว") : ($("#pageNotice").textContent || "ยังบันทึกไม่ได้ กรุณาตรวจรายการ"), saved ? "ok" : "error");
+      } catch (error) { showActionToast("บันทึกไม่สำเร็จ: " + error.message, "error"); }
+    }; $("#submitReturn").onclick = () => submitWorkflow("return");
     $("#openOrderSummary").onclick = openOrderSummary;
     $("#saveAndCopyOrder").onclick = async () => {
       const button = $("#saveAndCopyOrder"); if (button.disabled) return;

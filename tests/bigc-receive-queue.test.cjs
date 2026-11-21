@@ -22,7 +22,7 @@ function app(search='?view=admin') {
   const source=fs.readFileSync(path.join(__dirname,'../assets/js/bigc-v2.js'),'utf8');
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, `
     window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive,
-      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls, isStaffView};
+      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls, isStaffView, canEditProducts};
     renderReceive = () => {}; renderAll = () => {}; loadPage = async () => {};
     window.qa.mirrors = []; sheetApi = async (action,data) => {window.qa.mirrors.push(data.payload)};
     saveDraft = () => {window.qa.draftSaves=(window.qa.draftSaves||0)+1};
@@ -102,6 +102,10 @@ test('verified owner retains editing through a staff link; staff never gains edi
   const staff=app('?view=admin').qa;
   staff.state.access={canManage:false,companyRole:'staff'};
   assert.equal(staff.isStaffView(),true);
+  assert.equal(staff.canEditProducts(),false);
+  staff.state.session={user:{id:'test-staff'}};
+  assert.equal(staff.canEditProducts(),true);
+  assert.equal(staff.state.access.canManage,false);
 });
 
 test('ordered lines seed automatically alongside manual drafts, retaining edits and stable receipt keys',()=>{
