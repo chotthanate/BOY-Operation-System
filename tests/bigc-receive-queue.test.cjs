@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { randomUUID } = require('node:crypto');
 
-function app() {
+function app(search='?view=admin') {
   const nodes = new Map();
   const node = id => {
     if (!nodes.has(id)) nodes.set(id, {value:'2026-11-01',textContent:'',style:{},getBoundingClientRect:()=>({height:0}),classList:{add(){},remove(){},toggle(){}}});
@@ -13,7 +13,7 @@ function app() {
   };
   const storage = new Map();
   const context = {URLSearchParams, Intl, Date, crypto:{randomUUID},console,
-    location:{search:'?view=admin'},navigator:{onLine:true},
+    location:{search},navigator:{onLine:true},
     document:{body:{dataset:{},append(){}},createElement:()=>({style:{},setAttribute(){},addEventListener(){}}),addEventListener(){},documentElement:{style:{setProperty(){}}},querySelector:node,querySelectorAll:()=>[]},
     localStorage:{setItem:(k,v)=>storage.set(k,v),getItem:k=>storage.get(k)||null},
     setTimeout:()=>0,clearTimeout:()=>{},
@@ -22,7 +22,7 @@ function app() {
   const source=fs.readFileSync(path.join(__dirname,'../assets/js/bigc-v2.js'),'utf8');
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, `
     window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive,
-      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls};
+      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls, isStaffView};
     renderReceive = () => {}; renderAll = () => {}; loadPage = async () => {};
     window.qa.mirrors = []; sheetApi = async (action,data) => {window.qa.mirrors.push(data.payload)};
     saveDraft = () => {window.qa.draftSaves=(window.qa.draftSaves||0)+1};
@@ -65,7 +65,7 @@ test('only fresh and prepared fruit require actual weight; frozen bags use bag c
 
 test('weight-only pumpkin shows one field and uses current kg units for an older order',()=>{
   const {qa}=app();
-  const pumpkin={key:'pumpkin',name:'ฟักทอง',displayName:'ฟักทอง',category:'🍉 ผลไม้',unit:'กก.',inputMode:'weight',handlingType:'whole_fruit',costingBasis:'actual_raw_weight_kg'};
+  const pumpkin={key:'pumpkin',name:'ฟักทอง',displayName:'ฟักทอง',category:'🍉 ผลไม้',unit:'',inputMode:'weight',handlingType:'whole_fruit',costingBasis:'actual_raw_weight_kg'};
   qa.state.menu=[pumpkin];
   const line={line_key:'pumpkin',item_name:'ฟักทอง',unit_name:'',input_mode:'quantity',quantity:3.25,actual_weight_kg:3.25,checked:true};
   const controls=qa.receiveControls(pumpkin,line,'pumpkin');
@@ -77,6 +77,19 @@ test('weight-only pumpkin shows one field and uses current kg units for an older
   assert.equal(saved.input_mode,'weight');
   assert.equal(saved.quantity,3.25);
   assert.equal(saved.actual_weight_kg,3.25);
+  qa.state.order={pumpkin:6};
+  assert.equal(qa.linesFor('close_order')[0].unit_name,'');
+  assert.equal(qa.linesFor('close_order')[0].quantity,6);
+});
+
+test('verified owner retains editing through a staff link; staff never gains editing from URL',()=>{
+  const owner=app('?view=staff').qa;
+  assert.equal(owner.isStaffView(),true);
+  owner.state.access={canManage:true,companyRole:'admin'};
+  assert.equal(owner.isStaffView(),false);
+  const staff=app('?view=admin').qa;
+  staff.state.access={canManage:false,companyRole:'staff'};
+  assert.equal(staff.isStaffView(),true);
 });
 
 test('ordered lines seed automatically alongside manual drafts, retaining edits and stable receipt keys',()=>{

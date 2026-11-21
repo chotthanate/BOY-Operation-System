@@ -183,7 +183,7 @@
     try { return JSON.parse(localStorage.getItem(key) || "null"); }
     catch (_) { return null; }
   }
-  function isStaffView() { return REQUESTED_VIEW === "staff" || state.access?.canManage === false; }
+  function isStaffView() { return state.access ? !state.access.canManage : REQUESTED_VIEW === "staff"; }
   function staffLink() {
     const url = new URL("bigc-v2.html", location.href);
     url.search = "?view=staff&online=1";
@@ -822,7 +822,7 @@
         ? receiveHandlingType(item) : line.handling_type || receiveHandlingType(item);
       return {
         ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: line.item_id || item.itemId || item.item_id || null,
-        unit_name: type === "receive" ? item.unit : line.unit_name,
+        unit_name: type === "receive" ? (needsActualWeight(item) && isWeightQuantity(item) ? "กก." : item.unit) : line.unit_name,
         input_mode: type === "receive" ? (isPieceEstimatedFruit(item) || isFrozenFruit(item) ? "quantity" : item.inputMode) : line.input_mode,
         actual_weight_kg: type === "receive" && !needsActualWeight(item) ? null : line.actual_weight_kg,
         handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType),
