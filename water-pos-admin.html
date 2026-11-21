@@ -10,8 +10,9 @@
   <link rel="stylesheet" href="assets/css/water-pos-admin-enhancements.css?v=1.1.7">
   <style>.danger-text{color:#b9362b;margin-right:auto}.topbar-home-brand{min-width:0;display:flex;align-items:center;gap:14px;color:inherit;text-decoration:none}.topbar-home-brand>div{min-width:0}.topbar-home-brand h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:680px){.topbar-home-brand small{display:none}.topbar-home-brand h1{font-size:.9rem}}</style>
 </head>
-<body>
+<body><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div><script src="assets/js/boy-auth-status.js?v=20261121-recovery1"></script>
   <style id="boyAuthPendingStyle">body{visibility:hidden}</style>
+
   <header class="topbar">
     <a class="back" href="index.html" aria-label="กลับหน้าหลัก">←</a>
     <a class="topbar-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><img class="topbar-logo" id="topbarLogo" src="assets/icons/water-logo.png" alt="BOY ร้านน้ำ"><div><small>BOY OPERATION · POS v1.1.7</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div></a>
@@ -85,7 +86,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script>
   <script src="assets/js/water-pos-admin.js?v=1.1.7"></script>
 </body>
 </html>

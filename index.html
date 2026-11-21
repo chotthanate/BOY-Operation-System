@@ -172,8 +172,9 @@
     }
   </style>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+
 </head>
-<body>
+<body><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div><script src="assets/js/boy-auth-status.js?v=20261121-recovery1"></script>
   <main class="shell">
     <header class="topbar">
       <a class="brand" href="index.html" aria-label="หน้าหลัก"><div class="brand-mark">BOY</div><div><small>BOY OPERATION</small><strong>หน้าหลัก</strong></div></a>
@@ -219,7 +220,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261102-4"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/boy-auth-guard.js?v=20261102-4"></script>
+  <script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script>
   <script>
     const refreshButton = document.querySelector('#refreshButton');
     const logoutButton = document.querySelector('#logoutButton');

@@ -4,7 +4,7 @@ const path=require('node:path');
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const root=path.resolve(__dirname,'..');
-const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แตงโม',category_id:'cat',base_unit_id:'kg',track_stock:true},{id:'expense-id',expense_item_id:'expense-id',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat',track_stock:false}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ'}],item_units:[{item_id:'fruit-id',unit_id:'kg',conversion:1,purchase:true}],suppliers:[],item_suppliers:[]};
+const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',main:'วัตถุดิบ',sub:'ผลไม้',base_unit_id:'kg',track_stock:true},{id:'expense-id',expense_item_id:'expense-id',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat',main:'วัตถุดิบ',track_stock:false}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null},{id:'sub',name:'ผลไม้',parent_id:'cat'}],item_units:[{item_id:'fruit-id',unit_id:'kg',conversion:1,purchase:true}],suppliers:[],item_suppliers:[]};
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
  try{for(const name of ['tawana','bigc'])for(const width of [390,1440]){
@@ -17,7 +17,7 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แ�
   await page.route('**/*',async route=>{
    const u=new URL(route.request().url());
    if(u.origin!=='http://fixture.local')return route.fulfill({body:'',contentType:'text/javascript'});
-   if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"document.querySelector('#boyAuthPendingStyle')?.remove();",contentType:'text/javascript'});
+   if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();",contentType:'text/javascript'});
    if(u.pathname.endsWith('boy-central-config.js'))return route.fulfill({body:"window.BOY_CENTRAL_CONFIG={financeCutover:true,url:'https://example.invalid',publishableKey:'fixture'};",contentType:'text/javascript'});
    const file=path.join(root,u.pathname);if(!file.startsWith(root)||!fs.existsSync(file))return route.fulfill({status:404,body:''});
    return route.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
@@ -47,8 +47,12 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แ�
    row[row.length-1].classList.add('expanded');
   });
   assert.equal(await mode.isVisible(),true);
+  assert.equal(await page.locator(name==='tawana'?'.exp-sub-type':'.sub-type').last().inputValue(),'ผลไม้');
+  await page.evaluate(()=>checkAutoFill([...document.querySelectorAll(location.pathname.endsWith('tawana.html')?'.i':'.item')].at(-1)));
+  assert.equal(await page.locator(name==='tawana'?'.exp-sub-type':'.sub-type').last().inputValue(),'ผลไม้');
   const snapshot=await page.evaluate(()=>location.pathname.endsWith('tawana.html')?collectFormDataSnapshot():collectSnapshot());
   assert.equal(snapshot.exp.at(-1).item_id,'fruit-id');assert.equal(snapshot.exp.at(-1).receiving_mode,'delivery');
+  await page.locator('.investment-fields summary').last().click();
   await page.locator('.is-investment').last().check();
   await page.locator('.investment-project').last().fill('เปิดร้านทดสอบ');
   await page.locator('.investment-category').last().selectOption('construction');

@@ -8,8 +8,9 @@
   <link rel="stylesheet" href="assets/css/dashboard.css?v=20261105-2">
   <link rel="stylesheet" href="assets/css/expense-app.css?v=20261105-2">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+
 </head>
-<body data-dashboard-mode="branch">
+<body data-dashboard-mode="branch"><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div><script src="assets/js/boy-auth-status.js?v=20261121-recovery1"></script>
   <div class="app">
     <aside class="side">
       <a class="brand" href="index.html" aria-label="กลับหน้าหลัก"><span class="mark" id="branchMark">BOY</span><span><strong>BOY Operation</strong><small>Dashboard สาขา</small></span></a>
@@ -42,7 +43,7 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script>
   <nav id="branchBottomNav" class="branch-dashboard-nav" aria-label="เมนูสาขา"></nav>
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
   <script src="assets/js/expense-app.js?v=20261119-recovery1"></script>

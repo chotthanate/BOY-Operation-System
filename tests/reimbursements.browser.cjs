@@ -12,7 +12,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.
   }})})};
  });
  await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin!=='http://fixture.local')return route.fulfill({body:'',contentType:'text/javascript'});
-  if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"document.querySelector('#boyAuthPendingStyle')?.remove();",contentType:'text/javascript'});
+  if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();",contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-central-config.js'))return route.fulfill({body:"window.BOY_CENTRAL_CONFIG={url:'https://example.invalid',publishableKey:'fixture'}",contentType:'text/javascript'});
   const f=path.join(root,u.pathname);return route.fulfill({body:fs.existsSync(f)?fs.readFileSync(f):'',contentType:f.endsWith('.html')?'text/html':f.endsWith('.css')?'text/css':'text/javascript'});
  });

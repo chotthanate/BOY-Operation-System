@@ -34,7 +34,7 @@
   async function catalog(force=false){
     const {data:{session}}=await client().auth.getSession();
     if(!session)throw new Error('ต้องเข้าสู่ระบบออนไลน์เพื่อโหลดรายการ');
-    const catalogKey=prefix+'catalog:v3:'+session.user.id;
+    const catalogKey=prefix+'catalog:v4:'+session.user.id;
     const cached=(state.catalogUser===session.user.id&&state.catalog)||read(catalogKey);
     state.catalogUser=session.user.id;
     if(cached&&!force&&Date.now()-cached.fetchedAt<15*60*1000){state.catalog=cached;return cached;}

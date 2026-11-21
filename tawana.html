@@ -596,8 +596,9 @@
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
   <script src="assets/js/expense-app.js?v=20261121-expense1"></script>
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
+
 </head>
-<body>
+<body><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div><script src="assets/js/boy-auth-status.js?v=20261121-recovery1"></script>
   <div id="testModeBanner" class="test-mode-banner" hidden>🧪 โหมดทดลอง — ข้อมูลทั้งหมดจะถูกล้างก่อนเปิดใช้งานจริง</div>
   <div id="appSwitcherBackdrop" class="app-switcher-backdrop app-switcher-hidden" onclick="closeAppSwitcher()"></div>
   <nav id="appSwitcherPanel" class="app-switcher-panel app-switcher-hidden" aria-label="เลือกร้านค้า">
@@ -1601,7 +1602,11 @@
       document.querySelectorAll('.swipe-wrapper').forEach(function(wrapper) {
         var mainSelect = wrapper.querySelector('.exp-main-type');
         var subSelect = wrapper.querySelector('.exp-sub-type');
-        updateCategoryOptions(wrapper, mainSelect ? mainSelect.value : '', subSelect ? subSelect.value : '');
+        var item = wrapper.querySelector('.i');
+        var meta = item ? getExpenseMeta(item.value, wrapper.querySelector('.u')?.value) : {};
+        var main = (mainSelect && mainSelect.value) || meta.mainType || '';
+        var sub = (subSelect && subSelect.value) || (main === meta.mainType ? meta.subType : '') || '';
+        updateCategoryOptions(wrapper, main, sub);
       });
     }
 
@@ -2029,7 +2034,8 @@
       updateUnitOptions(wrapper, u);
       updateSupplierOptions(wrapper);
       updateCategoryOptions(wrapper, mainType, subType);
-      if (!mainType && !subType) syncCategoryFromItem(wrapper);
+      var restoredMeta = getExpenseMeta(i, u);
+      if (!subType && (!mainType || mainType === restoredMeta.mainType)) syncCategoryFromItem(wrapper);
       updateExpenseCard(wrapper);
       refreshExpenseIndexes();
       return wrapper;
@@ -2256,8 +2262,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261121-expense1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261121-recovery1"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
-  <script src="assets/js/boy-auth-guard.js"></script>
+  <script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script>
 </body>
 </html>

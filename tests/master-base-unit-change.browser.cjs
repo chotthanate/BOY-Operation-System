@@ -21,7 +21,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.
  });
  await page.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin!=='http://fixture.local')return route.fulfill({body:'',contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-master-store.js'))return route.fulfill({body:'',contentType:'text/javascript'});
-  if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"document.querySelector('#boyAuthPendingStyle')?.remove();window.dispatchEvent(new Event('boy-auth-ready'));",contentType:'text/javascript'});
+  if(u.pathname.endsWith('boy-auth-guard.js'))return route.fulfill({body:"window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();window.dispatchEvent(new Event('boy-auth-ready'));",contentType:'text/javascript'});
   const f=path.join(root,u.pathname);return route.fulfill({body:fs.existsSync(f)?fs.readFileSync(f):'',contentType:f.endsWith('.html')?'text/html':f.endsWith('.css')?'text/css':'text/javascript'});
  });
  await page.goto('http://fixture.local/master-data.html?entity=items');await page.locator('[data-edit="2"]').click();

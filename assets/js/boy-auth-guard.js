@@ -1,13 +1,14 @@
 (() => {
   "use strict";
   const style = document.querySelector("#boyAuthPendingStyle");
-  const reveal = () => { if (style) style.remove(); };
+  const reveal = () => { window.BOY_AUTH_SCREEN?.ready(); document.querySelector('#boyAuthFallback')?.remove(); if (style) style.remove(); };
   const ready = (context) => {
     window.BOY_AUTH_CONTEXT = context;
     reveal();
     window.dispatchEvent(new CustomEvent("boy-auth-ready", { detail: context }));
   };
   const block = (message) => {
+    if (window.BOY_AUTH_SCREEN) { window.BOY_AUTH_SCREEN.failed(message); return; }
     reveal();
     document.body.innerHTML = `<main style="max-width:420px;margin:15vh auto;padding:24px;font-family:system-ui;text-align:center"><h1>ยังเปิดหน้านี้ไม่ได้</h1><p>${message}</p><a href="burger.html" style="display:inline-block;margin-top:12px;padding:12px 18px;border-radius:12px;background:#08735e;color:white;text-decoration:none;font-weight:700">ไปหน้าเข้าสู่ระบบ</a></main>`;
   };
@@ -22,10 +23,11 @@
   };
   if (!requireOnline && allowLocalAccess()) return;
   if (!window.supabase || !config.url || !config.publishableKey) { block("ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ"); return; }
-  const client = window.supabase.createClient(config.url, config.publishableKey, {
+  let client;
+  try { client = window.supabase.createClient(config.url, config.publishableKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
       ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) }
-  });
+  }); } catch (_) { block('ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ กรุณาลองใหม่'); return; }
   client.auth.getSession().then(async ({ data, error }) => {
     if (!error && data.session) {
       const requiredRole = document.body?.dataset.requiredRole;
