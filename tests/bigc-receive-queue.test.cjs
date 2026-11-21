@@ -14,7 +14,7 @@ function app() {
   const storage = new Map();
   const context = {URLSearchParams, Intl, Date, crypto:{randomUUID},console,
     location:{search:'?view=admin'},navigator:{onLine:true},
-    document:{body:{dataset:{}},documentElement:{style:{setProperty(){}}},querySelector:node,querySelectorAll:()=>[]},
+    document:{body:{dataset:{},append(){}},createElement:()=>({style:{},setAttribute(){},addEventListener(){}}),addEventListener(){},documentElement:{style:{setProperty(){}}},querySelector:node,querySelectorAll:()=>[]},
     localStorage:{setItem:(k,v)=>storage.set(k,v),getItem:k=>storage.get(k)||null},
     setTimeout:()=>0,clearTimeout:()=>{},
     BOYBigCMasterMapping:{codesFor:()=>[],withCodes:x=>x}};
@@ -61,6 +61,22 @@ test('only fresh and prepared fruit require actual weight; frozen bags use bag c
   assert.equal(line.actual_weight_kg,null);
   assert.equal(line.handling_type,'standard');
   assert.equal(line.costing_basis,'backend');
+});
+
+test('weight-only pumpkin shows one field and uses current kg units for an older order',()=>{
+  const {qa}=app();
+  const pumpkin={key:'pumpkin',name:'ฟักทอง',displayName:'ฟักทอง',category:'🍉 ผลไม้',unit:'กก.',inputMode:'weight',handlingType:'whole_fruit',costingBasis:'actual_raw_weight_kg'};
+  qa.state.menu=[pumpkin];
+  const line={line_key:'pumpkin',item_name:'ฟักทอง',unit_name:'',input_mode:'quantity',quantity:3.25,actual_weight_kg:3.25,checked:true};
+  const controls=qa.receiveControls(pumpkin,line,'pumpkin');
+  assert.equal((controls.match(/<input /g)||[]).length,1);
+  assert.match(controls,/data-actual-weight-key/);
+  qa.state.receive.pumpkin=line;
+  const saved=qa.linesFor('receive')[0];
+  assert.equal(saved.unit_name,'กก.');
+  assert.equal(saved.input_mode,'weight');
+  assert.equal(saved.quantity,3.25);
+  assert.equal(saved.actual_weight_kg,3.25);
 });
 
 test('ordered lines seed automatically alongside manual drafts, retaining edits and stable receipt keys',()=>{

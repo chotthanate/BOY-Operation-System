@@ -243,3 +243,19 @@ html,body{overflow-x:clip}
 .settings-menu-card[data-manage-only][hidden],.settings-save-bar[hidden]{display:none}
 .settings-detail .setting-row-readonly{grid-template-columns:minmax(0,1fr) auto}
 .branch-brand[aria-disabled="true"]{cursor:default}
+
+/* Keep multi-digit quantities readable within both mobile card sizes. */
+.qty-control input[type="number"]{-moz-appearance:textfield;appearance:textfield;padding:0}
+.qty-control input::-webkit-inner-spin-button,.qty-control input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.order-card .qty-control{display:grid;grid-template-columns:38px minmax(0,1fr) 38px;gap:4px}
+.order-card .qty-control input{width:100%;min-width:0;text-align:center;font-variant-numeric:tabular-nums}
+.keyboard-dismiss{position:fixed;right:12px;bottom:12px;z-index:300;display:flex;align-items:center;gap:6px;min-height:44px;padding:8px 14px;border:1px solid #c9ded5;border-radius:12px;background:#fff;color:var(--green);box-shadow:0 3px 16px #0003;font-size:14px;font-weight:800;touch-action:manipulation}
+.keyboard-dismiss[hidden]{display:none}
+.keyboard-dismiss span{font-size:21px;line-height:1}
+@media(max-width:600px){
+  .order-card .qty-control{grid-template-columns:26px minmax(0,1fr) 26px;gap:2px;padding:5px 2px}
+  .order-card .qty-control button{width:26px;height:32px;min-width:0}
+  .order-card .qty-control input{width:100%;font-size:16px}
+  body[data-order-card-size="large"] .order-card .qty-control{grid-template-columns:36px minmax(0,1fr) 36px;gap:4px}
+  body[data-order-card-size="large"] .order-card .qty-control input{width:100%}
+}

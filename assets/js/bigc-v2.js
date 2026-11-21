@@ -822,7 +822,8 @@
         ? receiveHandlingType(item) : line.handling_type || receiveHandlingType(item);
       return {
         ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: line.item_id || item.itemId || item.item_id || null,
-        input_mode: type === "receive" && (isPieceEstimatedFruit(item) || isFrozenFruit(item)) ? "quantity" : line.input_mode,
+        unit_name: type === "receive" ? item.unit : line.unit_name,
+        input_mode: type === "receive" ? (isPieceEstimatedFruit(item) || isFrozenFruit(item) ? "quantity" : item.inputMode) : line.input_mode,
         actual_weight_kg: type === "receive" && !needsActualWeight(item) ? null : line.actual_weight_kg,
         handling_type: handlingType, costing_basis: receiveCostingBasis(item, handlingType),
         measurement_basis: type === "receive" ? isPieceEstimatedFruit(item) ? "estimated_raw"
@@ -1555,6 +1556,37 @@
       button.disabled = false;
     }
   }
+  function initializeKeyboardDismiss() {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "keyboard-dismiss";
+    button.hidden = true;
+    button.setAttribute("aria-label", "ซ่อนแป้นพิมพ์");
+    button.innerHTML = '<span aria-hidden="true">⌨ ↓</span> ซ่อนแป้นพิมพ์';
+    document.body.append(button);
+    const editable = (element) => element instanceof HTMLTextAreaElement
+      || (element instanceof HTMLInputElement && ["text", "search", "number", "tel", "email", "password", "url"].includes(element.type));
+    const update = () => {
+      button.hidden = !editable(document.activeElement);
+      const viewport = window.visualViewport;
+      const inset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+      button.style.bottom = (inset + 12) + "px";
+    };
+    // Keep focus until click, so the button cannot disappear before a tap completes.
+    button.addEventListener("pointerdown", (event) => event.preventDefault());
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (editable(document.activeElement)) document.activeElement.blur();
+      button.hidden = true;
+    });
+    document.addEventListener("focusin", update);
+    document.addEventListener("focusout", () => window.setTimeout(update, 0));
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
+  }
+
   function bindStaticEvents() {
     $("#logoutSettingsButton").onclick = logoutFromSettings;
     $$(".workflow-tabs button").forEach((button) => { button.onclick = () => selectWorkflowTab(button.dataset.tab); });
@@ -1723,6 +1755,7 @@
     $('.demo-link')?.setAttribute('href','bigc-demo.html?branch='+BRANCH_CODE);
     $('.revenue-card').hidden = true;
   }
+  initializeKeyboardDismiss();
   initializePersonalSettings();
   if (DEMO_MODE) {
     state.started = true; state.access = {canManage:false};
