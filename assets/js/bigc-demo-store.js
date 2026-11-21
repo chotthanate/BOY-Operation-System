@@ -2,21 +2,15 @@
   "use strict";
   const STORAGE_KEY = "boy-bigc-demo:data";
   const clone = value => JSON.parse(JSON.stringify(value));
-  const sampleMenu = [
-    ["demo-orange", "ส้ม", "ผลไม้", "ลูก"],
-    ["demo-banana", "กล้วย", "ผลไม้", "หวี"],
-    ["demo-water", "น้ำเปล่า", "เครื่องดื่ม", "ขวด"],
-    ["demo-cup", "แก้ว", "บรรจุภัณฑ์", "แพ็ก"],
-    ["demo-ice", "น้ำแข็ง", "วัตถุดิบ", "ถุง"]
-  ].map(([key,displayName,category,unit],sortOrder)=>({
-    key,displayName,name:displayName,category,unit,sortOrder,
-    active:true,inputMode:"quantity",handlingType:"standard"
-  }));
   function createStore(storage = localStorage, options = {}) {
     const storageKey=options.storageKey||STORAGE_KEY;
+    const prefix=storageKey.slice(0,storageKey.lastIndexOf(":")+1);
+    const catalog=options.menu || globalThis.BOYBigCDemoCatalog?.[options.branchCode || "BIGC-CENTRAL-PATTAYA"];
+    if (!Array.isArray(catalog) || !catalog.length) throw new Error("โหลดรายการทดลองไม่สำเร็จ กรุณารีเฟรช");
     let data;
     try { data=JSON.parse(storage.getItem(storageKey)||"null"); } catch (_) {}
-    if (!data || data.version!==1) data={version:1,menu:sampleMenu,workflows:{},batches:{},submissions:[]};
+    if (!data || data.version!==1) data={version:1,menu:clone(catalog),workflows:{},batches:{},submissions:[]};
+    data.menu=clone(catalog);
     if (!Array.isArray(data.submissions)) data.submissions=[];
     const persist=()=>storage.setItem(storageKey,JSON.stringify(data));
     const nextDate=(date,days=1)=>{
@@ -87,9 +81,9 @@
             submitted_at:row.submitted_at,lines:row.lines,legacy:true}))
       ].sort((a,b)=>b.submitted_at.localeCompare(a.submitted_at))),
       reset:()=>{
-        const keys=[];for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith("boy-bigc-demo:"))keys.push(key)}
+        const keys=[];for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith(prefix))keys.push(key)}
         keys.forEach(key=>storage.removeItem(key));
-        data={version:1,menu:clone(sampleMenu),workflows:{},batches:{},submissions:[]};
+        data={version:1,menu:clone(catalog),workflows:{},batches:{},submissions:[]};
       }};
   }
   globalThis.BOYBigCDemo={createStore};

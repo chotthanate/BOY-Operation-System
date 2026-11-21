@@ -82,6 +82,18 @@ test('weight-only pumpkin shows one field and uses current kg units for an older
   assert.equal(qa.linesFor('close_order')[0].quantity,6);
 });
 
+test('weight mode overrides piece counting for melon, pineapple and watermelon',()=>{
+  const {qa}=app();
+  for(const name of ['เมล่อน','สับปะรด','แตงโม']){
+    const item={key:name,name,displayName:name,category:'🍉 ผลไม้',unit:'ลูก',inputMode:'weight',handlingType:'whole_fruit',costingBasis:'actual_raw_weight_kg'};
+    const controls=qa.receiveControls(item,{quantity:6},name);
+    assert.equal((controls.match(/<input /g)||[]).length,1);
+    assert.match(controls,/data-actual-weight-key/);
+    assert.equal(qa.needsActualWeight(item),true);
+    assert.equal(qa.receiveCostingBasis(item),'actual_raw_weight_kg');
+  }
+});
+
 test('verified owner retains editing through a staff link; staff never gains editing from URL',()=>{
   const owner=app('?view=staff').qa;
   assert.equal(owner.isStaffView(),true);

@@ -5,8 +5,9 @@
   const SOUTH_BRANCH = BRANCH_CODE==='BIGC-SOUTH-PATTAYA';
   const STORAGE_PREFIX = DEMO_MODE ? (SOUTH_BRANCH?'boy-bigc-south-demo:':'boy-bigc-demo:') : (SOUTH_BRANCH?'boy-bigc-south-v2-':'boy-bigc-v2-');
   const DEMO_STORE = DEMO_MODE ? globalThis.BOYBigCDemo.createStore(localStorage, SOUTH_BRANCH ? {
+    branchCode: BRANCH_CODE,
     storageKey:'boy-bigc-south-demo:data',branch:{id:'demo-south',code:'DEMO-SOUTH',name:'BigC พัทยาใต้ · ทดลอง'}
-  } : {}) : null;
+  } : {branchCode: BRANCH_CODE}) : null;
   const workflowApi = { rpc(operation, arguments_ = {}) {
     if (!SOUTH_BRANCH || operation==='get_master_catalog') return state.client.schema('boy_central').rpc(operation,arguments_);
     return state.client.schema('boy_central').rpc('bigc_branch_request',{target_branch_code:BRANCH_CODE,operation,arguments:arguments_});
@@ -489,7 +490,7 @@
     return handlingType === "consignment" ? "consignment" : handlingType === "standard" ? "backend" : handlingType === "whole_fruit" ? "actual_raw_weight_kg" : "backend_yield_from_actual_weight";
   }
   function isPieceEstimatedFruit(item) {
-    return receiveHandlingType(item) === "whole_fruit" && item.unit === "ลูก" && /แตงโม|สับปะรด/.test(`${item.name || ""} ${item.displayName || ""}`);
+    return receiveHandlingType(item) === "whole_fruit" && !isWeightQuantity(item) && item.unit === "ลูก" && /แตงโม|สับปะรด/.test(`${item.name || ""} ${item.displayName || ""}`);
   }
   function needsActualWeight(item) { return isWeighedFruitCategory(item) && !isPieceEstimatedFruit(item) && ["whole_fruit", "prepared", "juiced"].includes(receiveHandlingType(item)); }
   function isWeightQuantity(item) { return item.inputMode === "weight"; }
@@ -1730,6 +1731,7 @@
 
   function loadDemoPage() {
     state.menu = DEMO_STORE.menu();
+    state.sharedStockVariants = new Map(state.menu.filter(item => item.demoVariants?.length).map(item => [item.itemId, item.demoVariants]));
     state.contexts = {
       order:DEMO_STORE.context($("#orderDate").value),
       receive:DEMO_STORE.context($("#receiveDate").value),

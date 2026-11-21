@@ -9,8 +9,9 @@ function demo(){
  const storage={getItem:k=>values.get(k)||null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k),
   key:i=>[...values.keys()][i],get length(){return values.size}};
  const context={crypto:{randomUUID},Date,Intl,localStorage:storage};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/js/bigc-demo-catalog.js'),'utf8'),context);
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/js/bigc-demo-store.js'),'utf8'),context);
- return {store:context.BOYBigCDemo.createStore(storage),values,createStore:()=>context.BOYBigCDemo.createStore(storage)};
+ return {store:context.BOYBigCDemo.createStore(storage),values,createStore:options=>context.BOYBigCDemo.createStore(storage,options)};
 }
 test('sample ordering supplies tomorrow receipts without reading or changing live queues',()=>{
  const {store,values}=demo();
@@ -78,4 +79,41 @@ test('morning receive shows each saved slip separately, including after-midnight
  assert.deepEqual(Array.from(rounds,row=>row.id),[secondId,firstId]);
  assert.equal(rounds[0].lines[0].quantity,2);
  assert.equal(rounds[1].lines[0].quantity,2);
+});
+
+test('all 162 products retain their receiving modes and simulated brands',()=>{
+ const {store}=demo(),menu=store.menu();
+ assert.equal(menu.length,162);
+ for(const name of ['เมล่อน','สับปะรด','แตงโม','ฟักทอง']){
+  const item=menu.find(row=>row.name===name && row.category==='🍉 ผลไม้');
+  assert.equal(item.inputMode,'weight');
+  assert.equal(item.unit,'');
+ }
+ assert(menu.some(row=>row.category.includes('แช่แข็ง') && row.inputMode==='quantity'));
+ assert(menu.some(row=>row.unit==='กล่อง' && row.inputMode==='weight'));
+ assert(menu.find(row=>row.name==='บลูเบอร์รี่ แช่แข็ง').demoVariants.length>=2);
+ assert(menu.every(row=>row.key.startsWith('demo-') && !row.masterItemId));
+});
+test('existing five-item demo upgrades the menu without deleting trial orders',()=>{
+ const {store,values,createStore}=demo();
+ store.submit({workflow_type:'close_order',business_date:'2026-11-01',submission_id:randomUUID(),lines:[{line_key:'demo-orange',item_name:'ส้ม',quantity:2}]});
+ const data=JSON.parse(values.get('boy-bigc-demo:data'));
+ data.menu=[{key:'demo-orange'}];
+ values.set('boy-bigc-demo:data',JSON.stringify(data));
+ const upgraded=createStore();
+ assert.equal(upgraded.menu().length,162);
+ assert.equal(upgraded.orderHistory().length,1);
+ assert.equal(upgraded.orderHistory()[0].lines[0].quantity,2);
+});
+test('south demo reset is isolated from central demo and every live key',()=>{
+ const {values,createStore}=demo();
+ values.set('boy-bigc-demo:keep','central-demo');
+ values.set('boy-bigc-south-v2-settings-pending','south-live');
+ values.set('boy-bigc-south-demo:draft:receive:2026-11-01','trial');
+ const south=createStore({branchCode:'BIGC-SOUTH-PATTAYA',storageKey:'boy-bigc-south-demo:data'});
+ assert.equal(south.menu().length,162);
+ south.reset();
+ assert.equal(values.has('boy-bigc-south-demo:draft:receive:2026-11-01'),false);
+ assert.equal(values.get('boy-bigc-demo:keep'),'central-demo');
+ assert.equal(values.get('boy-bigc-south-v2-settings-pending'),'south-live');
 });
