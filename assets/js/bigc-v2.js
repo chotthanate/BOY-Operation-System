@@ -1322,15 +1322,15 @@
   }
   function openAddItem() {
     if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
+    $("#newItemCategory").innerHTML = categoryNames().map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("");
     $("#newItemName").value = ""; $("#newItemCategory").value = categoryNames()[0] || ""; $("#newItemUnit").value = "";
     $("#addItemError").textContent = "";
-    $("#categoryOptions").innerHTML = categoryNames().map((category) => `<option value="${escapeHtml(category)}"></option>`).join("");
     $("#addItemModal").classList.remove("hidden");
   }
   async function addMenuItem() {
     if (DEMO_MODE || isStaffView() || !state.access?.canManage) return;
     const name = $("#newItemName").value.trim(); const category = $("#newItemCategory").value.trim(); const unit = $("#newItemUnit").value.trim();
-    if (!name || !category) { $("#addItemError").textContent = "กรุณากรอกชื่อรายการและประเภท"; return; }
+    if (!name || !category || !categoryNames().includes(category)) { $("#addItemError").textContent = "กรุณากรอกชื่อรายการและเลือกประเภท"; return; }
     const key = keyFor(name, unit); if (state.menu.some((item) => item.displayName === (unit ? `${name} (${unit})` : name))) { $("#addItemError").textContent = "มีรายการนี้แล้ว"; return; }
     const item = { key: globalThis.crypto?.randomUUID?.() || key, displayName: unit ? `${name} (${unit})` : name, name, category, unit, inputMode: "quantity", active: true, defaultReturn: false, sortOrder: state.menu.length };
     state.menu.push(item);

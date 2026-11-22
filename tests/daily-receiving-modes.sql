@@ -34,7 +34,7 @@ begin
   perform boy_central.post_daily_document(payload||jsonb_build_object('request_id',gen_random_uuid(),'expected_revision',2,'data',jsonb_set(body,'{exp,0,q}','4')));
   raise exception 'changed received purchase was accepted';
  exception when others then
-  if sqlerrm not like 'received purchase cannot be replaced%' then raise;end if;
+  if sqlerrm not like 'รายการ % รับสินค้าแล้ว%' then raise;end if;
  end;
  cat:=boy_central.get_daily_catalog('TAWANA',null);
  if not exists(select 1 from jsonb_array_elements(cat->'items') i where i->>'expense_item_id' is not null) then raise exception 'expense definitions missing from catalog';end if;
