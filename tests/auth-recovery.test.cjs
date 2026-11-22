@@ -12,7 +12,7 @@ test('auth recovery has a finite wait and does not delete drafts or grant access
  assert.doesNotMatch(failed,/\.remove\(|reveal\(/);
 });
 test('catalog upgrade leaves all draft and outbox keys intact',()=>{
- const source=read('assets/js/boy-daily-store.js');assert.match(source,/catalog:v4:/);assert.match(source,/BOY_TAWANA_DRAFT_/);assert.match(source,/BOY_BIGC_EXPENSE_DRAFT_/);
+ const source=read('assets/js/boy-daily-store.js');assert.match(source,/catalog:v5:/);assert.match(source,/BOY_TAWANA_DRAFT_/);assert.match(source,/BOY_BIGC_EXPENSE_DRAFT_/);
  assert.doesNotMatch(source,/localStorage\.clear\(/);
- for(const p of ['tawana.html','bigc.html'])assert.match(read(p),/boy-daily-store\.js\?v=20261121-recovery1/);
+ for(const p of ['tawana.html','bigc.html'])assert.match(read(p),/boy-daily-store\.js\?v=20261123-history2/);
 });

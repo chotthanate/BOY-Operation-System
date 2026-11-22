@@ -8,7 +8,7 @@ test('capital classification is collapsed by default but remains explicit on sav
 test('all expense UIs offer connected inline main/subcategory creation',()=>{
  for(const p of ['tawana.html','bigc.html','assets/js/burger.js']){const s=read(p);assert.match(s,/addCategoryOption\('main'\)/);assert.match(s,/addCategoryOption\('sub'\)/);}
  const s=read('assets/js/expense-app.js');assert.match(s,/rpc\('create_expense_category'/);assert.match(s,/store_types:/);assert.match(s,/stopImmediatePropagation/);
- assert.match(read('assets/js/burger.js'),/rpc\("get_expense_category_options"/);assert.match(read('assets/js/boy-daily-store.js'),/catalog:v4:/);
+ assert.match(read('assets/js/burger.js'),/rpc\("get_expense_category_options"/);assert.match(read('assets/js/boy-daily-store.js'),/catalog:v5:/);
 });
 test('physical purchases keep their receiving choice and new category creation cannot send a sentinel as a category',()=>{
  const s=read('assets/js/expense-app.js');assert.match(s,/s\.value=s\.dataset\.beforeAdd/);

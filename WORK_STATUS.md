@@ -1,5 +1,11 @@
 # Work Status
 
+## 2026-11-23: Date history and category autofill
+
+- Normal legacy date/history links preserve the branch and selected day in the common read-only daily history. Submitted central Tawana/BigC old-form days now open that history, not whole-day unlock/edit. Explicit old drafts and Sheet archives remain available for deliberate recovery; employee/stock routes are retained. No old business records, queues or drafts were imported, replaced or deleted.
+- History edits manual income in an income-only dialog. Add-expense opens the branch's main entry workspace with the selected posting day only when doing so will not redate an existing batch. POS income remains non-editable. Browser tests cover all five branches, duplicate-save protection and unsaved draft preservation.
+- Production read-only inspection confirmed orange ITEM-0006 and its daily catalog map to raw ingredients/fruit. Both current and recovery forms now derive labels/parent choice from category UUID relationships rather than cached display names, and changing product text clears the prior category. Old-shaped catalog caches refresh once; no new polling or database schema change. Chromium/WebKit 390/1440 px fixtures exercise packaging-to-orange selection, stale category metadata, history deep links and independent income saves. 174 Node tests pass.
+
 ## 2026-11-23: Purchase quantity and stock/receipt routing
 
 - Common expenses now have an explicit touch-friendly product picker. Quantity/unit fields are available before binding, and physical/pooled products require them even if old expense flags are false. Unmatched names cannot silently post as stock purchases: generic costs require an explicit selection. Existing draft/outbox identities and exact pending requests are retained. Safari touch selection no longer cancels the click, and the authorized form subtree gets an explicit visibility state after the successful branch RPC.

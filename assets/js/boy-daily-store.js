@@ -34,7 +34,7 @@
   async function catalog(force=false){
     const {data:{session}}=await client().auth.getSession();
     if(!session)throw new Error('ต้องเข้าสู่ระบบออนไลน์เพื่อโหลดรายการ');
-    const catalogKey=prefix+'catalog:v4:'+session.user.id;
+    const catalogKey=prefix+'catalog:v5:'+session.user.id;
     const cached=(state.catalogUser===session.user.id&&state.catalog)||read(catalogKey);
     state.catalogUser=session.user.id;
     if(cached&&!force&&Date.now()-cached.fetchedAt<15*60*1000){state.catalog=cached;return cached;}
@@ -51,11 +51,14 @@
     const mains=c.categories.filter(x=>!x.parent_id).map(x=>x.name),subs={};
     c.categories.filter(x=>x.parent_id).forEach(x=>{const parent=c.categories.find(p=>p.id===x.parent_id);if(parent)(subs[parent.name]||=[]).push(x.name);});
     c.items.forEach(item=>{
+      const category=c.categories.find(x=>x.id===item.category_id),sub=c.categories.find(x=>x.id===item.subcategory_id)||(category?.parent_id?category:null);
+      const main=sub?c.categories.find(x=>x.id===sub.parent_id):category;
+      const mainType=main&&!main.parent_id?main.name:'',subType=sub&&mainType?sub.name:'';
       const options=c.item_units.filter(u=>u.item_id===item.id&&u.purchase!==false).map(u=>({id:u.unit_id,name:units.get(u.unit_id),conversion:u.conversion})).filter(u=>u.name);
       const unit=units.get(item.base_unit_id)||'',name=item.name,display=unit?name+' ('+unit+')':name;
-      (categories[item.main||'อื่นๆ']||=[]).push(display);
+      (categories[mainType||'อื่นๆ']||=[]).push(display);
       const suppliers=(c.item_suppliers||[]).filter(x=>x.item_id===item.id).map(x=>c.suppliers.find(s=>s.id===x.supplier_id)?.name).filter(Boolean);
-      itemMeta[name]=itemMeta[display]={itemId:item.expense_item_id?null:item.id,expenseItemId:item.expense_item_id||null,masterCode:item.code,categoryId:item.category_id,baseUnit:unit,mainType:item.main||'',subType:item.sub||'',useStock:item.track_stock,unitOptions:options.map(u=>u.name),unitMappings:options,supplierOptions:[...new Set(suppliers)]};
+      itemMeta[name]=itemMeta[display]={itemId:item.expense_item_id?null:item.id,expenseItemId:item.expense_item_id||null,masterCode:item.code,categoryId:main?.id||null,baseUnit:unit,mainType,subType,useStock:item.track_stock,unitOptions:options.map(u=>u.name),unitMappings:options,supplierOptions:[...new Set(suppliers)]};
     });
     return {database:{categories,itemMeta,suppliers:c.suppliers.map(x=>x.name),expenseCategories:{rows:[],mainTypes:mains,subTypesByMain:subs}}};
   }

@@ -4,7 +4,7 @@ const path=require('node:path');
 const assert=require('node:assert/strict');
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const root=path.resolve(__dirname,'..');
-const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',main:'วัตถุดิบ',sub:'ผลไม้',base_unit_id:'kg',track_stock:true},{id:'expense-id',expense_item_id:'expense-id',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat',main:'วัตถุดิบ',track_stock:false}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null},{id:'sub',name:'ผลไม้',parent_id:'cat'}],item_units:[{item_id:'fruit-id',unit_id:'kg',conversion:1,purchase:true}],suppliers:[],item_suppliers:[]};
+const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',main:'บรรจุภัณฑ์เก่า',sub:'ชื่อเก่า',base_unit_id:'kg',track_stock:true},{id:'expense-id',expense_item_id:'expense-id',code:'ITEM-EXP',name:'ค่าเช่า',category_id:'cat',main:'วัตถุดิบ',track_stock:false}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null},{id:'sub',name:'ผลไม้',parent_id:'cat'}],item_units:[{item_id:'fruit-id',unit_id:'kg',conversion:1,purchase:true}],suppliers:[],item_suppliers:[]};
 (async()=>{
  const browser=await chromium.launch({headless:true,...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{})});
  try{for(const name of ['tawana','bigc'])for(const width of [390,1440]){
@@ -66,7 +66,12 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'แ�
    else addRow('ค่าเช่า','','',500,'','cash','วัตถุดิบ','',identity);
   });
   assert.equal(await page.locator('.receiving-mode-field').last().getAttribute('hidden'),'');
-  assert.deepEqual(errors,[],`${name} page errors`);await page.close();
+  assert.deepEqual(errors,[],`${name} page errors`);
+  await page.evaluate(()=>doSync());
+  const draftKey=await page.evaluate(n=>(n==='tawana'?'BOY_TAWANA_DRAFT_':'BOY_BIGC_EXPENSE_DRAFT_')+document.getElementById('mainDate').value,name),draftBefore=await page.evaluate(k=>localStorage.getItem(k),draftKey);
+  await page.evaluate(n=>n==='tawana'?unlockEditMode():unlockDate(),name);await page.waitForURL('**/expenses.html?branch=**&view=history&date=**');
+  assert.equal(await page.evaluate(k=>localStorage.getItem(k),draftKey),draftBefore,'history navigation must not discard the old draft');
+  await page.close();
   console.log(`${name} ${width}: identity, receiving mode and layout passed`);
  }}finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

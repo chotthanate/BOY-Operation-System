@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="th">
 <head>
-  <script src="assets/js/expense-entry-route.js?v=20261122-entry1"></script>
+  <script src="assets/js/expense-entry-route.js?v=20261123-history2"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0f6b55">
@@ -619,7 +619,7 @@
     <main class="app-content">
       <section id="dailyView" class="app-view active">
         <div class="compact-page-header"><h1>บันทึกประจำวัน</h1><span class="page-context">รายรับ · รายจ่าย</span></div>
-        <div class="card date-status-card" onclick="openMainDatePicker(event)"><div class="date-card-head"><label for="mainDate">วันที่ทำรายการ</label><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div><input type="date" id="mainDate" onchange="loadData()"></div>
+        <div class="card date-status-card" onclick="openMainDatePicker(event)"><div class="date-card-head"><label for="mainDate">วันที่ทำรายการ</label><div id="saveStatus" class="save-state">พร้อมบันทึก</div></div><input type="date" id="mainDate" onchange="openDayHistory(this.value)"></div>
         <div id="formArea" class="daily-columns">
           <div class="card income-card" id="incomeCard"><div class="income-card-head"><div class="section-heading"><div><h2 class="section-title">รายรับ</h2><div class="income-compact-status" id="incomeCompactStatus">ยังไม่ได้กรอก</div></div></div><button class="income-toggle" id="incomeToggle" type="button" aria-expanded="true" aria-controls="incomeCardBody" onclick="toggleIncomeCard()"><span>ย่อ</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button></div><div class="income-card-body" id="incomeCardBody"><div class="income-grid">
             <div class="field"><label for="val-cash">เงินสด</label><input type="number" inputmode="decimal" id="val-cash" placeholder="0.00" onchange="doSync()" oninput="updateDailySummary()"></div>
@@ -703,9 +703,9 @@
   <div id="lockedOverlay" class="full-overlay hidden">
     <div class="overlay-card">
       <div class="status-mark">✓</div>
-      <h2 class="overlay-title">ส่งข้อมูลแล้ว</h2>
-      <p class="overlay-description">เลือกวันอื่น หรือเปิดแก้ไขข้อมูลของวันนี้</p>
-      <div class="overlay-actions"><input type="date" id="lockedDate" class="locked-date-btn" onchange="syncDateFromLock()"><button class="btn-main btn-secondary" type="button" onclick="unlockEditMode()">แก้ไขข้อมูลของวันนี้</button></div>
+      <h2 class="overlay-title">บันทึกแล้ว</h2>
+      <p class="overlay-description">เปิดประวัติ หรือเพิ่มรายจ่ายแยกจากรายการเดิม</p>
+      <div class="overlay-actions"><input type="date" id="lockedDate" class="locked-date-btn" onchange="syncDateFromLock()"><button class="btn-main btn-secondary" type="button" onclick="openDayHistory()">ดูประวัติรายวัน</button><button class="btn-main" type="button" onclick="openExpenseEntry()">เพิ่มรายจ่าย</button></div>
     </div>
   </div>
 
@@ -714,7 +714,7 @@
       <div class="status-mark">✓</div>
       <h2 class="overlay-title">ส่งข้อมูลสำเร็จ</h2>
       <p class="overlay-description">อัปเดต Google Sheets วันที่ <strong id="displayDateText"></strong> แล้ว</p>
-      <div class="overlay-actions"><button class="btn-main btn-primary" type="button" onclick="goToNextDay()">ทำรายการวันถัดไป</button><button class="btn-main btn-secondary" type="button" onclick="unlockScreen()">กลับไปแก้ไขข้อมูล</button></div>
+      <div class="overlay-actions"><button class="btn-main btn-primary" type="button" onclick="openExpenseEntry()">เพิ่มรายจ่าย</button><button class="btn-main btn-secondary" type="button" onclick="openDayHistory()">ดูประวัติรายวัน</button></div>
     </div>
   </div>
 
@@ -2065,7 +2065,14 @@
 
     function syncDateFromLock() {
       var lDate = document.getElementById('lockedDate').value;
-      if(lDate) { document.getElementById('mainDate').value = lDate; document.getElementById('lockedOverlay').classList.add('hidden'); loadData(); }
+      if(lDate) openDayHistory(lDate);
+    }
+    function openDayHistory(date) {
+      var url = new URL('expenses.html', location.href); url.searchParams.set('branch','TAWANA'); url.searchParams.set('view','history');
+      url.searchParams.set('date',date || document.getElementById('mainDate').value); location.href=url.href;
+    }
+    function openExpenseEntry() {
+      var url = new URL('expenses.html', location.href); url.searchParams.set('branch','TAWANA'); location.href=url.href;
     }
 
     function collectFormDataSnapshot() {
@@ -2157,14 +2164,7 @@
     }
 
     function unlockScreen() { document.getElementById('successOverlay').classList.add('hidden'); unlockEditMode(); }
-    async function unlockEditMode() {
-      try {
-        await apiCall('unlockDate', { date: document.getElementById('mainDate').value });
-        document.getElementById('lockedOverlay').classList.add('hidden');
-        document.getElementById('btnSubmit').style.display = 'block';
-        setSaveState('saved', 'เปิดให้แก้ไขแล้ว');
-      } catch(error) { alert(error.message); }
-    }
+    function unlockEditMode() { openDayHistory(); }
 
     function nav(e, idx) {
       if (e.keyCode === 13) {
@@ -2212,6 +2212,7 @@
       try {
         const parsed = await apiCall('loadData', { date: date });
         if (requestId !== loadDataSeq || document.getElementById('mainDate').value !== date) return;
+        if (parsed.submitted && !parsed.archive && !['employee','stock'].includes(new URLSearchParams(location.search).get('view'))) { openDayHistory(date); return; }
         var d = {};
         try {
           d = JSON.parse(parsed.draft || '{}');
@@ -2263,7 +2264,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
   <script src="assets/js/boy-session-storage.js?v=20261102-3"></script>
-  <script src="assets/js/boy-daily-store.js?v=20261121-recovery1"></script>
+  <script src="assets/js/boy-daily-store.js?v=20261123-history2"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script>
 </body>
