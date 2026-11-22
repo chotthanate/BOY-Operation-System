@@ -16,6 +16,6 @@ test('physical purchases keep their receiving choice and new category creation c
  assert.match(read('assets/js/burger.js'),/receiving_mode: group.receiving_mode/);
 });
 test('updated expense scripts and CSS are versioned on every entry page',()=>{
- for(const p of ['tawana.html','bigc.html','burger.html']){assert.match(read(p),/expense-app\.js\?v=20261121-expense1/);assert.match(read(p),/expense-app\.css\?v=20261121-expense1/);}
+ for(const p of ['tawana.html','bigc.html','burger.html']){assert.match(read(p),/expense-app\.js\?v=20261122-entry1/);assert.match(read(p),/expense-app\.css\?v=20261121-expense1/);}
  for(const p of ['tawana.html','bigc.html','burger.html','master-data.html'])for(const m of read(p).matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))new vm.Script(m[1]);
 });

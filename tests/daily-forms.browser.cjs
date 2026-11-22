@@ -22,7 +22,7 @@ const catalog={version:'fixture',items:[{id:'fruit-id',code:'ITEM-1',name:'à¹à¸
    const file=path.join(root,u.pathname);if(!file.startsWith(root)||!fs.existsSync(file))return route.fulfill({status:404,body:''});
    return route.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
   });
-  await page.goto(`http://fixture.local/${name}.html`);await page.waitForFunction(()=>window.BOY_DAILY_STORE&&typeof itemMetaDict!=='undefined'&&Object.keys(itemMetaDict).length>0);
+  await page.goto(`http://fixture.local/${name}.html?legacy=1`);await page.waitForFunction(()=>window.BOY_DAILY_STORE&&typeof itemMetaDict!=='undefined'&&Object.keys(itemMetaDict).length>0);
   await page.evaluate(()=>window.BOY_EXPENSE_APP.toggleMenu());
   assert.equal(await page.locator('#expenseNavigation a[href="reimbursements.html"]').isVisible(),true);
   await page.locator('#expenseNavigation [data-expense-nav-close]').click();

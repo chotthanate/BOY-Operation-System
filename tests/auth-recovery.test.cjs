@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
 test('every guarded page loads recovery before the auth dependency and uses the new guard',()=>{
  const pages=fs.readdirSync(root).filter(p=>p.endsWith('.html')&&read(p).includes('boy-auth-guard.js'));
- assert.equal(pages.length,10);
+ assert.equal(pages.length,11);
  for(const page of pages){const html=read(page);assert.ok(html.indexOf('boy-auth-status.js')<html.indexOf('https://cdn.jsdelivr.net/npm/@supabase/'),page);assert.match(html,/boy-auth-guard\.js\?v=20261121-recovery1/,page);assert.ok(html.indexOf('id="boyAuthFallback"')<html.indexOf('boy-auth-status.js'),page);}
 });
 test('auth recovery has a finite wait and does not delete drafts or grant access on a timeout',()=>{

@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const branches = window.BOY_BRANCHES.all.map(branch => ({ ...branch, path: branch.expensePath }));
+  const branches = window.BOY_BRANCHES.all.map(branch => ({ ...branch, path: 'expenses.html?branch='+encodeURIComponent(branch.code) }));
   const uniqueNames = (rows) => [...new Map(rows.filter(Boolean).map(value => {
     const name = String(value.name || value).trim();
     return [name.toLocaleLowerCase("th"), name];

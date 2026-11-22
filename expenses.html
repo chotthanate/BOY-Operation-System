@@ -1,14 +1,26 @@
 <!doctype html>
-<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ลงค่าใช้จ่าย | BOY Operation</title></head><body>
-<p>กำลังเปิดหน้าลงค่าใช้จ่าย…</p>
-<script src="assets/js/boy-branches.js?v=20261105-2"></script><script>
-  const query = new URLSearchParams(location.search);
-  const branch = query.get('branch') || 'TAWANA';
-  const selected=window.BOY_BRANCHES.get(branch)||window.BOY_BRANCHES.get('TAWANA');
-  const target = new URL(selected.expensePath, location.href);
-  query.delete('branch');
-  query.forEach((value,key)=>target.searchParams.set(key,value));
-  if (branch === 'GRILL') target.searchParams.set('branch', 'GRILL');
-  target.hash = location.hash;
-  location.replace(target.href);
-</script><noscript><a href="tawana.html">เปิดหน้าทาวน่า</a></noscript></body></html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f3f8f5"><title>BOY Operations</title>
+<link rel="stylesheet" href="assets/css/expense-app.css?v=20261121-expense1"><link rel="stylesheet" href="assets/css/finance-entry.css?v=20261122-entry1">
+<style id="boyAuthPendingStyle">html{visibility:hidden}</style></head>
+<body><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;background:#f3f8f5"><p>กำลังเปิดหน้า… <button onclick="location.reload()">ลองใหม่</button></p></div><script src="assets/js/boy-auth-status.js?v=20261121-recovery1"></script>
+<header class="entry-header"><button class="expense-menu-button" id="branchMenu" type="button" aria-label="เปิดเมนู">☰</button><strong id="branchTitle">BOY Operations</strong><a href="index.html" aria-label="หน้าหลัก">⌂</a></header>
+<main class="entry-shell">
+ <nav class="entry-tabs" aria-label="หน้ารายการ"><button type="button" class="active" data-view="entry">บันทึก</button><button type="button" data-view="history">ดูรายวัน</button><a id="branchTools" href="#">งานสาขา ↗</a></nav>
+ <div id="entryNotice" class="entry-notice" role="status" hidden></div>
+ <section id="legacyRecovery" class="entry-notice" hidden><strong>มีข้อมูลจากแบบเดิม</strong><p>ร่างและคิวเดิมยังเก็บอยู่</p><a id="legacyLink" href="#">เปิดตรวจร่างเดิม ↗</a></section>
+ <section id="entryView">
+  <section id="incomeCard" class="entry-panel income-panel" hidden>
+   <button id="incomeHeading" class="income-heading" type="button" aria-expanded="true"><span><strong>รายรับ</strong><small id="incomeSummary">ยังไม่ได้บันทึก</small></span><span id="incomeHeadingAction">ย่อ</span></button>
+   <div id="incomeFields"><div class="entry-fields"><label>วันที่รายรับ<input id="incomeDate" type="date"></label><label>เงินสด<input id="incomeCash" type="number" min="0" step="0.01" inputmode="decimal"></label><label>เงินโอน<input id="incomeTransfer" type="number" min="0" step="0.01" inputmode="decimal"></label><label id="governmentField">โครงการรัฐ<input id="incomeGovernment" type="number" min="0" step="0.01" inputmode="decimal"></label><label>รายรับอื่น<input id="incomeOther" type="number" min="0" step="0.01" inputmode="decimal"></label></div><button id="saveIncome" class="entry-primary" type="button">บันทึกรายรับ</button></div>
+  </section>
+  <section class="entry-panel"><div class="entry-section-heading"><h1>รายจ่าย</h1><span id="draftState" role="status">กำลังโหลด…</span></div><label class="entry-date">วันที่บันทึกรายจ่าย<input id="entryDate" type="date"></label><div id="entryLines"></div><div class="entry-actions"><button id="addEntryLine" class="entry-secondary" type="button">＋ เพิ่มรายการ</button><button id="saveExpenses" class="entry-primary" type="button">บันทึกรายจ่าย</button></div><div id="batchTotal" class="entry-total"></div></section>
+ </section>
+ <section id="historyView" hidden><section class="entry-panel"><div class="entry-section-heading"><h1>ดูรายการรายวัน</h1><button id="reloadDay" class="entry-secondary" type="button">↻ โหลดใหม่</button></div><label class="entry-date">วันที่ต้องการดู<input id="historyDate" type="date"></label><div id="daySummary"></div><div id="dayEntries"></div></section></section>
+ <section id="recoveryPanel" class="entry-panel" hidden><h2>ร่างต่างจากอีกเครื่อง</h2><p>ร่างในเครื่องยังอยู่ กรุณาเลือกข้อมูลที่จะตรวจต่อ</p><button id="useCloudDraft" class="entry-secondary" type="button">เก็บสำเนาร่างนี้ แล้วเปิดร่างฐานกลาง</button></section>
+ <details id="backupPanel" class="entry-panel" hidden><summary>ร่างสำรองในเครื่อง</summary><div id="backupList"></div></details>
+</main>
+<datalist id="entryProductOptions"></datalist><datalist id="entrySupplierOptions"></datalist>
+<dialog id="entryReview"><h2>ตรวจสอบรายจ่าย</h2><p id="entryReviewSummary"></p><div class="entry-actions"><button id="cancelEntryReview" class="entry-secondary" type="button">กลับไปแก้ไข</button><button id="confirmEntrySave" class="entry-primary" type="button">ยืนยันบันทึก</button></div></dialog>
+<script src="assets/js/boy-branches.js?v=20261122-entry1"></script><script src="assets/js/expense-app.js?v=20261122-entry1"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"></script><script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script><script src="assets/js/boy-session-storage.js?v=20261102-3"></script><script src="assets/js/boy-local-access.js?v=20260922-1"></script><script src="assets/js/boy-auth-guard.js?v=20261121-recovery1"></script><script src="assets/js/finance-entry.js?v=20261122-entry1"></script>
+</body></html>

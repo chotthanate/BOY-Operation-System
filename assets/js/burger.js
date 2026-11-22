@@ -295,6 +295,9 @@
   }
 
   function setPage(page) {
+    if(page==='expense'&&new URLSearchParams(location.search).get('legacy')!=='1'){
+      location.href='expenses.html?branch='+encodeURIComponent(branchApp.code);return;
+    }
     $$(".page").forEach((section) => section.classList.toggle("active", section.dataset.page === page));
     $$(".bottom-nav button").forEach((button) => button.classList.toggle("active", button.dataset.target === page));
     if (page === "stock" && state.session) loadStock();
