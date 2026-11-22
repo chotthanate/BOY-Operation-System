@@ -1,9 +1,13 @@
 // Isolated screen fixture: no requests reach a real service.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.resolve(__dirname,'..');
+const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.resolve(__dirname,'..');
 const catalog={version:'fixture',items:[{id:'fruit',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',base_unit_id:'kg'},{id:'shipping',expense_item_id:'shipping',code:'EXP-1',name:'ค่าขนส่ง',category_id:'cat',subcategory_id:'sub'}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null,category_type:'item'},{id:'sub',name:'ผลไม้',parent_id:'cat',category_type:'item'}],item_units:[{item_id:'fruit',unit_id:'kg',purchase:true,conversion:1}],suppliers:[{id:'supplier',name:'ผู้ขายเดียว'}],item_suppliers:[{item_id:'fruit',supplier_id:'supplier'}]};
-async function setup(browser,branch,width,seed={}){
- const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+async function setup(browser,branch,width,seed={},authorized=true){
+ const purchase=JSON.parse(JSON.stringify(catalog));
+ purchase.items.push({id:'mapped-exp',expense_item_id:'mapped-exp',code:'EXP-MAPPED',name:'ขนมปังยี่ห้อทดสอบ',category_id:'cat',subcategory_id:'sub',is_physical:true,requires_quantity:false,requires_unit:false,purchased_item_id:'brand',stock_target_item_id:'pool',stock_target_name:'ขนมปังรวม',purchase_unit_id:'pack'});
+ purchase.items.push({id:'duplicate-a',code:'ITEM-DUP-A',name:'ชื่อซ้ำ',category_id:'cat',is_physical:true,base_unit_id:'kg'},{id:'duplicate-b',code:'ITEM-DUP-B',name:'ชื่อซ้ำ',category_id:'cat',is_physical:true,base_unit_id:'kg'});
+ purchase.units.push({id:'pack',name:'แพ็ค'});purchase.item_units.push({item_id:'brand',unit_id:'pack',purchase:true,conversion:6});
+ const page=await browser.newPage({viewport:{width,height:900},isMobile:width===390,hasTouch:width===390}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(({cat,branch,seed})=>{
   window.__calls=[];window.__saved=[];window.__rev=0;window.__income=null;window.__draft={};window.__fail=false;
   window.confirm=()=>true;for(const [k,v] of Object.entries(seed))localStorage.setItem(k,JSON.stringify(v));
@@ -19,23 +23,28 @@ async function setup(browser,branch,width,seed={}){
    if(name==='get_branch_finance_day')return{data:{income:window.__income,revenue_mode:manual?'manual':'pos_shift',pos_income:100,expenses:window.__saved.filter(p=>p.date===args.target_date).map((p,i)=>({id:String(i),status:'confirmed',total_amount:p.lines.reduce((n,x)=>n+x.line_total,0),receiving_status:p.lines[0].receiving_mode==='delivery'?'pending':'received',lines:p.lines.map(x=>({description:x.description,amount:x.line_total,quantity:x.quantity,unit:'กก.',supplier:x.supplier_name}))}))}};
    throw Error('unmocked rpc '+name);
   }})})};
- },{cat:catalog,branch,seed});
+ },{cat:purchase,branch,seed});
  await page.route('**/*',r=>{
   const u=new URL(r.request().url());if(u.origin!=='https://entry.fixture')return r.fulfill({body:'',contentType:'text/javascript'});
+  if(u.pathname.endsWith('boy-auth-guard.js')&&!authorized)return r.fulfill({body:'',contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-auth-guard.js'))return r.fulfill({body:"window.BOY_AUTH_CONTEXT={user:{id:'owner'}};window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();document.querySelector('#boyAuthFallback')?.remove();",contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-central-config.js'))return r.fulfill({body:"window.BOY_CENTRAL_CONFIG={url:'https://fixture.invalid',publishableKey:'public-fixture'}",contentType:'text/javascript'});
   const file=path.join(root,u.pathname);if(!file.startsWith(root)||!fs.existsSync(file))return r.fulfill({status:404,body:''});
   return r.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
  });
- await page.goto('https://entry.fixture/expenses.html?branch='+branch);await page.waitForFunction(()=>window.BOY_FINANCE_ENTRY?.state.catalog&&document.querySelector('.expense-card'),null,{timeout:5000}).catch(async e=>{console.error(errors,await page.locator('#entryNotice').textContent(),await page.evaluate(()=>window.__calls));throw e;});
+ await page.goto('https://entry.fixture/expenses.html?branch='+branch);if(authorized)await page.waitForFunction(()=>window.BOY_FINANCE_ENTRY?.state.catalog&&document.querySelector('.expense-card'),null,{timeout:5000}).catch(async e=>{console.error(errors,await page.locator('#entryNotice').textContent(),await page.evaluate(()=>window.__calls));throw e;});
  return{page,errors};
 }
 async function fill(page){
  await page.locator('[data-product]').fill('แตงโม');await page.locator('[data-product]').press('Tab');
- await page.locator('[data-field="quantity"]').fill('2');await page.locator('[data-field="line_total"]').fill('100');await page.locator('[data-field="receiving_mode"]').selectOption('delivery');
+ await page.locator('[data-field="quantity"]').fill('2');await page.locator('[data-field="line_total"]').fill('100');
+ // WebKit can defer the inherited auth-visibility repaint after replacing the
+ // product card; exercise the screen only after a rendered frame.
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.locator('[data-field="receiving_mode"]').selectOption('delivery');
  assert.equal(await page.locator('[data-field="supplier_name"]').inputValue(),'ผู้ขายเดียว');assert.equal(await page.locator('[data-field="subcategory_id"]').inputValue(),'sub');
 }
-(async()=>{const browser=await chromium.launch({headless:true});try{
+(async()=>{const browser=await (process.env.BROWSER_ENGINE==='webkit'?webkit:chromium).launch({headless:true});try{
  for(const branch of ['TAWANA','BURGER','GRILL','BIGC-CENTRAL-PATTAYA','BIGC-SOUTH-PATTAYA'])for(const width of [390,1440]){
   const{page,errors}=await setup(browser,branch,width),today=await page.locator('#entryDate').inputValue();
   assert.equal(await page.locator('#incomeCard').isVisible(),['TAWANA','BIGC-CENTRAL-PATTAYA'].includes(branch));
@@ -64,6 +73,28 @@ async function fill(page){
  assert.equal(await page.locator('#entryLines').getAttribute('inert'),'');const first=await page.evaluate(()=>__calls.find(x=>x.name==='record_finance_expenses').args.payload);
  await page.locator('#confirmEntrySave').click();await page.waitForFunction(()=>__saved.length===1);assert.deepEqual(await page.evaluate(()=>__saved[0]),first);await page.close();
  console.log('network: durable exact retry passed');
+ for(const branch of ['TAWANA','BURGER','GRILL','BIGC-CENTRAL-PATTAYA','BIGC-SOUTH-PATTAYA']){
+  ({page}=await setup(browser,branch,390));
+  assert.equal(await page.locator('[data-field="quantity"]').isVisible(),true,'quantity must be visible before selection');
+  await page.locator('[data-field="quantity"]').fill('3');
+  await page.locator('[data-product]').fill('ขนมปัง');
+  await page.locator('.entry-product-choice').filter({hasText:'ขนมปังยี่ห้อทดสอบ'}).tap();
+  assert.equal(await page.locator('[data-field="quantity"]').inputValue(),'3');
+  assert.equal(await page.locator('[data-field="unit_id"]').inputValue(),'pack');
+  assert.match(await page.locator('.entry-product-status').textContent(),/ขนมปังรวม/);
+  await page.locator('[data-field="receiving_mode"]').selectOption('delivery');await page.locator('[data-field="line_total"]').fill('100');
+  const mapped=await page.evaluate(()=>BOY_FINANCE_ENTRY.payloadLines()[0]);
+  assert.equal(mapped.expense_item_id,'mapped-exp');assert.equal(mapped.quantity,3);assert.equal(mapped.receiving_mode,'delivery');
+  await page.locator('[data-product]').fill('ไม่พบสินค้าในฐาน');
+  await page.locator('#saveExpenses').click();assert.match(await page.locator('#entryNotice').textContent(),/เลือกสินค้า/);
+  assert.equal(await page.evaluate(()=>__calls.filter(x=>x.name==='record_finance_expenses').length),0);
+  await page.locator('[data-product]').focus();await page.locator('.entry-custom-choice').tap();
+  assert.equal(await page.evaluate(()=>BOY_FINANCE_ENTRY.payloadLines()[0].custom_expense),true);
+  await page.locator('[data-product]').fill('ชื่อซ้ำ');await page.locator('.entry-product-choice').filter({hasText:'ITEM-DUP-B'}).tap();
+  assert.equal(await page.evaluate(()=>BOY_FINANCE_ENTRY.state.lines[0].item_id),'duplicate-b');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.close();console.log(branch+': touch picker, quantity, pooled legacy flags, unlinked guard and duplicate names passed');
+ }
  ({page}=await setup(browser,'GRILL',390));await fill(page);
  await page.locator('[data-field="subcategory_id"]').selectOption('__add_category__');await page.locator('#expenseCategoryDialog [name="name"]').fill('เพิ่มจากฟอร์ม');
  await page.locator('#expenseCategoryDialog [type="submit"]').click();await page.waitForFunction(()=>document.querySelector('[data-field="subcategory_id"]').value==='created-sub');
@@ -77,4 +108,9 @@ async function fill(page){
  await page.locator('#useCloudDraft').click();await page.waitForFunction(()=>document.querySelector('#recoveryPanel').hidden);
  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('BOY_ENTRY_V1:TAWANA:owner:backups'))[0].data.lines[0].description),'ร่างห้ามหาย');
  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('BOY_TAWANA_DRAFT_2099-01-01')).exp[0].i),'เก่าห้ามหาย');await page.close();console.log('conflict: backup and untouched legacy draft passed');
+ ({page}=await setup(browser,'BURGER',390,{},false));
+ assert.equal(await page.locator('.entry-shell').isVisible(),false);
+ assert.equal(await page.evaluate(()=>document.documentElement.dataset.financeReady),undefined);
+ assert.equal(await page.evaluate(()=>__calls.length),0);
+ await page.close();console.log('auth pending: no private content or branch requests before authorization');
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

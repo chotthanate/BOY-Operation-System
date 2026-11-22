@@ -18,7 +18,7 @@ begin
   exception when others then if sqlerrm not like 'ร่างถูกแก้%' then raise;end if;end;
   request:=gen_random_uuid();
   payload:=jsonb_build_object('branch_code',b.code,'date','2099-06-01','request_id',request,'expected_revision',rev,
-   'lines',jsonb_build_array(jsonb_build_object('description','Rollback batch one','category_id',category,'subcategory_id',subcategory,'line_total',100,'payment_method','reimbursement_pending','receiving_mode','immediate')));
+   'lines',jsonb_build_array(jsonb_build_object('description','Rollback batch one','custom_expense',true,'category_id',category,'subcategory_id',subcategory,'line_total',100,'payment_method','reimbursement_pending','receiving_mode','immediate')));
   result:=boy_central.record_finance_expenses(payload);tid:=(result#>>'{transaction_ids,0}')::uuid;
   if tid is null or (select total_amount from boy_central.transactions where id=tid)<>100 then raise exception 'expense missing for %',b.code;end if;
   if not exists(select 1 from boy_central.transaction_lines where transaction_id=tid and category_id=category and subcategory_id=subcategory) then raise exception 'subcategory was not stored';end if;
@@ -42,8 +42,8 @@ begin
   select count(*) into before_count from boy_central.transactions;
   begin
    perform boy_central.record_finance_expenses(payload||jsonb_build_object('request_id',gen_random_uuid(),'expected_revision',rev,'lines',jsonb_build_array(
-    jsonb_build_object('description','valid first group','category_id',category,'line_total',10,'payment_method','cash'),
-    jsonb_build_object('description','bad second group','category_id',category,'line_total',20,'payment_method','invalid'))));
+    jsonb_build_object('description','valid first group','custom_expense',true,'category_id',category,'line_total',10,'payment_method','cash'),
+    jsonb_build_object('description','bad second group','custom_expense',true,'category_id',category,'line_total',20,'payment_method','invalid'))));
    raise exception 'invalid group accepted';
   exception when others then if sqlerrm not like 'เลือกช่องทาง%' then raise;end if;end;
   if (select count(*) from boy_central.transactions)<>before_count then raise exception 'group not atomic';end if;

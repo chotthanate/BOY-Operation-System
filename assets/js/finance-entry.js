@@ -62,18 +62,39 @@
   rows.forEach(x=>select.append(node('option',{value:x.id,text:x.name})));select.value=value||'';
   select.onchange=()=>change(select.value);return node('label',{},[node('span',{text:label}),select]);
  }
- function selectProduct(row,value){
-  const matches=state.catalog.items.filter(x=>x.option===value||x.name===value);
-  if(matches.length>1)return notice('ชื่อรายการซ้ำ กรุณาเลือกชื่อพร้อมรหัสจากรายการ');
-  const product=matches[0];row.description=product?.name||value;
+ const normalized=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('th');
+ function productFor(row){return state.catalog.items.find(x=>row.item_id?x.id===row.item_id&&!x.expense_item_id:row.expense_item_id&&x.expense_item_id===row.expense_item_id);}
+ function requirements(row){
+  const product=productFor(row),physical=!!(product&&(product.is_physical||product.stock_target_item_id||product.track_stock||(!product.expense_item_id&&product.is_physical!==false)));
+  if(row.is_investment)return {product,physical:false,quantity:false,unit:false};
+  return {product,physical,quantity:!product||physical||product.requires_quantity,unit:!product||physical||product.requires_unit};
+ }
+ function selectProduct(row,value,explicit=null){
+  const matches=state.catalog.items.filter(x=>normalized(x.option)===normalized(value)||normalized(x.name)===normalized(value));
+  if(!explicit&&matches.length>1)return notice('ชื่อรายการซ้ำ กรุณาเลือกชื่อพร้อมรหัสจากรายการ');
+  const product=explicit||matches[0];if(!product)return;
+  row.description=product.name;row.custom_expense=false;
   row.item_id=product&&!product.expense_item_id?product.id:null;row.expense_item_id=product?.expense_item_id||null;
   if(product){
    row.category_id=product.category_id||'';row.subcategory_id=product.subcategory_id||'';
-   row.unit_id=state.catalog.item_units.find(x=>x.item_id===product.id&&x.purchase!==false)?.unit_id||product.base_unit_id||'';
-   const suppliers=(state.catalog.item_suppliers||[]).filter(x=>x.item_id===product.id).map(x=>state.catalog.suppliers.find(s=>s.id===x.supplier_id)?.name).filter(Boolean);
+   const sourceId=product.purchased_item_id||product.id;
+   row.unit_id=product.purchase_unit_id||state.catalog.item_units.find(x=>x.item_id===sourceId&&x.purchase!==false)?.unit_id||product.base_unit_id||'';
+   const suppliers=(state.catalog.item_suppliers||[]).filter(x=>x.item_id===sourceId).map(x=>state.catalog.suppliers.find(s=>s.id===x.supplier_id)?.name).filter(Boolean);
    row.supplier_name=window.BOY_EXPENSE_APP.onlySupplier(suppliers)||'';
+   if(!requirements(row).physical&&!product.requires_quantity){row.quantity='';row.receiving_mode='immediate';}
   }
   changed();render();
+ }
+ function renderProductChoices(picker,row,value){
+  const list=picker.querySelector('.entry-product-choices');list.replaceChildren();list.hidden=false;
+  const query=normalized(value),matches=state.catalog.items.filter(x=>!query||normalized(x.name+' '+x.code).includes(query));
+  matches.slice(0,20).forEach(product=>{
+   const choice=button('','entry-product-choice',()=>selectProduct(row,product.name,product));choice.setAttribute('role','option');
+   choice.append(node('strong',{text:product.name}),node('small',{text:[product.code,product.stock_target_name?'เข้าสต็อก '+product.stock_target_name:product.expense_item_id?'ค่าใช้จ่าย':'สินค้า'].join(' · ')}));list.append(choice);
+  });
+  if(!matches.length)list.append(node('small',{text:'ไม่พบสินค้าที่ตรงกัน'}));
+  if(matches.length>20)list.append(node('small',{text:'พิมพ์เพิ่มเพื่อค้นหารายการอื่น'}));
+  if(query)list.append(button('ใช้ “'+value+'” เป็นรายจ่ายทั่วไป','entry-custom-choice',()=>{row.custom_expense=true;row.item_id=null;row.expense_item_id=null;row.receiving_mode='immediate';changed();render();}));
  }
  function render(){
   const list=$('#entryLines');list.replaceChildren();const c=state.catalog;if(!c)return;
@@ -84,8 +105,23 @@
    const remove=button('×','entry-line-remove',()=>{if(!confirm('ลบรายการนี้ออกจากร่างหรือไม่?'))return;state.lines=state.lines.filter(x=>x!==row);if(!state.lines.length)state.lines=[line()];changed();render();});remove.setAttribute('aria-label','ลบรายการ '+(index+1));
    card.append(node('div',{class:'entry-line-heading'},[toggle]));
    const body=node('div',{class:'entry-line-body',hidden:!row.expanded});
-   const product=field('รายการสินค้า / ค่าใช้จ่าย','input',row.description,{list:'entryProductOptions',autocomplete:'off','data-product':'true'},value=>{row.description=value;row.item_id=null;row.expense_item_id=null;changed();});
-   product.className='entry-item-field';product.querySelector('input').onchange=e=>selectProduct(row,e.target.value);body.append(product);
+   const picker=node('div',{class:'entry-product-picker'});
+   const product=field('รายการสินค้า / ค่าใช้จ่าย','input',row.description,{autocomplete:'off','data-product':'true',placeholder:'พิมพ์ค้นหาหรือกดเลือกสินค้า','aria-autocomplete':'list'},value=>{
+    row.description=value;row.item_id=null;row.expense_item_id=null;row.custom_expense=false;changed();renderProductChoices(picker,row,value);
+    picker.querySelector('.entry-product-status').textContent='เลือกรายการจากรายการแนะนำ';
+    const receiving=body.querySelector('[data-field="receiving_mode"]');if(receiving)receiving.closest('label').hidden=true;
+   });
+   product.className='entry-item-field';const input=product.querySelector('input'),choices=node('div',{class:'entry-product-choices',role:'listbox',hidden:true});
+   const control=node('div',{class:'entry-product-control'},[input,button('⌄','entry-product-open',()=>{if(choices.hidden)renderProductChoices(picker,row,input.value);else choices.hidden=true;})]);
+   control.querySelector('button').setAttribute('aria-label','เลือกสินค้า');product.append(control);
+   choices.onpointerdown=e=>{picker.choosing=true;if(e.pointerType==='mouse')e.preventDefault();};
+   choices.onpointercancel=()=>{picker.choosing=false;};
+   input.onfocus=()=>renderProductChoices(picker,row,input.value);
+   input.onchange=e=>{if(!picker.choosing&&!row.item_id&&!row.expense_item_id&&!row.custom_expense)selectProduct(row,e.target.value);};
+   input.onkeydown=e=>{if(e.key==='Escape')choices.hidden=true;};
+   const req=requirements(row),source=req.product;
+   const status=row.is_investment?'เงินลงทุน · ไม่เพิ่มสต็อก':source?(source.stock_target_name?'เข้าสต็อก: '+source.stock_target_name:req.physical?'ผูกสินค้าแล้ว':'รายการค่าใช้จ่าย'):row.custom_expense?'รายจ่ายทั่วไป · ไม่เพิ่มสต็อก':row.description?'เลือกรายการจากรายการแนะนำ':'';
+   picker.append(product,choices,node('small',{class:'entry-product-status',text:status}));body.append(picker);
    const grid=node('div',{class:'entry-fields'});
    const mains=c.categories.filter(x=>!x.parent_id),subs=c.categories.filter(x=>x.parent_id===row.category_id);
    const main=selectField('ประเภทหลัก',row.category_id,mains,{'data-field':'category_id'},value=>{if(value==='__add_category__')return;row.category_id=value;row.subcategory_id='';changed();render();});
@@ -93,20 +129,20 @@
    const sub=selectField('ประเภทย่อย',row.subcategory_id,subs,{'data-field':'subcategory_id'},value=>{if(value==='__add_category__')return;row.subcategory_id=value;changed();},'ไม่ระบุ');
    sub.querySelector('select').insertAdjacentHTML('beforeend',window.BOY_EXPENSE_APP.addCategoryOption('sub'));grid.append(main,sub);
    grid.append(field('ยอดเงิน','input',row.line_total,{type:'number',min:'0',step:'0.01',inputmode:'decimal','data-field':'line_total'},v=>{row.line_total=v;changed();updateTotal();}));
-   const source=c.items.find(x=>x.id===row.item_id||x.expense_item_id===row.expense_item_id&&row.expense_item_id);
-   if(row.item_id||source?.requires_quantity){
-    grid.append(field('จำนวน','input',row.quantity,{type:'number',min:'0',step:'any',inputmode:'decimal','data-field':'quantity'},v=>{row.quantity=v;changed();}));
+   if(req.quantity){
+    grid.append(field(source?'จำนวน':'จำนวน (ถ้ามี)','input',row.quantity,{type:'number',min:'0',step:'any',inputmode:'decimal','data-field':'quantity'},v=>{row.quantity=v;changed();}));
    }
-   if(row.item_id||source?.requires_unit){
-    const options=c.item_units.filter(x=>x.item_id===row.item_id&&x.purchase!==false).map(x=>c.units.find(u=>u.id===x.unit_id)).filter(Boolean);
+   if(req.unit){
+    const sourceId=source?.purchased_item_id||row.item_id;
+    const options=source?.expense_item_id&&req.physical?c.units.filter(x=>x.id===source.purchase_unit_id):c.item_units.filter(x=>x.item_id===sourceId&&x.purchase!==false).map(x=>c.units.find(u=>u.id===x.unit_id)).filter(Boolean);
     grid.append(selectField('หน่วยซื้อ',row.unit_id,options.length?options:c.units,{'data-field':'unit_id'},v=>{row.unit_id=v;changed();}));
    }
-   if(row.item_id)grid.append(selectField('การรับสินค้า',row.receiving_mode,[{id:'immediate',name:'รับสินค้าทันที'},{id:'delivery',name:'รอจัดส่ง'}],{'data-field':'receiving_mode'},v=>{row.receiving_mode=v;changed();}));
+   if(req.physical)grid.append(selectField('การรับสินค้า',row.receiving_mode,[{id:'immediate',name:'รับสินค้าทันที'},{id:'delivery',name:'รอจัดส่ง'}],{'data-field':'receiving_mode'},v=>{row.receiving_mode=v;changed();}));
    grid.append(selectField('ชำระด้วย',row.payment_method,[{id:'cash',name:'เงินสด'},{id:'transfer',name:'เงินโอน'},{id:'credit_card',name:'บัตรเครดิต'},{id:'reimbursement_pending',name:'รอเบิกค่าใช้จ่าย'}],{'data-field':'payment_method'},v=>{row.payment_method=v;changed();}));
    grid.append(field('ผู้ขาย / Supplier','input',row.supplier_name,{list:'entrySupplierOptions','data-field':'supplier_name'},v=>{row.supplier_name=v;changed();}));
    grid.append(field('หมายเหตุ','input',row.note,{'data-field':'note'},v=>{row.note=v;changed();}));
    const investment=node('div',{class:'entry-wide'});investment.innerHTML=window.BOY_EXPENSE_APP.investmentFields(row);
-   const updateInvestment=()=>{const selected=investment.querySelector('.is-investment').checked;Object.assign(row,window.BOY_EXPENSE_APP.readInvestment(investment));row.is_investment=selected;row.expense_class=selected?'capital':'operating';changed();};
+   const updateInvestment=event=>{const selected=investment.querySelector('.is-investment').checked;Object.assign(row,window.BOY_EXPENSE_APP.readInvestment(investment));row.is_investment=selected;row.expense_class=selected?'capital':'operating';changed();if(event.type==='change'&&event.target.matches('.is-investment'))render();};
    investment.addEventListener('input',updateInvestment);investment.addEventListener('change',updateInvestment);grid.append(investment);body.append(grid);
    remove.textContent='ลบรายการนี้';remove.className='entry-secondary entry-line-delete';
    body.append(node('div',{class:'entry-actions'},[remove,button('✓ เสร็จสิ้น','entry-secondary entry-line-done',()=>{row.expanded=false;changed();render();})]));card.append(body);list.append(card);
@@ -120,8 +156,9 @@
   return state.lines.filter(x=>x.description||Number(x.line_total)).map(x=>{
    if(!x.description.trim()||!(Number(x.line_total)>0))throw Error('กรอกชื่อรายการและยอดเงินให้ครบ');
    if(!x.is_investment&&!x.category_id)throw Error('เลือกประเภทหลัก: '+x.description);
-   const source=state.catalog.items.find(i=>i.expense_item_id&&i.expense_item_id===x.expense_item_id);
-   if(!x.is_investment&&((x.item_id||source?.requires_quantity)&&!(Number(x.quantity)>0)||(x.item_id||source?.requires_unit)&&!x.unit_id))throw Error('กรอกจำนวนและหน่วยซื้อ: '+x.description);
+   const req=requirements(x),source=req.product;
+   if(!x.is_investment&&!source&&!x.custom_expense)throw Error('เลือกสินค้า หรือกดใช้เป็นรายจ่ายทั่วไป: '+x.description);
+   if(!x.is_investment&&((source&&req.quantity)&&!(Number(x.quantity)>0)||(source&&req.unit)&&!x.unit_id))throw Error('กรอกจำนวนและหน่วยซื้อ: '+x.description);
    if(x.is_investment&&(!x.project_name?.trim()||!x.investment_category))throw Error('ระบุโครงการและหมวดลงทุน: '+x.description);
    const suppliers=state.catalog.suppliers.filter(s=>s.name.trim().toLocaleLowerCase('th')===(x.supplier_name||'').trim().toLocaleLowerCase('th'));
    return {...x,expense_class:x.is_investment?'capital':'operating',item_id:x.is_investment?null:x.item_id,expense_item_id:x.is_investment?null:x.expense_item_id,
@@ -213,6 +250,9 @@
    const tools=branch.code==='TAWANA'?new URL(url):new URL('burger.html?branch='+branch.code+'&legacy=1',location.href);if(branch.code==='TAWANA')tools.searchParams.set('view','employee');else tools.searchParams.set('page','stock');$('#branchTools').href=tools.href;
    if(Object.keys(localStorage).some(k=>k.startsWith(branch.code==='TAWANA'?'BOY_TAWANA_DRAFT_':branch.code==='BIGC-CENTRAL-PATTAYA'?'BOY_BIGC_EXPENSE_DRAFT_':'boy-'+branch.slug+'-draft:')||k.startsWith('boy-'+branch.slug+'-outbox:')||k.startsWith('BOY_CENTRAL_DAILY:'+branch.code+':request:')))$('#legacyRecovery').hidden=false;
    const [workspace,cat]=await Promise.all([rpc('get_finance_entry_workspace',{branch_code:branch.code}),catalog()]);state.branchId=workspace.branch_id;state.revision=workspace.revision;state.catalog=cat;
+   // Explicitly reveal this subtree only after the branch-authorized response;
+   // WebKit may retain inherited hidden visibility after removing the auth style.
+   document.documentElement.dataset.financeReady='true';
    const units=new Map(cat.units.map(x=>[x.id,x.name]));cat.items.forEach(x=>{x.option=x.name+' · '+(units.get(x.base_unit_id)||'ค่าใช้จ่าย')+' · '+x.code;$('#entryProductOptions').append(node('option',{value:x.option}));});
    cat.suppliers.forEach(x=>$('#entrySupplierOptions').append(node('option',{value:x.name})));
    window.BOY_EXPENSE_APP.configureCategories({branchCode:branch.code,categories:async()=>state.catalog.categories,rpc,
@@ -221,7 +261,7 @@
    if(local?.dirty&&JSON.stringify(local.data)!==JSON.stringify(workspace.data)){data=local.data;if(local.revision!==workspace.revision){state.conflict=true;$('#recoveryPanel').hidden=false;}state.dirty=true;}
    if(pending){data={date:pending.date,lines:pending.lines};notice('มีรายการรอส่ง กดส่งซ้ำเพื่อยืนยัน โดยไม่สร้างบิลซ้ำ');}
    useDraft(data);localSave();render();backups();$('#draftState').textContent=state.conflict?'รอตรวจเทียบ':state.dirty?'ร่างในเครื่อง':'พร้อมบันทึก';
-   $('#saveExpenses').disabled=$('#addEntryLine').disabled=false;
+   $('#saveExpenses').disabled=false;
    $('#incomeCard').hidden=workspace.revenue_mode!=='manual'||workspace.can_record_income===false;$('#governmentField').hidden=branch.code==='TAWANA';
    if(!$('#incomeCard').hidden)await loadIncome();
    if(query.get('view')==='history')view('history');
