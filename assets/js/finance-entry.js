@@ -5,7 +5,10 @@
  const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok'}).format(new Date());
  const money=v=>Number(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
  const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f;}catch{return f;}};
- const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+ const write=(k,v,optional=false)=>{
+  try{if(window.BOY_SESSION_STORAGE?.saveLocal)return window.BOY_SESSION_STORAGE.saveLocal(k,JSON.stringify(v),optional);localStorage.setItem(k,JSON.stringify(v));return true;}
+  catch(error){if(optional)return false;throw Error('พื้นที่เก็บร่างในเบราว์เซอร์ไม่พร้อม ยังไม่ได้ส่งรายการ กรุณาลองใหม่');}
+ };
  const state={client:null,session:null,catalog:null,branchId:null,revision:0,lines:[],dirty:false,busy:false,conflict:false,save:Promise.resolve(),timer:0,started:false,income:null,incomeRevision:0,incomeConflict:false,dayCache:new Map()};
  const key=s=>'BOY_ENTRY_V1:'+branch.code+':'+state.session.user.id+':'+s;
  const line=()=>({id:crypto.randomUUID(),description:'',item_id:null,expense_item_id:null,category_id:'',subcategory_id:'',quantity:'',unit_id:'',line_total:'',supplier_name:'',note:'',payment_method:'cash',receiving_mode:'immediate',expanded:true,is_investment:query.get('investment')==='1'});
@@ -35,7 +38,7 @@
   const cached=read(key('catalog'));
   // Validate the version once on opening; unchanged catalogs return metadata only.
   const data=await rpc('get_daily_catalog',{target_branch_code:branch.code,known_version:cached?.schema===2?cached.data.version:null});
-  const result=data.not_modified?cached.data:data;write(key('catalog'),{schema:2,data:result,at:Date.now()});return result;
+  const result=data.not_modified?cached.data:data;write(key('catalog'),{schema:2,data:result,at:Date.now()},true);return result;
  }
  function changed(){if(!state.session||state.busy)return;state.dirty=true;localSave();$('#draftState').textContent='เก็บในเครื่องแล้ว';clearTimeout(state.timer);state.timer=setTimeout(()=>saveDraft().catch(showError),8000);}
  async function saveDraft(){
@@ -277,7 +280,7 @@
    const units=new Map(cat.units.map(x=>[x.id,x.name]));cat.items.forEach(x=>{x.option=x.name+' · '+(units.get(x.base_unit_id)||'ค่าใช้จ่าย')+' · '+x.code;$('#entryProductOptions').append(node('option',{value:x.option}));});
    cat.suppliers.forEach(x=>$('#entrySupplierOptions').append(node('option',{value:x.name})));
    window.BOY_EXPENSE_APP.configureCategories({branchCode:branch.code,categories:async()=>state.catalog.categories,rpc,
-    onCreated:async(result,context)=>{state.catalog.categories=result.categories.filter(x=>x.category_type==='item');write(key('catalog'),{schema:2,data:state.catalog,at:Date.now()});const row=state.lines.find(x=>x.id===context.lineId);if(row&&result.categories.some(x=>x.id===result.id)){row.category_id=result.parent_id||result.id;row.subcategory_id=result.parent_id?result.id:'';}changed();render();}});
+    onCreated:async(result,context)=>{state.catalog.categories=result.categories.filter(x=>x.category_type==='item');write(key('catalog'),{schema:2,data:state.catalog,at:Date.now()},true);const row=state.lines.find(x=>x.id===context.lineId);if(row&&result.categories.some(x=>x.id===result.id)){row.category_id=result.parent_id||result.id;row.subcategory_id=result.parent_id?result.id:'';}changed();render();}});
    const local=read(key('draft')),pending=read(key('pending'));let data=workspace.data;
    if(local?.dirty&&JSON.stringify(local.data)!==JSON.stringify(workspace.data)){data=local.data;if(local.revision!==workspace.revision){state.conflict=true;$('#recoveryPanel').hidden=false;}state.dirty=true;}
    if(pending){data={date:pending.date,lines:pending.lines};notice('มีรายการรอส่ง กดส่งซ้ำเพื่อยืนยัน โดยไม่สร้างบิลซ้ำ');}

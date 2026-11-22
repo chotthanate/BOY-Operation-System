@@ -5,15 +5,19 @@ const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),roo
  for(const branch of ['TAWANA','BURGER','GRILL','BIGC-CENTRAL-PATTAYA','BIGC-SOUTH-PATTAYA']){
   const page=await browser.newPage({viewport:{width:390,height:850}}),errors=[],outside=[],calls=[];let failProfile=branch==='TAWANA';
   page.on('pageerror',e=>errors.push(e.message));
-  await page.addInitScript(expired=>{
+  await page.addInitScript(({expired,quota})=>{
    const enc=x=>btoa(JSON.stringify(x)).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
    const user={id:'00000000-0000-0000-0000-000000000001',aud:'authenticated',role:'authenticated'},exp=Math.floor(Date.now()/1000)+3600;
    const token=enc({alg:'HS256',typ:'JWT'})+'.'+enc({sub:user.id,aud:'authenticated',role:'authenticated',exp})+'.fixture-signature';
    window.__fixtureSession={access_token:token,refresh_token:'test-refresh-not-a-real-token',token_type:'bearer',expires_in:3600,expires_at:exp,user};
    localStorage.setItem('sb-qa-auth-token',JSON.stringify({...window.__fixtureSession,expires_at:expired?1:exp}));
    localStorage.setItem('BOY_TAWANA_DRAFT_2099-01-01','draft-must-survive');
+   if(quota){
+    localStorage.setItem('BOY_ENTRY_V1:GRILL:owner:catalog','rebuildable-fixture');localStorage.setItem('BOY_CENTRAL_DAILY:TAWANA:catalog:v4:owner','rebuildable-fixture');
+    const original=Storage.prototype.setItem;Storage.prototype.setItem=function(k,v){if(localStorage.getItem('BOY_ENTRY_V1:GRILL:owner:catalog'))throw new DOMException('The quota has been exceeded.','QuotaExceededError');return original.call(this,k,v);};
+   }
    Object.defineProperty(window,'indexedDB',{value:{open:()=>({})},configurable:true});
-  },branch==='BURGER');
+  },{expired:branch==='BURGER',quota:branch==='GRILL'});
   await page.route('**/*',async r=>{
    const u=new URL(r.request().url());
    if(u.origin==='https://qa.supabase.co'){
@@ -45,6 +49,7 @@ const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),roo
   assert.equal(await page.evaluate(()=>localStorage.getItem('BOY_TAWANA_DRAFT_2099-01-01')),'draft-must-survive');
   assert.equal(calls.some(x=>/record_|save_/.test(x)),false);assert.deepEqual(outside,[]);assert.deepEqual(errors,[]);
   if(branch==='BURGER')assert.equal(calls.filter(x=>x==='/auth/v1/token').length,1,'one refresh, no duplicate client refresh');
+  if(branch==='GRILL')assert.equal(await page.evaluate(()=>localStorage.getItem('BOY_ENTRY_V1:GRILL:owner:catalog')===null&&localStorage.getItem('BOY_CENTRAL_DAILY:TAWANA:catalog:v4:owner')===null),true,'only regenerable catalogs reclaimed');
   await page.close();console.log(branch+': real SDK, stalled IndexedDB, protected profile check and no-CDN startup passed');
  }
 }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

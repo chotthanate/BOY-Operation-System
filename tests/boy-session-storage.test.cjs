@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
 function adapter(options={}){
  const values=new Map();
  const context={URL,setTimeout:(fn,ms)=>setTimeout(fn,options.fastTimeout?Math.min(ms,10):ms),clearTimeout,indexedDB:options.indexedDB,localStorage:{
+  get length(){return values.size;},key:i=>[...values.keys()][i],
   getItem:k=>{if(options.localUnavailable)throw Error('storage unavailable');return values.get(k)||null;},setItem:(k,v)=>{if(options.localUnavailable)throw Error('storage unavailable');values.set(k,v);},removeItem:k=>{if(options.localUnavailable)throw Error('storage unavailable');values.delete(k);}
  }};
  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../assets/js/boy-session-storage.js'),'utf8'),context);
@@ -15,6 +16,15 @@ test('existing Supabase session remains readable without PIN storage or IndexedD
  assert.equal(await api.storage.getItem('sb-qa-auth-token'),session);
  await api.storage.setItem('sb-qa-auth-token',JSON.stringify({user:{id:'employee-b'}}));
  assert.equal(JSON.parse(await api.storage.getItem('sb-qa-auth-token')).user.id,'employee-b');
+});
+test('quota recovery discards only rebuildable catalogs, never business data or authentication',()=>{
+ const {api,values}=adapter();
+ const storageKey='BOY_ENTRY_V1:BURGER:owner:catalog',draftKey='BOY_ENTRY_V1:BURGER:owner:draft';
+ values.set(storageKey,'large-catalog');values.set(draftKey,'draft');values.set('BOY_ENTRY_V1:BURGER:owner:pending','outbox');values.set('sb-qa-auth-token','test-auth');values.set('settings','settings');
+ const source=fs.readFileSync(path.join(__dirname,'../assets/js/boy-session-storage.js'),'utf8'),local={get length(){return values.size;},key:i=>[...values.keys()][i],getItem:k=>values.get(k)||null,removeItem:k=>values.delete(k),setItem:(k,v)=>{if(values.has(storageKey)){const e=Error('quota');e.name='QuotaExceededError';throw e;}values.set(k,v);}};
+ const ctx={localStorage:local,URL,setTimeout,clearTimeout};vm.runInNewContext(source,ctx);
+ assert.equal(ctx.BOY_SESSION_STORAGE.saveLocal('new-draft','pending-data'),true);
+ assert.equal(values.has(storageKey),false);for(const [k,v] of [[draftKey,'draft'],['BOY_ENTRY_V1:BURGER:owner:pending','outbox'],['sb-qa-auth-token','test-auth'],['settings','settings']])assert.equal(values.get(k),v);
 });
 test('a stuck IndexedDB backup cannot block reading or refreshing a local session',async()=>{
  const {api,values}=adapter({indexedDB:{open:()=>({})},fastTimeout:true});values.set('sb-qa-auth-token','test-session');

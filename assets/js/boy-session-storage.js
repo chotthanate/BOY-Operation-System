@@ -4,6 +4,19 @@
   const DEADLINE_MS = 1800;
   let database;
   const versions = new Map(), pending = new Map();
+  function saveLocal(key,value,optional=false){
+    try{localStorage.setItem(key,value);return true;}catch(error){
+      const quota=error?.name==='QuotaExceededError'||error?.code===22||error?.code===1014;
+      if(quota){
+        // Only regenerable catalog snapshots. Never drafts, outboxes, history,
+        // settings, auth records, logout markers or unrelated browser data.
+        const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^BOY_ENTRY_V1:[^:]+:[^:]+:catalog$/.test(k)||/^BOY_CENTRAL_DAILY:[^:]+:catalog:v\d+:/.test(k))keys.push(k);}
+        keys.forEach(k=>localStorage.removeItem(k));
+        if(!optional&&keys.length){localStorage.setItem(key,value);return true;}
+      }
+      if(optional)return false;throw error;
+    }
+  }
   function openDatabase() {
     if (!database) database = new Promise((resolve, reject) => {
       if (!globalThis.indexedDB) { reject(new Error("IndexedDB unavailable")); return; }
@@ -54,13 +67,13 @@
         value = await access("readonly", store => store.get(key));
         if(cleared(key))return null;
         try{const current=localStorage.getItem(key);if(current!==null)return current;}catch(_){}
-        if (value !== null) try { localStorage.setItem(key, value); } catch (_) {}
+        if (value !== null) try { saveLocal(key, value); } catch (_) {}
         return value;
       } catch (_) { return null; }
     },
     async setItem(key, value) {
       let saved = false;
-      try { localStorage.setItem(key, value); saved = true; } catch (_) {}
+      try { saveLocal(key, value); saved = true; } catch (_) {}
       try { localStorage.removeItem("boy-auth-cleared:"+key); } catch (_) {}
       const copy=backup(key,value);
       if(saved){void copy.catch(()=>{});return;}
@@ -80,5 +93,5 @@
     const key = "sb-" + new URL(url).hostname.split(".")[0] + "-auth-token";
     await Promise.all([key, key+"-user", key+"-code-verifier"].map(name => storage.removeItem(name)));
   }
-  globalThis.BOY_SESSION_STORAGE = {storage, clearProject};
+  globalThis.BOY_SESSION_STORAGE = {storage, clearProject, saveLocal};
 })();
