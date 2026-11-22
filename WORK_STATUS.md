@@ -1,5 +1,11 @@
 # Work Status
 
+## 2026-11-23: Auth startup cannot wait indefinitely on its backup
+
+- Reproduced the endless startup with a stalled IndexedDB open: the previous session adapter awaited a backup write even when the working localStorage session existed. Reads/refresh writes now use the working local copy immediately, with ordered/versioned backup writes and bounded open/transaction waits. Logout tombstones and selected-project clearing are retained; no draft, queue, token or account is cleared by startup/retry.
+- Common expenses load the unchanged pinned Supabase 2.119.2 UMD from the site's own origin (upstream checksum/license retained). The guard and common expense app share one client. Session/profile waits are bounded; retry runs the guard again, without granting access on timeout or skipping active-profile/role checks. Shared auth/storage asset URLs are updated across consuming pages; no new polling or database/schema changes.
+- Verification: 177 Node tests. New Chromium/WebKit integration fixtures use the real vendored SDK and real auth/storage code for all five branches, including stalled IndexedDB, expired-session refresh, profile-error retry, protected content and absence of CDN/finance writes. Shared expense and legacy form/recovery browser regressions pass. These fixture sessions are synthetic, not restored user credentials.
+
 ## 2026-11-23: Date history and category autofill
 
 - Normal legacy date/history links preserve the branch and selected day in the common read-only daily history. Submitted central Tawana/BigC old-form days now open that history, not whole-day unlock/edit. Explicit old drafts and Sheet archives remain available for deliberate recovery; employee/stock routes are retained. No old business records, queues or drafts were imported, replaced or deleted.

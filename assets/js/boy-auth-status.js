@@ -13,7 +13,7 @@
   document.querySelector('#boyAuthFallback')?.remove();
   const actions = panel.querySelector('div[hidden]');
   panel.querySelector('a').href = 'burger.html?next=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash);
-  panel.querySelector('button').onclick = () => location.reload();
+  panel.querySelector('button').onclick = () => {if(window.BOY_AUTH_RETRY)window.BOY_AUTH_RETRY();else location.reload();};
   let finished = false;
   const failed = message => {
     if (finished) return;
@@ -22,9 +22,13 @@
     panel.querySelector('p').textContent = message;
     actions.hidden = false;
   };
-  const timer = setTimeout(() => failed('เชื่อมต่อใช้เวลานาน กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่'), 12000);
+  let timer = setTimeout(() => failed('โหลดระบบเข้าใช้ไม่สำเร็จ กรุณาลองใหม่'), 12000);
   window.BOY_AUTH_SCREEN = {
     failed,
+    checking(message) {
+      if(finished)return;clearTimeout(timer);panel.querySelector('h1').textContent=message;panel.querySelector('p').textContent='';actions.hidden=true;
+      timer=setTimeout(()=>failed('เชื่อมต่อใช้เวลานาน กรุณาลองใหม่'),12000);
+    },
     ready() {
       finished = true;
       clearTimeout(timer);

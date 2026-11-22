@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 async function guard(filename,profile,requiredRole){
  const result={ready:false,redirect:null,blocked:false};
- const context={URLSearchParams,CustomEvent:class{constructor(name){this.name=name}},
+ const context={URLSearchParams,setTimeout,clearTimeout,CustomEvent:class{constructor(name){this.name=name}},
   location:{pathname:'/BOY-Operation-System/'+filename,search:'?online=1',hash:'',replace:url=>result.redirect=url},
   document:{body:{dataset:{...(requiredRole?{requiredRole}:{})},set innerHTML(_v){result.blocked=true}},documentElement:{dataset:{}},
    querySelector:()=>({remove(){}})},

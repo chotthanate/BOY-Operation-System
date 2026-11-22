@@ -25,16 +25,27 @@
   if (!window.supabase || !config.url || !config.publishableKey) { block("ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ"); return; }
   let client;
   try { client = window.supabase.createClient(config.url, config.publishableKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true,
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, lockAcquireTimeout: 5000,
       ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) }
   }); } catch (_) { block('ระบบเข้าสู่ระบบเชื่อมต่อไม่สำเร็จ กรุณาลองใหม่'); return; }
-  client.auth.getSession().then(async ({ data, error }) => {
-    if (!error && data.session) {
+  window.BOY_AUTH_CLIENT = client;
+  const deadline = (promise,message) => {
+    let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),8000);})]).finally(()=>clearTimeout(timer));
+  };
+  let running;
+  const check = () => {
+    if(running)return running;
+    window.BOY_AUTH_SCREEN?.checking?.('กำลังอ่านสถานะเข้าใช้…');
+    running=(async()=>{
+    const {data,error}=await deadline(client.auth.getSession(),'อ่านสถานะเข้าใช้ไม่สำเร็จ กรุณาลองใหม่หรือเข้าสู่ระบบอีกครั้ง');
+    if (!error && data?.session) {
       const requiredRole = document.body?.dataset.requiredRole;
       const page = location.pathname.split("/").pop() || "index.html";
       if (requiredRole || page !== "bigc-v2.html") {
-        const { data: profile, error: profileError } = await client.schema("boy_central").from("profiles").select("company_role,active,employee_code").eq("user_id", data.session.user.id).maybeSingle();
-        if (profileError || !profile?.active) { block("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน"); return; }
+        window.BOY_AUTH_SCREEN?.checking?.('กำลังตรวจสิทธิ์บัญชี…');
+        const { data: profile, error: profileError } = await deadline(client.schema("boy_central").from("profiles").select("company_role,active,employee_code").eq("user_id", data.session.user.id).maybeSingle(),'ตรวจสิทธิ์บัญชีใช้เวลานาน กรุณาลองใหม่');
+        if (profileError) { block("ตรวจสิทธิ์บัญชีไม่สำเร็จ กรุณาลองใหม่"); return; }
+        if (!profile?.active) { block("บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน"); return; }
         if (profile.employee_code === "BIGC-SHARED-STAFF" && page !== "bigc-v2.html") {
           window.BOY_LOCAL_ACCESS?.clear();
           location.replace("bigc-v2.html?online=1"); return;
@@ -48,5 +59,8 @@
     if (!requireOnline && allowLocalAccess()) return;
     const next = `${location.pathname.split("/").pop() || "index.html"}${location.search}${location.hash}`;
     location.replace(`burger.html?next=${encodeURIComponent(next)}`);
-  }).catch(() => { if (requireOnline || !allowLocalAccess()) block("กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่"); });
+    })().catch(error => { if (requireOnline || !allowLocalAccess()) block(/^[ก-๙]/.test(error.message||'')?error.message:"ตรวจการเข้าใช้ไม่สำเร็จ กรุณาลองใหม่"); }).finally(()=>{running=null;});
+    return running;
+  };
+  window.BOY_AUTH_RETRY=check;check();
 })();

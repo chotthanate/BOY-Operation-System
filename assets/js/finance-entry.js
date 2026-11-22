@@ -261,7 +261,7 @@
  async function start(){
   if(state.started)return;state.started=true;
   try{
-   const c=window.BOY_CENTRAL_CONFIG;state.client=window.supabase.createClient(c.url,c.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,...(window.BOY_SESSION_STORAGE?{storage:window.BOY_SESSION_STORAGE.storage}:{})}});
+   const c=window.BOY_CENTRAL_CONFIG;state.client=window.BOY_AUTH_CLIENT||window.supabase.createClient(c.url,c.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,lockAcquireTimeout:5000,...(window.BOY_SESSION_STORAGE?{storage:window.BOY_SESSION_STORAGE.storage}:{})}});
    const session=await state.client.auth.getSession();state.session=session.data.session;if(!state.session)throw Error('เข้าสู่ระบบออนไลน์ก่อนบันทึก');
    $('#branchTitle').textContent=branch.name;document.title=branch.name+' | BOY Operations';$('#entryDate').value=$('#incomeDate').value=$('#historyDate').value=today();
    window.BOY_EXPENSE_APP.init(branch.code);$('#branchMenu').onclick=()=>window.BOY_EXPENSE_APP.toggleMenu();

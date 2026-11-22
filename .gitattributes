@@ -1,0 +1,2 @@
+# Preserve whitespace inside the pinned upstream bundle's template literals.
+/assets/vendor/supabase-2.119.2.js -whitespace

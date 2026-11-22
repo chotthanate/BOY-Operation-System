@@ -30,6 +30,7 @@ async function setup(browser,branch,width,seed={},authorized=true,search=''){
  },{cat:purchase,branch,seed});
  await page.route('**/*',r=>{
   const u=new URL(r.request().url());if(u.origin!=='https://entry.fixture')return r.fulfill({body:'',contentType:'text/javascript'});
+  if(u.pathname.startsWith('/assets/vendor/supabase-'))return r.fulfill({body:'',contentType:'text/javascript'}); // SDK integration is tested separately with the real bundle.
   if(u.pathname.endsWith('boy-auth-guard.js')&&!authorized)return r.fulfill({body:'',contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-auth-guard.js'))return r.fulfill({body:"window.BOY_AUTH_CONTEXT={user:{id:'owner'}};window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();document.querySelector('#boyAuthFallback')?.remove();",contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-central-config.js'))return r.fulfill({body:"window.BOY_CENTRAL_CONFIG={url:'https://fixture.invalid',publishableKey:'public-fixture'}",contentType:'text/javascript'});
