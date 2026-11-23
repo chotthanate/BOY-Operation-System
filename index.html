@@ -3,247 +3,137 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f4faf7">
+  <meta name="theme-color" content="#f4f8f6">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>หน้าหลัก | BOY Operation</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --ink: #17352e;
-      --muted: #71817b;
-      --line: #dfe9e4;
-      --paper: #f4faf7;
-      --surface: #ffffff;
-      --green: #0b876b;
-      --green-strong: #086d57;
-      --green-soft: #e5f6ef;
-      --orange: #ef6c4d;
-      --orange-soft: #fff0e9;
-      --yellow: #e6ad18;
-      --yellow-soft: #fff6d9;
-      --blue-soft: #edf5ff;
-      --violet-soft: #f2edff;
-      --shadow: 0 14px 36px rgba(22, 62, 50, .08);
-    }
-    * { box-sizing: border-box; }
-    html { min-height: 100%; background: var(--paper); }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      min-height: 100dvh;
-      color: var(--ink);
-      background: radial-gradient(circle at 100% 0, #fff4cc 0, transparent 24rem), linear-gradient(180deg, #f3fcf8 0, #fffaf3 100%);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Noto Sans Thai", sans-serif;
-      -webkit-tap-highlight-color: transparent;
-    }
-    a { color: inherit; text-decoration: none; }
-    .shell {
-      width: min(100%, 980px);
-      margin: 0 auto;
-      padding: calc(22px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom));
-    }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 30px; }
-    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .brand-mark {
-      width: 50px;
-      height: 50px;
-      flex: 0 0 50px;
-      display: grid;
-      place-items: center;
-      border-radius: 17px;
-      color: #fff;
-      background: linear-gradient(145deg, var(--green), #16a687);
-      box-shadow: 0 11px 24px rgba(11, 135, 107, .23);
-      font-size: .9rem;
-      font-weight: 950;
-      letter-spacing: .03em;
-    }
-    .brand small, .brand strong { display: block; }
-    .brand small { color: var(--orange); font-size: .7rem; font-weight: 900; letter-spacing: .08em; }
-    .brand strong { margin-top: 3px; font-size: clamp(1.22rem, 3vw, 1.55rem); line-height: 1.15; }
-    .home-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      flex: 0 0 auto;
-      padding: 8px 11px;
-      border-radius: 999px;
-      color: var(--green-strong);
-      background: rgba(229, 246, 239, .9);
-      font-size: .72rem;
-      font-weight: 850;
-    }
-    .home-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #14a77d; }
-    .home-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-    .home-action {
-      min-height: 38px;
-      padding: 8px 12px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      color: var(--ink);
-      background: rgba(255, 255, 255, .94);
-      font: inherit;
-      font-size: .74rem;
-      font-weight: 850;
-      cursor: pointer;
-    }
-    .home-action:hover { border-color: #bddbce; background: #fff; }
-    .home-action:disabled { cursor: wait; opacity: .58; }
-    .home-action.logout { color: #a43e2c; }
-    .section + .section { margin-top: 28px; }
-    .section-head { margin: 0 2px 13px; }
-    .section-head h1, .section-head h2 { margin: 0; line-height: 1.2; }
-    .section-head h1 { font-size: clamp(1.55rem, 5vw, 2rem); }
-    .section-head h2 { font-size: 1.05rem; }
-    .section-head p { margin: 6px 0 0; color: var(--muted); font-size: .82rem; }
-    .branch-grid, .tool-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .card {
-      position: relative;
-      min-width: 0;
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
-      min-height: 112px;
-      padding: 16px;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      background: rgba(255, 255, 255, .94);
-      box-shadow: var(--shadow);
-      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
-    }
-    a.card:active { transform: scale(.985); }
-    a.card:hover { border-color: #bddbce; box-shadow: 0 17px 40px rgba(22, 62, 50, .12); }
-    .card-icon {
-      width: 52px;
-      height: 52px;
-      display: grid;
-      place-items: center;
-      border-radius: 17px;
-      color: var(--green-strong);
-      background: var(--green-soft);
-      font-size: .88rem;
-      font-weight: 950;
-    }
-    .card-copy { min-width: 0; }
-    .card-copy strong, .card-copy span { display: block; }
-    .card-copy strong { font-size: 1rem; line-height: 1.25; }
-    .card-copy span { margin-top: 5px; color: var(--muted); font-size: .76rem; line-height: 1.4; }
-    .card-arrow { color: #9aaca5; font-size: 1.35rem; }
-    .card.bigc .card-icon, .card.order .card-icon { color: #815d00; background: var(--yellow-soft); }
-    .card.burger .card-icon { color: #bd4c33; background: var(--orange-soft); }
-    .card.grill .card-icon, .card.system .card-icon { color: #69509c; background: var(--violet-soft); }
-    .card.dashboard .card-icon, .card.pos .card-icon { color: #285f9f; background: var(--blue-soft); }
-    .card.disabled { opacity: .67; box-shadow: none; }
-    .status-chip {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 4px 7px;
-      border-radius: 999px;
-      color: #716c5f;
-      background: #f2f0ea;
-      font-size: .61rem;
-      font-weight: 850;
-    }
-    .tool-grid .card { min-height: 96px; }
-    .tool-grid .card-icon { width: 46px; height: 46px; border-radius: 15px; }
-    @media (max-width: 620px) {
-      .shell { padding-left: 14px; padding-right: 14px; }
-      .topbar { margin-bottom: 24px; }
-      .branch-grid { grid-template-columns: 1fr; }
-      .tool-grid { grid-template-columns: 1fr 1fr; }
-      .branch-grid .card { min-height: 96px; }
-      .card { padding: 14px; border-radius: 19px; }
-      .card-icon { width: 48px; height: 48px; border-radius: 15px; }
-      .tool-grid .card { grid-template-columns: auto minmax(0, 1fr); min-height: 112px; align-content: center; }
-      .tool-grid .card-arrow { display: none; }
-      .tool-grid .card-copy span { font-size: .7rem; }
-      .home-status { display: none; }
-      .home-action { min-height: 40px; padding: 8px 10px; }
-    }
-    @media (max-width: 380px) {
-      .tool-grid { grid-template-columns: 1fr; }
-      .tool-grid .card { min-height: 88px; grid-template-columns: auto minmax(0, 1fr) auto; }
-      .tool-grid .card-arrow { display: block; }
-      .home-status { padding: 7px 9px; }
-    }
-  </style>
+  <link rel="stylesheet" href="assets/css/boy-home.css?v=20261124-home1">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
-
 </head>
-<body><div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div><script src="assets/js/boy-auth-status.js?v=20261123-auth2"></script>
-  <main class="shell">
-    <header class="topbar">
-      <a class="brand" href="index.html" aria-label="หน้าหลัก"><div class="brand-mark">BOY</div><div><small>BOY OPERATION</small><strong>หน้าหลัก</strong></div></a>
-      <div class="home-actions">
-        <span class="home-status" id="homeStatus">พร้อมใช้งาน</span>
-        <button class="home-action" id="refreshButton" type="button">↻ รีเฟรช</button>
-        <button class="home-action logout" id="logoutButton" type="button">ออกจากระบบ</button>
-      </div>
+<body>
+  <div id="boyAuthFallback" role="status" style="visibility:visible;position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:#f3f8f5;color:#193d34;font:16px system-ui;text-align:center"><div><p>กำลังเปิดหน้า…</p><button type="button" onclick="location.reload()" style="min-height:44px;padding:10px 22px;border:0;border-radius:12px;background:#08735e;color:white;font:inherit">ลองใหม่</button></div></div>
+  <script src="assets/js/boy-auth-status.js?v=20261123-auth2"></script>
+  <svg class="home-icon-defs" xmlns="http://www.w3.org/2000/svg" width="0" height="0" aria-hidden="true">
+    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-4v-7H8v7H4a1 1 0 0 1-1-1Z"/></symbol>
+    <symbol id="icon-expense" viewBox="0 0 24 24"><path d="M5 3l2 1 2-1 3 1 3-1 2 1 2-1v18l-2-1-2 1-3-1-3 1-2-1-2 1Z"/><path d="M9 9h6m-6 4h6m-6 4h4"/></symbol>
+    <symbol id="icon-stock" viewBox="0 0 24 24"><path d="m12 3 9 5v8l-9 5-9-5V8Zm-9 5 9 5 9-5m-9 5v8M7.5 5.5l9 5"/></symbol>
+    <symbol id="icon-dashboard" viewBox="0 0 24 24"><path d="M4 4v16h16M8 15v-3m5 3V6m5 9v-6"/></symbol>
+    <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 8a7 7 0 0 1 12-2l2 3M4 15l2 3a7 7 0 0 0 12-2"/></symbol>
+  </svg>
+  <div id="app" class="home-shell">
+    <header class="home-header">
+      <div class="home-header-brand"><span class="home-mark" aria-hidden="true">BOY</span><h1>BOY Operation</h1></div>
+      <button type="button" class="home-icon-button" id="home-refresh" aria-label="โหลดข้อมูลใหม่" title="โหลดข้อมูลใหม่"><svg class="home-icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
     </header>
 
-    <section class="section" aria-labelledby="branchHeading">
-      <div class="section-head"><h1 id="branchHeading">เว็บลงค่าใช้จ่าย</h1><a href="expenses.html" style="color:var(--green);font-weight:700;text-decoration:none">เปิดทาวน่า ›</a></div>
-      <div class="branch-grid">
-        <a class="card tawana" href="expenses.html"><span class="card-icon">TW</span><span class="card-copy"><strong>ทาวน่า</strong><span>ลงค่าใช้จ่าย · ร้านน้ำ</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card burger" href="expenses.html?branch=BURGER"><span class="card-icon">BG</span><span class="card-copy"><strong>ร้านเบอร์เกอร์</strong><span>ลงค่าใช้จ่าย · ร้านเบอร์เกอร์</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card grill" href="expenses.html?branch=GRILL"><span class="card-icon">GR</span><span class="card-copy"><strong>ร้านเนื้อย่าง</strong><span>ลงค่าใช้จ่าย · ร้านเนื้อย่าง</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card bigc" href="expenses.html?branch=BIGC-CENTRAL-PATTAYA"><span class="card-icon">BC</span><span class="card-copy"><strong>BigC พัทยากลาง</strong><span>ลงค่าใช้จ่าย · BigC</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card bigc" href="expenses.html?branch=BIGC-SOUTH-PATTAYA"><span class="card-icon">BS</span><span class="card-copy"><strong>BigC พัทยาใต้</strong><span>รายจ่าย · สต็อก · Dashboard</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-      </div>
-    </section>
+    <nav class="home-nav" aria-label="เมนูหลัก">
+      <a href="index.html" aria-current="page"><svg class="home-icon" aria-hidden="true"><use href="#icon-home"/></svg><span>หน้าแรก</span></a>
+      <a id="home-expense-link" href="expenses.html"><svg class="home-icon" aria-hidden="true"><use href="#icon-expense"/></svg><span>รายจ่าย</span></a>
+      <button type="button" popovertarget="home-stock-menu"><svg class="home-icon" aria-hidden="true"><use href="#icon-stock"/></svg><span>สต็อก</span></button>
+      <a href="dashboard.html"><svg class="home-icon" aria-hidden="true"><use href="#icon-dashboard"/></svg><span>Dashboard</span></a>
+      <button type="button" popovertarget="home-more-menu"><svg class="home-icon" aria-hidden="true"><use href="#icon-more"/></svg><span>เพิ่มเติม</span></button>
+    </nav>
 
-    <section class="section" aria-labelledby="centralHeading">
-      <div class="section-head"><h2 id="centralHeading">ภาพรวมและข้อมูลกลาง</h2></div>
-      <div class="tool-grid">
-        <a class="card dashboard" href="dashboard.html"><span class="card-icon">DB</span><span class="card-copy"><strong>Dashboard รวม</strong><span>รายรับ รายจ่าย และภาพรวมทุกสาขา</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card burger" href="reimbursements.html"><span class="card-icon">฿</span><span class="card-copy"><strong>รอเบิกค่าใช้จ่าย</strong><span>รวมรายการสำรองจ่ายจากทุกสาขาและเคลียร์ยอด</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card system" href="investments.html"><span class="card-icon">▤</span><span class="card-copy"><strong>เงินลงทุนและโครงการ</strong><span>ก่อสร้าง · ตกแต่ง · อุปกรณ์เปิดร้าน</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card master" href="master-data.html"><span class="card-icon">MD</span><span class="card-copy"><strong>ข้อมูลกลาง BOY</strong><span>สินค้า พนักงาน หน่วย Supplier และสาขา</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card system" href="water-pos-admin.html#access"><span class="card-icon">AC</span><span class="card-copy"><strong>บัญชีและสิทธิ์</strong><span>บัญชีเว็บไซต์ รหัสพนักงาน POS สาขา และตำแหน่ง</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-      </div>
-    </section>
+    <main class="home-content">
+      <p class="home-message" id="home-message" role="status" hidden></p>
+      <div class="home-grid">
+        <section class="home-panel home-daily" aria-labelledby="home-today-heading">
+          <header class="home-panel-heading"><h2 id="home-today-heading">สรุปวันนี้</h2><time id="home-date"></time></header>
+          <div class="home-totals">
+            <div><span>ยอดขายรวม</span><strong id="home-sales-total">—</strong><small id="home-sales-status"></small></div>
+            <div><span>รายจ่ายรวม</span><strong id="home-expense-total">—</strong><small id="home-expense-status"></small></div>
+          </div>
+          <h3 class="home-sales-heading">ยอดขายแยกสาขา</h3>
+          <ul class="home-list home-branches" id="home-branches" aria-label="ยอดขายแยกสาขา">
+            <li class="home-empty">กำลังโหลดยอดขาย…</li>
+          </ul>
+        </section>
 
-    <section class="section" aria-labelledby="supportHeading">
-      <div class="section-head"><h2 id="supportHeading">งานสนับสนุน</h2></div>
-      <div class="tool-grid">
-        <a class="card pos" href="water-pos-admin.html"><span class="card-icon">POS</span><span class="card-copy"><strong>จัดการ POS ร้านน้ำ</strong><span>สินค้า การขาย การชำระเงิน และเครื่อง POS</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
-        <a class="card order" href="bigc-v2.html?view=admin&amp;online=1" target="_blank" rel="noopener"><span class="card-icon">OR</span><span class="card-copy"><strong>สั่งและรับของ BigC</strong><span>เปิดระบบเต็มในแท็บใหม่</span></span><span class="card-arrow" aria-hidden="true">↗</span></a>
-        <a class="card order" href="bigc-south-order.html?view=admin&amp;online=1" target="_blank" rel="noopener"><span class="card-icon">BS</span><span class="card-copy"><strong>สั่งและรับของ BigC พัทยาใต้</strong><span>เปิดระบบเต็มในแท็บใหม่</span></span><span class="card-arrow" aria-hidden="true">↗</span></a>
-        <a class="card system" href="system-test.html"><span class="card-icon">✓</span><span class="card-copy"><strong>ตรวจระบบ</strong><span>สถานะฐานข้อมูล Master และการเชื่อมต่อ</span></span><span class="card-arrow" aria-hidden="true">›</span></a>
+        <div class="home-followup">
+          <section class="home-panel" aria-labelledby="home-tasks-heading">
+            <header class="home-panel-heading"><h2 id="home-tasks-heading">งานที่ต้องจัดการ</h2></header>
+            <ul class="home-list" id="home-tasks">
+              <li class="home-empty">กำลังโหลดงานค้าง…</li>
+            </ul>
+          </section>
+
+          <section class="home-panel" aria-labelledby="home-recent-heading">
+            <header class="home-panel-heading"><h2 id="home-recent-heading">รายการล่าสุด</h2></header>
+            <ul class="home-list" id="home-recent">
+              <li class="home-empty">กำลังโหลดรายการ…</li>
+            </ul>
+          </section>
+        </div>
       </div>
-    </section>
-  </main>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="assets/js/boy-central-config.js?v=20261102-4"></script>
+    </main>
+  </div>
+
+  <section popover id="home-stock-menu" class="home-popover" role="dialog" aria-labelledby="home-stock-heading">
+    <header class="home-menu-header">
+      <h2 id="home-stock-heading">สต็อกตามสาขา</h2>
+      <button class="home-icon-button" type="button" popovertarget="home-stock-menu" popovertargetaction="hide" aria-label="ปิดเมนูสต็อก">×</button>
+    </header>
+    <nav class="home-menu-list" id="home-stock-links" aria-label="เลือกสาขา">
+      <a href="tawana.html?view=stock" data-home-branch="TAWANA">ทาวน่า</a>
+      <a href="burger.html?branch=BIGC-CENTRAL-PATTAYA&amp;page=stock" data-home-branch="BIGC-CENTRAL-PATTAYA">BigC พัทยากลาง</a>
+      <a href="burger.html?branch=BIGC-SOUTH-PATTAYA&amp;page=stock" data-home-branch="BIGC-SOUTH-PATTAYA">BigC พัทยาใต้</a>
+      <a href="burger.html?branch=BURGER&amp;page=stock" data-home-branch="BURGER">ร้านเบอร์เกอร์</a>
+      <a href="burger.html?branch=GRILL&amp;page=stock" data-home-branch="GRILL">ร้านเนื้อย่าง</a>
+      <p class="home-empty" id="home-stock-empty" hidden>ไม่มีสาขาที่เข้าถึงได้</p>
+    </nav>
+  </section>
+
+  <section popover id="home-more-menu" class="home-popover" role="dialog" aria-labelledby="home-more-heading">
+    <header class="home-menu-header">
+      <h2 id="home-more-heading">เพิ่มเติม</h2>
+      <button class="home-icon-button" type="button" popovertarget="home-more-menu" popovertargetaction="hide" aria-label="ปิดเมนูเพิ่มเติม">×</button>
+    </header>
+    <nav class="home-menu-list" aria-label="เมนูเพิ่มเติม">
+      <section aria-labelledby="home-finance-menu">
+        <h3 id="home-finance-menu">การเงิน</h3>
+        <a href="reimbursements.html">รอเบิกค่าใช้จ่าย</a>
+        <a href="investments.html">เงินลงทุนและโครงการ</a>
+      </section>
+      <section aria-labelledby="home-branch-menu">
+        <h3 id="home-branch-menu">งานสาขา</h3>
+        <a href="bigc-v2.html?view=admin&amp;online=1" target="_blank" rel="noopener">สั่งและรับของ BigC พัทยากลาง <span aria-hidden="true">↗</span></a>
+        <a href="bigc-south-order.html?view=admin&amp;online=1" target="_blank" rel="noopener">สั่งและรับของ BigC พัทยาใต้ <span aria-hidden="true">↗</span></a>
+        <a href="water-pos-admin.html">จัดการ POS ร้านน้ำ</a>
+      </section>
+      <section aria-labelledby="home-settings-menu">
+        <h3 id="home-settings-menu">ตั้งค่าระบบ</h3>
+        <a href="master-data.html">ข้อมูลกลาง BOY</a>
+        <a href="water-pos-admin.html#access">บัญชีและสิทธิ์</a>
+        <a href="system-test.html">ตรวจระบบ</a>
+      </section>
+      <button class="home-logout" id="logoutButton" type="button">ออกจากระบบ</button>
+    </nav>
+  </section>
+
+  <script src="assets/vendor/supabase-2.119.2.js"></script>
+  <script src="assets/js/boy-central-config.js?v=20261115-finance-1"></script>
+  <script src="assets/js/boy-session-storage.js?v=20261123-auth3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
+  <script src="assets/js/boy-branches.js?v=20261122-entry1"></script>
+  <script src="assets/js/boy-home.js?v=20261124-home1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261123-auth2"></script>
   <script>
-    const refreshButton = document.querySelector('#refreshButton');
     const logoutButton = document.querySelector('#logoutButton');
-    const homeStatus = document.querySelector('#homeStatus');
-
-    refreshButton.addEventListener('click', () => {
-      refreshButton.disabled = true;
-      refreshButton.textContent = 'กำลังรีเฟรช…';
-      homeStatus.textContent = 'กำลังโหลดข้อมูลใหม่';
-      location.reload();
-    });
-
     logoutButton.addEventListener('click', async () => {
       if (!confirm('ออกจากระบบใช่ไหม?')) return;
       logoutButton.disabled = true;
       logoutButton.textContent = 'กำลังออก…';
       window.BOY_LOCAL_ACCESS?.clear();
       const config = window.BOY_CENTRAL_CONFIG || {};
-      if (window.supabase && config.url && config.publishableKey) {
-        const client = window.supabase.createClient(config.url, config.publishableKey, { auth: { persistSession: true, autoRefreshToken: true } });
-        await Promise.race([client.auth.signOut(), new Promise(resolve => setTimeout(resolve, 2500))]);
-      }
-      location.replace('burger.html?online=1');
+      try {
+        if (window.supabase && config.url && config.publishableKey) {
+          const client = window.BOY_AUTH_CLIENT || window.supabase.createClient(config.url, config.publishableKey, {
+            auth: { persistSession: true, autoRefreshToken: true, ...(window.BOY_SESSION_STORAGE ? {storage:window.BOY_SESSION_STORAGE.storage} : {}) }
+          });
+          await Promise.race([client.auth.signOut(), new Promise(resolve => setTimeout(resolve, 2500))]);
+        }
+      } finally { location.replace('burger.html?online=1'); }
     });
   </script>
 </body>

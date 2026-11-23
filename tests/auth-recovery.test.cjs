@@ -3,7 +3,7 @@ const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'
 test('every guarded page loads recovery before the auth dependency and uses the new guard',()=>{
  const pages=fs.readdirSync(root).filter(p=>p.endsWith('.html')&&read(p).includes('boy-auth-guard.js'));
  assert.equal(pages.length,11);
- for(const page of pages){const html=read(page),sdk=html.indexOf(page==='expenses.html'?'assets/vendor/supabase-2.119.2.js':'https://cdn.jsdelivr.net/npm/@supabase/');assert.ok(html.indexOf('boy-auth-status.js')<sdk,page);assert.match(html,/boy-auth-guard\.js\?v=20261123-auth2/,page);assert.ok(html.indexOf('id="boyAuthFallback"')<html.indexOf('boy-auth-status.js'),page);}
+ for(const page of pages){const html=read(page),sdk=html.search(/assets\/vendor\/supabase-[\d.]+\.js|https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\//);assert.ok(sdk>=0&&html.indexOf('boy-auth-status.js')<sdk,page);assert.match(html,/boy-auth-guard\.js\?v=20261123-auth2/,page);assert.ok(html.indexOf('id="boyAuthFallback"')<html.indexOf('boy-auth-status.js'),page);}
 });
 test('auth recovery has a finite wait and does not delete drafts or grant access on a timeout',()=>{
  const source=read('assets/js/boy-auth-status.js');assert.match(source,/12000/);assert.match(source,/pageshow/);assert.match(source,/location\.reload\(\)/);
