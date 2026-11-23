@@ -11,7 +11,7 @@ function app(south){
  return {qa:context.qa,node,saved:context.saved};
 }
 test('BigC add forms use a real category select, not a free text datalist',()=>{
- for(const p of ['bigc-v2.html','bigc-demo.html']){const html=fs.readFileSync(path.join(root,p),'utf8');assert.match(html,/<select id="newItemCategory"><\/select>/);assert.doesNotMatch(html,/id="categoryOptions"/);assert.match(html,/bigc-v2.js\?v=20261122-category1/);}
+ for(const p of ['bigc-v2.html','bigc-demo.html']){const html=fs.readFileSync(path.join(root,p),'utf8');assert.match(html,/<select id="newItemCategory"><\/select>/);assert.doesNotMatch(html,/id="categoryOptions"/);assert.match(html,/bigc-v2.js\?v=[\w-]+/);}
 });
 for(const south of [false,true])test(`BigC ${south?'South':'Central'} uses saved menu categories and persists the selected category`,async()=>{
  const {qa,node,saved}=app(south);qa.openAddItem();assert.match(node('#newItemCategory').innerHTML,/ผลไม้ \(ใส่กล่อง\)/);assert.match(node('#newItemCategory').innerHTML,/>ขนม<\/option>/);

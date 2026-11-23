@@ -1,5 +1,13 @@
 # Work Status
 
+## 2026-11-24: Durable expense dates and cross-device draft refresh
+
+- Common expenses keep any complete/partial draft and exact pending request on its original date across midnight/reload. Only an empty workspace rolls to Bangkok today. Partial quantity/note/category entries are also protected when opening another history day or backing up a conflict.
+- Done immediately saves the shared draft, not a business expense. Visible pages check an authenticated branch-scoped revision-only RPC every 30 seconds and on focus/resume (deduplicated/throttled); full drafts download only after a revision change. Hidden pages stop checks. Dirty drafts and pending requests are never overwritten; explicit cloud selection first preserves a local backup. No automatic row merge or transaction replay.
+- Applied `expense_draft_sync_version` as production version `20261123211924`; source is `20261123211518_expense_draft_sync_version.sql`. Private checked helper/public invoker, no anonymous access or table grants. Rollback tests verify all five branches, revision parity and missing-auth denial. Advisor counts unchanged.
+- Validation now opens the invalid card and displays the error near Save and inside the confirmation dialog. Existing category/quantity rules are not bypassed. No production expense, income or stock was submitted during tests. Tawana's seven-row 2026-11-23 draft was separately backed up outside the repository before release; legacy source remains untouched.
+- 181 Node tests and Chromium/WebKit fixtures pass, including two isolated device contexts with one shared backend, immediate Done, pull/conflict/backup, exact retry, midnight/reload and 390/1440 layouts. These are not hands-on tests on the owner's iPhones. The stale upstream BigC category test now validates a versioned script URL without pinning the old cache-bust string.
+
 ## 2026-11-24: BigC South Water POS connected and verified
 
 - Owner explicitly approved the token gateway. Applied `water_pos_owner_approved_token_gateway`; source is `20261124100000_water_pos_owner_approved_gateway.sql`. Anonymous access to the private `boy_central` schema remains denied; public entry point permits only the allowlisted WATER-device actions after pairing/token validation. Invalid-token rejection was verified against live API.

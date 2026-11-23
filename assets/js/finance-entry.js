@@ -9,12 +9,12 @@
   try{if(window.BOY_SESSION_STORAGE?.saveLocal)return window.BOY_SESSION_STORAGE.saveLocal(k,JSON.stringify(v),optional);localStorage.setItem(k,JSON.stringify(v));return true;}
   catch(error){if(optional)return false;throw Error('พื้นที่เก็บร่างในเบราว์เซอร์ไม่พร้อม ยังไม่ได้ส่งรายการ กรุณาลองใหม่');}
  };
- const state={client:null,session:null,catalog:null,branchId:null,revision:0,lines:[],dirty:false,busy:false,conflict:false,save:Promise.resolve(),timer:0,started:false,income:null,incomeRevision:0,incomeConflict:false,dayCache:new Map()};
+ const state={client:null,session:null,catalog:null,branchId:null,revision:0,lines:[],dirty:false,busy:false,conflict:false,save:Promise.resolve(),timer:0,started:false,observedDay:today(),income:null,incomeRevision:0,incomeConflict:false,dayCache:new Map()};
  const key=s=>'BOY_ENTRY_V1:'+branch.code+':'+state.session.user.id+':'+s;
  const line=()=>({id:crypto.randomUUID(),description:'',item_id:null,expense_item_id:null,category_id:'',subcategory_id:'',quantity:'',unit_id:'',line_total:'',supplier_name:'',note:'',payment_method:'cash',receiving_mode:'immediate',expanded:true,is_investment:query.get('investment')==='1'});
  const node=(tag,attrs={},children=[])=>{const n=document.createElement(tag);Object.entries(attrs).forEach(([k,v])=>{if(k==='text')n.textContent=v;else if(k==='class')n.className=v;else if(k==='hidden')n.hidden=v;else n.setAttribute(k,v);});children.filter(Boolean).forEach(c=>n.append(c));return n;};
  const button=(text,cls,action)=>{const b=node('button',{type:'button',class:cls,text});b.onclick=action;return b;};
- const notice=text=>{$('#entryNotice').textContent=text;$('#entryNotice').hidden=!text;};
+ const notice=text=>{for(const id of ['entryNotice','entrySaveNotice','entryReviewError']){const n=$('#'+id);n.textContent=text;n.hidden=!text;}};
  const snapshot=()=>({date:$('#entryDate').value,lines:state.lines});
  function localSave(){if(!state.session)return;write(key('draft'),{revision:state.revision,data:snapshot(),dirty:state.dirty});}
  function backups(){
@@ -25,8 +25,22 @@
    backup(snapshot());useDraft(b.data);state.dirty=true;localSave();render();notice('เปิดสำเนาในเครื่องแล้ว กรุณาตรวจรายการก่อนส่ง');
   })));
  }
- function backup(data){if(!(data.lines||[]).some(x=>x.description||x.line_total))return;const rows=read(key('backups'),[]);rows.push({at:new Date().toISOString(),data:JSON.parse(JSON.stringify(data))});write(key('backups'),rows);backups();}
- function useDraft(data){$('#entryDate').value=data.date||today();state.lines=Array.isArray(data.lines)&&data.lines.length?data.lines.map(x=>({...line(),...x})): [line()];}
+ function backup(data){if(!hasExpenseEntries(data))return;const rows=read(key('backups'),[]);rows.push({at:new Date().toISOString(),data:JSON.parse(JSON.stringify(data))});write(key('backups'),rows);backups();}
+ function hasExpenseEntries(data){
+  // Partial input is still a draft; UI-only state and a blank card are not.
+  return (data.lines||[]).some(row=>['description','quantity','line_total','supplier_name','note','item_id','expense_item_id','category_id','subcategory_id','unit_id','project_name','investment_category'].some(k=>String(row[k]??'').trim()!=='')||row.is_investment||row.payment_method&&row.payment_method!=='cash'||row.receiving_mode&&row.receiving_mode!=='immediate');
+ }
+ function draftPostingDate(data,currentDay,preserveDate=false){return preserveDate||hasExpenseEntries(data)?data.date||currentDay:currentDay;}
+ function useDraft(data,preserveDate=false){$('#entryDate').value=draftPostingDate(data,today(),preserveDate);state.lines=Array.isArray(data.lines)&&data.lines.length?data.lines.map(x=>({...line(),...x})): [line()];}
+ function checkExpenseDay(){
+  if(!state.session||!state.catalog)return;
+  const current=today();if(state.observedDay===current)return;
+  // Do not consume the day change while an exact request or conflict is open.
+  if(state.busy||state.conflict||read(key('pending'))||$('#entryReview').open)return;
+  state.observedDay=current;
+  if(hasExpenseEntries(snapshot()))return;
+  $('#entryDate').value=current;localSave();
+ }
  async function rpc(name,args){
   if(!navigator.onLine)throw Error('ออฟไลน์ · ข้อมูลยังเก็บอยู่ในเครื่อง');
   let timer;const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('ใช้เวลานานเกินไป · ข้อมูลยังอยู่ กดลองส่งอีกครั้งเพื่อตรวจผล')),20000);});
@@ -43,8 +57,10 @@
  function changed(){if(!state.session||state.busy)return;state.dirty=true;localSave();$('#draftState').textContent='เก็บในเครื่องแล้ว';clearTimeout(state.timer);state.timer=setTimeout(()=>saveDraft().catch(showError),8000);}
  async function saveDraft(){
   state.save=state.save.catch(()=>{}).then(async()=>{
-   if(!state.dirty||state.conflict||read(key('pending')))return;
+   if(state.conflict)throw Error('ร่างถูกแก้จากอีกเครื่อง กรุณาตรวจเทียบก่อนส่ง');
+   if(!state.dirty||read(key('pending')))return;
    const data=JSON.parse(JSON.stringify(snapshot()));
+   $('#draftState').textContent='กำลังซิงค์ร่าง…';
    const result=await rpc('save_finance_entry_draft',{payload:{branch_code:branch.code,expected_revision:state.revision,data}});
    state.revision=result.revision;
    state.dirty=JSON.stringify(data)!==JSON.stringify(snapshot());localSave();
@@ -53,8 +69,40 @@
  }
  function showError(error){
   if(/อีกเครื่อง/.test(error.message)){state.conflict=true;$('#recoveryPanel').hidden=false;}
+  $('#draftState').textContent=state.conflict?'รอตรวจเทียบ':'ร่างอยู่ในเครื่อง';
   notice(error.message||'เชื่อมต่อไม่สำเร็จ ข้อมูลยังอยู่ในเครื่อง');
+  if(error.lineId){
+   const row=state.lines.find(x=>x.id===error.lineId);if(row){row.expanded=true;render();const card=[...document.querySelectorAll('.expense-card')].find(x=>x.dataset.lineId===row.id);
+    card.classList.add('entry-invalid');card.querySelector('.entry-line-body').prepend(node('p',{class:'entry-line-error',role:'alert',text:error.message}));card.scrollIntoView({block:'center'});
+   }
+  }
  }
+ const comparableDraft=data=>JSON.stringify({date:data.date||'',lines:(data.lines||[]).filter(x=>hasExpenseEntries({lines:[x]})).map(({expanded,legacy_original,...row})=>row)});
+ function acceptWorkspace(remote){
+  state.revision=remote.revision;useDraft(remote.data);state.dirty=false;state.conflict=false;$('#recoveryPanel').hidden=true;localSave();render();$('#draftState').textContent='ร่างตรงกับฐานกลาง';
+ }
+ function refreshDraft(force=false){
+  if(state.refreshing)return state.refreshing;
+  if(!state.session||!state.catalog||state.busy||state.conflict||read(key('pending'))||document.hidden||$('#entryReview').open)return Promise.resolve();
+  if(!force&&Date.now()-(state.lastDraftCheck||0)<5000)return Promise.resolve();
+  state.lastDraftCheck=Date.now();const revision=state.revision;
+  state.refreshing=(async()=>{
+   const version=await rpc('get_finance_entry_sync_version',{branch_code:branch.code});
+   if(version.revision===state.revision)return;
+   const remote=await rpc('get_finance_entry_workspace',{branch_code:branch.code});
+   // A read started before typing/saving must never overwrite that newer work.
+   if(state.busy||read(key('pending'))||state.revision!==revision)return;
+   if(state.dirty){
+    if(comparableDraft(snapshot())===comparableDraft(remote.data)){state.revision=remote.revision;state.dirty=false;localSave();$('#draftState').textContent='ร่างตรงกับฐานกลาง';return;}
+    state.conflict=true;$('#recoveryPanel').hidden=false;$('#draftState').textContent='รอตรวจเทียบ';return notice('มีร่างใหม่จากอีกเครื่อง ร่างที่แก้อยู่ยังเก็บในเครื่อง กรุณาตรวจเทียบก่อนบันทึก');
+   }
+   if(document.activeElement?.matches('#entryLines input,#entryLines select,#entryLines textarea,#entryDate'))return;
+   acceptWorkspace(remote);notice('อัปเดตร่างล่าสุดแล้ว');
+  })().catch(error=>{notice('ตรวจร่างล่าสุดไม่สำเร็จ · '+error.message);}).finally(()=>{state.refreshing=null;});return state.refreshing;
+ }
+ function scheduleDraftCheck(){clearTimeout(state.refreshTimer);if(!document.hidden&&state.session&&state.catalog)state.refreshTimer=setTimeout(async()=>{await refreshDraft();scheduleDraftCheck();},30000);}
+ function resumeDraft(){checkExpenseDay();refreshDraft();scheduleDraftCheck();}
+ function invalidLine(row,message,field){const error=Error(message);error.lineId=row.id;error.field=field;return error;}
  function field(label,tag,value,attrs,onChange){
   const input=node(tag,attrs);input.value=value??'';
   input.addEventListener(tag==='select'?'change':'input',()=>onChange(input.value));
@@ -156,7 +204,7 @@
    const updateInvestment=event=>{const selected=investment.querySelector('.is-investment').checked;Object.assign(row,window.BOY_EXPENSE_APP.readInvestment(investment));row.is_investment=selected;row.expense_class=selected?'capital':'operating';changed();if(event.type==='change'&&event.target.matches('.is-investment'))render();};
    investment.addEventListener('input',updateInvestment);investment.addEventListener('change',updateInvestment);grid.append(investment);body.append(grid);
    remove.textContent='ลบรายการนี้';remove.className='entry-secondary entry-line-delete';
-   body.append(node('div',{class:'entry-actions'},[remove,button('✓ เสร็จสิ้น','entry-secondary entry-line-done',()=>{row.expanded=false;changed();render();})]));card.append(body);list.append(card);
+   body.append(node('div',{class:'entry-actions'},[remove,button('✓ เสร็จสิ้น','entry-secondary entry-line-done',()=>{row.expanded=false;changed();render();clearTimeout(state.timer);saveDraft().catch(showError);})]));card.append(body);list.append(card);
   });
   updateTotal();const pending=read(key('pending'));$('#saveExpenses').textContent=pending?'ลองส่งรายการค้างอีกครั้ง':'บันทึกรายจ่าย';
   $('#entryLines').inert=!!pending||state.busy;$('#entryDate').disabled=!!pending||state.busy;$('#addEntryLine').disabled=!!pending||state.busy;
@@ -164,14 +212,14 @@
  }
  function updateTotal(){$('#batchTotal').textContent='รวม '+money(state.lines.reduce((n,x)=>n+Number(x.line_total||0),0))+' บาท';}
  function payloadLines(){
-  return state.lines.filter(x=>x.description||Number(x.line_total)).map(x=>{
-   if(!x.description.trim()||!(Number(x.line_total)>0))throw Error('กรอกชื่อรายการและยอดเงินให้ครบ');
+  return state.lines.filter(x=>hasExpenseEntries({lines:[x]})).map(x=>{
+   if(!x.description.trim()||!(Number(x.line_total)>0))throw invalidLine(x,'กรอกชื่อรายการและยอดเงินให้ครบ: '+(x.description||'รายการที่ยังไม่ระบุชื่อ'),'line_total');
    const req=requirements(x),source=req.product;
-   if(!x.is_investment&&!source&&!x.custom_expense)throw Error('เลือกสินค้า หรือกดใช้เป็นรายจ่ายทั่วไป: '+x.description);
-   if(!x.is_investment&&!state.catalog.categories.some(c=>c.id===x.category_id&&!c.parent_id))throw Error('เลือกประเภทหลัก: '+x.description);
-   if(!x.is_investment&&x.subcategory_id&&!state.catalog.categories.some(c=>c.id===x.subcategory_id&&c.parent_id===x.category_id))throw Error('เลือกประเภทย่อยให้ตรงกับประเภทหลัก: '+x.description);
-   if(!x.is_investment&&((source&&req.quantity)&&!(Number(x.quantity)>0)||(source&&req.unit)&&!x.unit_id))throw Error('กรอกจำนวนและหน่วยซื้อ: '+x.description);
-   if(x.is_investment&&(!x.project_name?.trim()||!x.investment_category))throw Error('ระบุโครงการและหมวดลงทุน: '+x.description);
+   if(!x.is_investment&&!source&&!x.custom_expense)throw invalidLine(x,'เลือกสินค้า หรือกดใช้เป็นรายจ่ายทั่วไป: '+x.description,'description');
+   if(!x.is_investment&&!state.catalog.categories.some(c=>c.id===x.category_id&&!c.parent_id))throw invalidLine(x,'เลือกประเภทหลัก: '+x.description,'category_id');
+   if(!x.is_investment&&x.subcategory_id&&!state.catalog.categories.some(c=>c.id===x.subcategory_id&&c.parent_id===x.category_id))throw invalidLine(x,'เลือกประเภทย่อยให้ตรงกับประเภทหลัก: '+x.description,'subcategory_id');
+   if(!x.is_investment&&((source&&req.quantity)&&!(Number(x.quantity)>0)||(source&&req.unit)&&!x.unit_id))throw invalidLine(x,'กรอกจำนวนและหน่วยซื้อ: '+x.description,'quantity');
+   if(x.is_investment&&(!x.project_name?.trim()||!x.investment_category))throw invalidLine(x,'ระบุโครงการและหมวดลงทุน: '+x.description,'project_name');
    const suppliers=state.catalog.suppliers.filter(s=>s.name.trim().toLocaleLowerCase('th')===(x.supplier_name||'').trim().toLocaleLowerCase('th'));
    return {...x,expense_class:x.is_investment?'capital':'operating',item_id:x.is_investment?null:x.item_id,expense_item_id:x.is_investment?null:x.expense_item_id,
     subcategory_id:x.is_investment?null:x.subcategory_id,supplier_id:suppliers.length===1?suppliers[0].id:null,quantity:x.is_investment?0:Number(x.quantity||0),line_total:Number(x.line_total),unit_id:x.is_investment?null:x.unit_id||null};
@@ -237,7 +285,7 @@
   if(name==='history')loadDay();else if(!$('#incomeCard').hidden&&!state.incomeLoaded)loadIncome();
  }
  function addExpenseForDay(){
-  const date=$('#historyDate').value,pending=read(key('pending')),hasDraft=state.lines.some(x=>x.description||x.line_total);
+  const date=$('#historyDate').value,pending=read(key('pending')),hasDraft=hasExpenseEntries(snapshot());
   if((pending||hasDraft)&&$('#entryDate').value!==date){view('entry');return notice('มีร่างรายจ่ายวันที่ '+$('#entryDate').value+' อยู่ กรุณาบันทึกร่างนี้ก่อนเพิ่มของวันอื่น');}
   if(!pending&&$('#entryDate').value!==date){$('#entryDate').value=date;changed();}view('entry');$('#entryDate').scrollIntoView({block:'center'});
  }
@@ -284,12 +332,13 @@
    const local=read(key('draft')),pending=read(key('pending'));let data=workspace.data;
    if(local?.dirty&&JSON.stringify(local.data)!==JSON.stringify(workspace.data)){data=local.data;if(local.revision!==workspace.revision){state.conflict=true;$('#recoveryPanel').hidden=false;}state.dirty=true;}
    if(pending){data={date:pending.date,lines:pending.lines};notice('มีรายการรอส่ง กดส่งซ้ำเพื่อยืนยัน โดยไม่สร้างบิลซ้ำ');}
-   useDraft(data);localSave();render();backups();$('#draftState').textContent=state.conflict?'รอตรวจเทียบ':state.dirty?'ร่างในเครื่อง':'พร้อมบันทึก';
+   useDraft(data,!!pending||state.conflict);state.observedDay=today();localSave();render();backups();$('#draftState').textContent=state.conflict?'รอตรวจเทียบ':state.dirty?'ร่างในเครื่อง':'พร้อมบันทึก';
    $('#saveExpenses').disabled=false;
    $('#incomeCard').hidden=workspace.revenue_mode!=='manual'||workspace.can_record_income===false;$('#governmentField').hidden=branch.code==='TAWANA';
    if(query.get('view')==='history'){
     if(/^\d{4}-\d{2}-\d{2}$/.test(query.get('date')||''))$('#historyDate').value=query.get('date');view('history');
    }else if(!$('#incomeCard').hidden)await loadIncome();
+   scheduleDraftCheck();
   }catch(e){showError(e);$('#draftState').textContent='เชื่อมต่อไม่สำเร็จ';$('#entryNotice').append(document.createElement('br'),button('ลองเชื่อมต่อใหม่','entry-secondary',()=>{state.started=false;start();}));
    if(!state.session)$('#entryNotice').append(node('a',{href:'burger.html?online=1&next='+encodeURIComponent('expenses.html?branch='+branch.code),text:'เข้าสู่ระบบออนไลน์'}));
   }
@@ -304,10 +353,13 @@
  document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>view(b.dataset.view));$('#historyDate').onchange=loadDay;$('#reloadDay').onclick=loadDay;
  $('#addDayExpense').onclick=addExpenseForDay;$('#closeHistoryIncome').onclick=()=>$('#historyIncomeDialog').close();
  $('#historyIncomeDialog').addEventListener('close',()=>{$('#incomeDate').readOnly=false;$('#incomeSlot').append($('#incomeCard'));});
- $('#useCloudDraft').onclick=async()=>{try{const remote=await rpc('get_finance_entry_workspace',{branch_code:branch.code});backup(snapshot());state.revision=remote.revision;useDraft(remote.data);state.dirty=false;state.conflict=false;$('#recoveryPanel').hidden=true;localSave();render();notice('เปิดร่างฐานกลางแล้ว สำเนาร่างก่อนหน้ายังอยู่ด้านล่าง');}catch(e){showError(e);}};
+ $('#useCloudDraft').onclick=async()=>{try{if(state.busy||read(key('pending')))throw Error('ยืนยันรายการที่รอส่งก่อนเปิดร่างฐานกลาง');const remote=await rpc('get_finance_entry_workspace',{branch_code:branch.code});backup(snapshot());acceptWorkspace(remote);notice('เปิดร่างฐานกลางแล้ว สำเนาร่างก่อนหน้ายังอยู่ด้านล่าง');}catch(e){showError(e);}};
+ $('#refreshDraft').onclick=()=>refreshDraft(true);
  window.doSync=changed;window.addEventListener('pagehide',localSave);
  window.addEventListener('expense-before-navigate',()=>{localSave();saveDraft().catch(showError);});
  window.addEventListener('online',()=>{if(state.session&&state.dirty&&!read(key('pending')))saveDraft().catch(showError);});
+ window.addEventListener('pageshow',resumeDraft);window.addEventListener('focus',resumeDraft);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)resumeDraft();else clearTimeout(state.refreshTimer);});
  if(window.BOY_AUTH_CONTEXT)start();else window.addEventListener('boy-auth-ready',start,{once:true});
  window.BOY_FINANCE_ENTRY={state,start,saveExpenses,saveIncome,payloadLines,snapshot};
 })();

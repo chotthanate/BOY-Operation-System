@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.resolve(__dirname,'..');
 const catalog={version:'fixture',items:[{id:'fruit',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',base_unit_id:'kg'},{id:'shipping',expense_item_id:'shipping',code:'EXP-1',name:'ค่าขนส่ง',category_id:'cat',subcategory_id:'sub'}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null,category_type:'item'},{id:'sub',name:'ผลไม้',parent_id:'cat',category_type:'item'}],item_units:[{item_id:'fruit',unit_id:'kg',purchase:true,conversion:1}],suppliers:[{id:'supplier',name:'ผู้ขายเดียว'}],item_suppliers:[{item_id:'fruit',supplier_id:'supplier'}]};
-async function setup(browser,branch,width,seed={},authorized=true,search=''){
+async function setup(browser,branch,width,seed={},authorized=true,search='',now=null,sharedBackend=null){
  const purchase=JSON.parse(JSON.stringify(catalog));
  purchase.categories.unshift({id:'pack-cat',name:'บรรจุภัณฑ์',parent_id:null,category_type:'item'},{id:'pack-sub',name:'แก้ว',parent_id:'pack-cat',category_type:'item'});
  purchase.items.push({id:'orange',code:'ITEM-ORANGE',name:'ส้ม',category_id:'pack-cat',subcategory_id:'sub',main:'บรรจุภัณฑ์',sub:'ชื่อเก่า',is_physical:true,base_unit_id:'kg'},
@@ -12,15 +12,19 @@ async function setup(browser,branch,width,seed={},authorized=true,search=''){
  purchase.items.push({id:'duplicate-a',code:'ITEM-DUP-A',name:'ชื่อซ้ำ',category_id:'cat',is_physical:true,base_unit_id:'kg'},{id:'duplicate-b',code:'ITEM-DUP-B',name:'ชื่อซ้ำ',category_id:'cat',is_physical:true,base_unit_id:'kg'});
  purchase.units.push({id:'pack',name:'แพ็ค'});purchase.item_units.push({item_id:'brand',unit_id:'pack',purchase:true,conversion:6});
  const page=await browser.newPage({viewport:{width,height:900},isMobile:width===390,hasTouch:width===390}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ if(sharedBackend)await page.exposeFunction('__sharedRpc',sharedBackend);
+ if(now)await page.clock.install({time:new Date(now)});
  await page.addInitScript(({cat,branch,seed})=>{
   window.__calls=[];window.__saved=[];window.__rev=0;window.__income=null;window.__draft={};window.__fail=false;
   window.confirm=()=>true;for(const [k,v] of Object.entries(seed))localStorage.setItem(k,JSON.stringify(v));
   const manual=['TAWANA','BIGC-CENTRAL-PATTAYA'].includes(branch);
   window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:{id:'owner'}}}})},schema:()=>({rpc:async(name,args)=>{
    window.__calls.push({name,args});const p=args.payload;
+   if(window.__sharedRpc&&['get_finance_entry_workspace','get_finance_entry_sync_version','save_finance_entry_draft'].includes(name))return window.__sharedRpc(name,args);
    if(name==='get_daily_catalog')return{data:args.known_version===cat.version?{version:cat.version,not_modified:true}:cat};
    if(name==='create_expense_category'){const created={id:'created-sub',name:p.name,parent_id:p.parent_id,category_type:'item'};cat.categories.push(created);return{data:{...created,categories:cat.categories}};}
    if(name==='get_finance_entry_workspace')return{data:{branch_id:'branch',revision:window.__rev,data:window.__draft,revenue_mode:manual?'manual':'pos_shift'}};
+   if(name==='get_finance_entry_sync_version')return{data:{revision:window.__rev}};
    if(name==='save_finance_entry_draft'){if(p.expected_revision!==window.__rev)return{error:{code:'P0001',message:'ร่างถูกแก้จากอีกเครื่อง'}};window.__draft=p.data;return{data:{revision:++window.__rev}};}
    if(name==='record_finance_expenses'){if(window.__fail){window.__fail=false;return{error:{message:'Network request failed'}};}window.__saved.push(p);window.__draft={};return{data:{status:'Success',draft_revision:++window.__rev,transaction_ids:['fixture']}};}
    if(name==='save_branch_manual_income'){window.__income={cash:p.cash,transfer:p.transfer,government:p.government,other:p.other,revision:(window.__income?.revision||0)+1};return{data:{status:'Success',income:window.__income}};}
@@ -139,6 +143,69 @@ async function fill(page){
  await page.locator('[data-view="history"]').click();await page.locator('#historyDate').fill('2099-06-02');await page.locator('#reloadDay').click();await page.locator('#addDayExpense').click();
  assert.equal(await page.locator('#entryDate').inputValue(),'2099-06-01');assert.equal(await page.locator('[data-product]').inputValue(),'แตงโม');
  assert.match(await page.locator('#entryNotice').textContent(),/มีร่างรายจ่ายวันที่/);await page.close();console.log('history deep link, old cache upgrade and unsaved expense protection passed');
+ for(const branch of ['TAWANA','BURGER','GRILL','BIGC-CENTRAL-PATTAYA','BIGC-SOUTH-PATTAYA']){
+  const draftKey='BOY_ENTRY_V1:'+branch+':owner:draft',pendingKey='BOY_ENTRY_V1:'+branch+':owner:pending';
+  for(const partial of [false,true]){
+   const draft={revision:0,dirty:true,data:{date:'2026-11-23',lines:[{id:'midnight',description:partial?'ยังไม่ส่ง':'',quantity:partial?'3':'',line_total:partial?'100':''}]}};
+   ({page}=await setup(browser,branch,390,{[draftKey]:draft},true,'','2026-11-23T16:59:00Z'));
+   assert.equal(await page.locator('#entryDate').inputValue(),'2026-11-23');
+   const original=await page.evaluate(()=>JSON.stringify(BOY_FINANCE_ENTRY.state.lines));
+   const calls=await page.evaluate(()=>__calls.length);
+   await page.clock.setFixedTime(new Date('2026-11-23T17:01:00Z'));
+   await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+   assert.equal(await page.locator('#entryDate').inputValue(),partial?'2026-11-23':'2026-11-24');
+   assert.equal(await page.evaluate(()=>JSON.stringify(BOY_FINANCE_ENTRY.state.lines)),original);
+   assert.equal(await page.evaluate(n=>__calls.slice(n).every(x=>x.name==='get_finance_entry_sync_version'),calls),true,'midnight wake may check metadata but must not post or reload catalog');
+   await page.reload();await page.waitForFunction(()=>window.BOY_FINANCE_ENTRY?.state.catalog&&document.querySelector('.expense-card'));
+   await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+   assert.equal(await page.locator('#entryDate').inputValue(),partial?'2026-11-23':'2026-11-24');
+   assert.equal(await page.locator('[data-product]').inputValue(),partial?'ยังไม่ส่ง':'');
+   assert.equal(await page.evaluate(()=>__saved.length),0);await page.close();
+  }
+  const pending={request_id:'exact-old-request',date:'2026-11-23',lines:[{id:'queued',description:'รอยืนยัน',line_total:100}]};
+  ({page}=await setup(browser,branch,390,{[pendingKey]:pending},true,'','2026-11-23T17:01:00Z'));
+  assert.equal(await page.locator('#entryDate').inputValue(),'2026-11-23');
+  assert.deepEqual(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)),pendingKey),pending);
+  assert.equal(await page.evaluate(()=>__saved.length),0);await page.close();
+  console.log(branch+': midnight empty rollover, retained draft reload and untouched exact pending request passed');
+ }
+ const partialSeed={'BOY_ENTRY_V1:TAWANA:owner:draft':{revision:0,dirty:true,data:{date:'2026-11-23',lines:[{id:'quantity-only',quantity:'3'}]}}};
+ ({page}=await setup(browser,'TAWANA',390,partialSeed,true,'&view=history&date=2026-11-24','2026-11-23T17:01:00Z'));
+ await page.locator('#addDayExpense').click();assert.equal(await page.locator('#entryDate').inputValue(),'2026-11-23');assert.equal(await page.locator('[data-field="quantity"]').inputValue(),'3');
+ await page.close();console.log('quantity-only partial draft cannot be redated by history navigation');
+ {const shared={revision:6,data:{date:'2026-11-23',lines:Array.from({length:6},(_,i)=>({id:'shared-'+i,description:'เดิม '+(i+1),line_total:'10',custom_expense:true,category_id:'cat',expanded:false}))}};
+ const backend=async(name,args)=>{
+  if(name==='get_finance_entry_sync_version')return{data:{revision:shared.revision}};
+  if(name==='get_finance_entry_workspace')return{data:{branch_id:'branch',revision:shared.revision,data:structuredClone(shared.data),revenue_mode:'manual'}};
+  if(args.payload.expected_revision!==shared.revision)return{error:{code:'P0001',message:'ร่างถูกแก้จากอีกเครื่อง'}};
+  shared.data=structuredClone(args.payload.data);return{data:{revision:++shared.revision}};
+ };
+ const first=await setup(browser,'TAWANA',390,{},true,'',null,backend),second=await setup(browser,'TAWANA',390,{},true,'',null,backend);
+ await first.page.locator('#addEntryLine').click();await first.page.locator('[data-product]').last().fill('น้ำแข็ง');await first.page.locator('[data-field="line_total"]').last().fill('105');
+ await first.page.locator('.entry-line-done').last().click();await first.page.waitForFunction(()=>document.querySelector('#draftState').textContent==='ร่างตรงกับฐานกลาง');
+ assert.equal(shared.data.lines.length,7,'Done must commit draft immediately, without business posting');
+ await second.page.locator('#refreshDraft').click();await second.page.waitForFunction(()=>BOY_FINANCE_ENTRY.state.lines.length===7);
+ assert.equal(await second.page.locator('.entry-line-toggle').last().textContent(),'7. น้ำแข็ง105.00');
+ assert.equal(await second.page.evaluate(()=>__calls.filter(x=>x.name==='get_daily_catalog').length),1,'refresh must not reload catalog');
+ const reads=await second.page.evaluate(()=>__calls.filter(x=>x.name==='get_finance_entry_workspace').length);
+ await second.page.locator('#refreshDraft').click();await second.page.waitForFunction(()=>!BOY_FINANCE_ENTRY.state.refreshing);
+ assert.equal(await second.page.evaluate(()=>__calls.filter(x=>x.name==='get_finance_entry_workspace').length),reads,'unchanged revisions do not download full drafts');
+ await second.page.locator('.entry-line-toggle').last().click();await second.page.locator('[data-field="note"]').last().fill('งานที่กำลังพิมพ์ห้ามทับ');
+ shared.data.lines.push({id:'remote-8',description:'รายการอีกเครื่อง',line_total:'20'});shared.revision++;
+ await second.page.locator('#refreshDraft').click();await second.page.waitForFunction(()=>BOY_FINANCE_ENTRY.state.conflict);
+ assert.equal(await second.page.locator('[data-field="note"]').last().inputValue(),'งานที่กำลังพิมพ์ห้ามทับ');assert.equal(shared.data.lines.length,8);
+ await second.page.locator('#useCloudDraft').click();await second.page.waitForFunction(()=>BOY_FINANCE_ENTRY.state.lines.length===8);
+ assert.match(await second.page.evaluate(()=>JSON.stringify(JSON.parse(localStorage.getItem('BOY_ENTRY_V1:TAWANA:owner:backups')))),/งานที่กำลังพิมพ์ห้ามทับ/);
+ assert.equal(await first.page.evaluate(()=>__saved.length),0);assert.equal(await second.page.evaluate(()=>__saved.length),0);
+ await first.page.close();await second.page.close();console.log('two-device shared draft: immediate Done, pull, conflict and backup passed');}
+ const invalidSeed={'BOY_ENTRY_V1:TAWANA:owner:draft':{revision:0,dirty:true,data:{date:'2026-11-23',lines:[{id:'missing-category',description:'ชิฟฟ่อนใบเตย',line_total:'63',custom_expense:true,expanded:false}]}}};
+ ({page}=await setup(browser,'TAWANA',390,invalidSeed));await page.locator('#saveExpenses').click();
+ assert.equal(await page.locator('.entry-line-body').isVisible(),true);assert.match(await page.locator('.entry-line-error').textContent(),/เลือกประเภทหลัก.*ชิฟฟ่อนใบเตย/);
+ assert.match(await page.locator('#entrySaveNotice').textContent(),/ชิฟฟ่อนใบเตย/);assert.equal(await page.locator('#entryReview').isVisible(),false);
+ await page.screenshot({path:'/private/tmp/finance-entry-error-390.png',fullPage:true});
+ await page.locator('[data-field="category_id"]').selectOption('cat');await page.locator('#saveExpenses').click();assert.equal(await page.locator('#entryReview').isVisible(),true);
+ assert.equal(await page.evaluate(()=>__saved.length),0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+ await page.screenshot({path:'/private/tmp/finance-entry-validation-390.png',fullPage:true});await page.close();console.log('collapsed invalid row opens with visible error; corrected category reaches review without posting');
  ({page}=await setup(browser,'BURGER',390,{},false));
  assert.equal(await page.locator('.entry-shell').isVisible(),false);
  assert.equal(await page.evaluate(()=>document.documentElement.dataset.financeReady),undefined);

@@ -49,3 +49,16 @@ test('category autofill follows subcategory UUID parent, never stale names or ar
  assert.equal(api.productCategories({category_id:'fruit'}).category_id,'raw');
  assert.equal(api.productCategories({category_id:'missing',main:'บรรจุภัณฑ์'}).category_id,'');
 });
+function draftHelpers(){
+ const source=read('assets/js/finance-entry.js'),context={};
+ vm.runInNewContext(source.slice(source.indexOf(' function hasExpenseEntries('),source.indexOf(' function useDraft('))+';globalThis.api={hasExpenseEntries,draftPostingDate};',context);return context.api;
+}
+test('new day opens today only for an empty expense draft',()=>{
+ const api=draftHelpers(),day='2026-11-24';
+ for(const lines of [[],[{}],[{description:' ',expanded:true,payment_method:'cash',receiving_mode:'immediate'}]])assert.equal(api.draftPostingDate({date:'2026-11-23',lines},day),day);
+ for(const field of ['description','quantity','line_total','supplier_name','note','item_id','expense_item_id','category_id','subcategory_id','unit_id','project_name','investment_category']){
+  const data={date:'2026-11-23',lines:[{[field]:'0'}]};assert.equal(api.hasExpenseEntries(data),true,field);assert.equal(api.draftPostingDate(data,day),'2026-11-23',field);
+ }
+ for(const row of [{is_investment:true},{payment_method:'reimbursement_pending'},{receiving_mode:'delivery'}])assert.equal(api.draftPostingDate({date:'2026-11-23',lines:[row]},day),'2026-11-23');
+ assert.equal(api.draftPostingDate({date:'2026-11-23',lines:[]},day,true),'2026-11-23','exact pending requests and unresolved conflicts must keep their date');
+});
