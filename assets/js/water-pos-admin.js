@@ -7,7 +7,11 @@
   const $$ = (s) => [...document.querySelectorAll(s)];
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
   const money = (v) => `฿${Number(v || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 })}`;
-  const POS_VERSION = "1.1.7";
+  const POS_VERSION = "1.1.9";
+  const branchKey="boy.water-pos.branch";
+  const allowedBranches=["BIGC-SOUTH-PATTAYA","TAWANA","BIGC-CENTRAL-PATTAYA"];
+  let rememberedBranch="";try{rememberedBranch=localStorage.getItem(branchKey)||"";}catch{}
+  const requestedBranch=new URLSearchParams(location.search).get("branch")||rememberedBranch||"BIGC-SOUTH-PATTAYA";
   let branch = null;
   let row = null;
   let config = {};
@@ -45,11 +49,20 @@
         }
         return;
       }
-      const branchResult = await db.from("branches").select("id,company_id,code,name").eq("code", "TAWANA").single();
+      if(!allowedBranches.includes(requestedBranch))throw new Error("ไม่พบสาขา POS ร้านน้ำ");
+      const branchesResult=await db.from("branches").select("id,company_id,code,name").in("code",allowedBranches);
+      if(branchesResult.error)throw branchesResult.error;
+      const branchResult={data:(branchesResult.data||[]).find(b=>b.code===requestedBranch)};
+      if(!branchResult.data)throw new Error("ไม่มีสิทธิ์เข้าถึงสาขานี้");
+      $("#posBranchSelect").innerHTML=(branchesResult.data||[]).map(b=>`<option value="${esc(b.code)}">${esc(b.name)}</option>`).join("");
+      $("#posBranchSelect").value=requestedBranch;
       if (branchResult.error) throw branchResult.error;
       branch = branchResult.data;
       await loadConfig();
       await Promise.all([loadOverview(), loadStock(), loadDevices(), loadAccess().catch((error) => { console.warn("Access management is not ready", error); $("#posUserList").innerHTML = '<article class="card">ระบบบัญชีกำลังรออัปเดตฐานข้อมูล</article>'; })]);
+      try{localStorage.setItem(branchKey,branch.code);}catch{}
+      $("#posDashboardLink").href=`branch-dashboard.html?branch=${encodeURIComponent(branch.code)}`;
+      document.title=`POS ${branch.name} · BOY Operation`;
       setConnected(true);
     } catch (error) { console.error(error); setConnected(false); toast(error.message || "โหลดข้อมูลไม่สำเร็จ"); }
   }
@@ -71,8 +84,8 @@
 
   async function saveConfig() {
     collectSettings();
-    const result = await db.from("pos_branch_configs").update({ config, version: Number(row.version || 0) + 1 }).eq("id", row.id).select("id,config,version,updated_at").single();
-    if (result.error) throw result.error;
+    const result = await db.from("pos_branch_configs").update({ config, version: Number(row.version || 0) + 1 }).eq("id", row.id).eq("version",row.version).select("id,config,version,updated_at").single();
+    if (result.error) throw new Error(result.error.code==="PGRST116"?"ข้อมูลกลางเปลี่ยนแล้ว กรุณารีเฟรชก่อนบันทึกอีกครั้ง":result.error.message);
     row = result.data; config = structuredClone(result.data.config); setConnected(true, `บันทึกเวอร์ชัน ${row.version} แล้ว`); renderConfig(); toast("บันทึกข้อมูลกลางแล้ว POS จะรับในการซิงก์ครั้งถัดไป");
   }
 
@@ -162,11 +175,13 @@
 
   async function loadOverview() {
     const start = new Date(); start.setHours(0, 0, 0, 0);
-    const [ordersResult, eventsResult] = await Promise.all([
+    const [ordersResult, eventsResult, historyResult] = await Promise.all([
       db.from("pos_orders").select("id,total_amount,payment_method,payment_status,ordered_at").eq("branch_id", branch.id).eq("source_system", "water_pos").gte("ordered_at", start.toISOString()).order("ordered_at", { ascending: false }),
-      db.from("pos_sync_events").select("event_type,status,external_id,received_at").eq("branch_id", branch.id).order("received_at", { ascending: false }).limit(8)
+      db.from("pos_sync_events").select("event_type,status,external_id,received_at").eq("branch_id", branch.id).order("received_at", { ascending: false }).limit(8),
+      db.from("pos_orders").select("id,order_no,total_amount,payment_status,ordered_at,raw_payload").eq("branch_id",branch.id).eq("source_system","water_pos").order("ordered_at",{ascending:false}).limit(50)
     ]);
-    if (ordersResult.error) throw ordersResult.error; if (eventsResult.error) throw eventsResult.error;
+    if (ordersResult.error) throw ordersResult.error; if (eventsResult.error) throw eventsResult.error;if(historyResult.error)throw historyResult.error;
+    $("#orderHistory").innerHTML=(historyResult.data||[]).map(order=>`<details class="card" style="margin-top:10px"><summary style="cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px"><strong>${esc(order.order_no)} · ${money(order.total_amount)}</strong><small>${esc(new Date(order.ordered_at).toLocaleString("th-TH"))} · ${order.payment_status==='completed'?'สำเร็จ':'ยกเลิก/คืนเงิน'}</small></summary>${(order.raw_payload?.items||[]).map(item=>`<div style="margin-top:12px"><strong>${Number(item.qty||0)} × ${esc(item.name)}</strong><span style="float:right">${money(item.total)}</span>${(item.options||item.addons||[]).map(option=>`<div style="padding-left:16px;color:var(--muted);font-size:.85rem">${esc(option.name)}${Number(option.price)?` +${money(option.price)}`:''}</div>`).join('')}${item.note?`<small>${esc(item.note)}</small>`:''}</div>`).join('')}${order.raw_payload?.note?`<p>${esc(order.raw_payload.note)}</p>`:''}</details>`).join('')||'<p>ยังไม่มีรายการขายจากเครื่อง POS</p>';
     const valid = (ordersResult.data || []).filter((o) => o.payment_status === "completed"); const revenue = valid.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
     const byMethod = {}; valid.forEach((o) => byMethod[o.payment_method || "other"] = (byMethod[o.payment_method || "other"] || 0) + Number(o.total_amount || 0));
     $("#metrics").innerHTML = [["ยอดขายวันนี้", money(revenue), "accent"], ["ออร์เดอร์สำเร็จ", `${valid.length} บิล`, ""], ["ยกเลิก/คืนเงิน", `${(ordersResult.data || []).length - valid.length} บิล`, ""], ["ซิงก์ล่าสุด", eventsResult.data?.[0] ? new Date(eventsResult.data[0].received_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) : "ยังไม่มี", ""]].map(([label, value, cls]) => `<article class="metric ${cls}"><span>${label}</span><strong>${value}</strong></article>`).join("");
@@ -190,7 +205,7 @@
   }
 
   async function createPairing() {
-    const result = await db.rpc("create_pos_pairing_code", { target_branch_id: branch.id, target_device_code: "WATER-TWN-POS-01", target_device_name: "เครื่องแคชเชียร์ 1" });
+    const result = await db.rpc("create_pos_pairing_code", { target_branch_id: branch.id, target_device_code: branch.code === "BIGC-SOUTH-PATTAYA" ? "WATER-BIGC-SOUTH-POS-01" : branch.code === "TAWANA" ? "WATER-TWN-POS-01" : "WATER-BIGC-CENTRAL-POS-01", target_device_name: "เครื่องแคชเชียร์ 1" });
     if (result.error) throw result.error;
     const panel = $("#pairingResult"); panel.hidden = false; panel.innerHTML = `<span>รหัสเชื่อมเครื่อง (ใช้ได้ 15 นาที)</span><strong>${esc(result.data.pairing_code)}</strong><p>เปิด ตั้งค่า → ร้านและเครื่อง POS ที่เครื่องขาย แล้วกรอกรหัสนี้</p>`; await loadDevices();
   }
@@ -253,7 +268,7 @@
   }
 
   function activateTab(name) { const button = $(`[data-tab="${name}"]`) || $("[data-tab=\"overview\"]"); $$("[data-tab]").forEach((b) => b.classList.toggle("active", b === button)); $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `${button.dataset.tab}Panel`)); }
-  $$("[data-tab]").forEach((button) => button.addEventListener("click", () => { activateTab(button.dataset.tab); history.replaceState(null, "", button.dataset.tab === "overview" ? location.pathname : `#${button.dataset.tab}`); }));
+  $$("[data-tab]").forEach((button) => button.addEventListener("click", () => { activateTab(button.dataset.tab); history.replaceState(null, "", button.dataset.tab === "overview" ? location.pathname+location.search : location.pathname+location.search+`#${button.dataset.tab}`); }));
   document.addEventListener("click", (event) => { const edit = event.target.closest("[data-edit-product]"); if (edit) openProduct(edit.dataset.editProduct); const paymentEdit = event.target.closest("[data-edit-payment]"); if (paymentEdit) openPaymentEditor(paymentEdit.dataset.editPayment); const userEdit = event.target.closest("[data-edit-pos-user]"); if (userEdit) openPosUser(userEdit.dataset.editPosUser); const roleEdit = event.target.closest("[data-edit-pos-role]"); if (roleEdit) openPosRole(roleEdit.dataset.editPosRole); });
   document.addEventListener("change", (event) => { const input = event.target.closest("[data-payment-image]"); if (input?.files?.[0]) uploadPaymentImage(input.dataset.paymentImage, input.files[0]).catch((e) => toast(e.message)); });
   $$("[data-save-config]").forEach((button) => button.addEventListener("click", () => saveConfig().catch((e) => toast(e.message))));
@@ -268,5 +283,6 @@
   $("#refreshAccess").addEventListener("click", () => loadAccess().then(() => toast("อัปเดตบัญชีแล้ว")).catch((e) => toast(e.message)));
   $("#addPosUser").addEventListener("click", () => openPosUser()); $("#savePosUser").addEventListener("click", () => savePosUser().catch((e) => toast(e.message)));
   $("#addPosRole").addEventListener("click", () => openPosRole()); $("#savePosRole").addEventListener("click", () => savePosRole().catch((e) => toast(e.message)));
+  $("#posBranchSelect").addEventListener("change",event=>{if(!confirm("เปลี่ยนสาขา? การแก้ไขที่ยังไม่บันทึกจะไม่ถูกเก็บ")){event.target.value=branch?.code||requestedBranch;return;}const url=new URL(location.href);url.searchParams.set("branch",event.target.value);location.href=url.href;});
   activateTab(location.hash.slice(1) || "overview"); start();
 })();

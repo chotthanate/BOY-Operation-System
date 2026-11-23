@@ -150,6 +150,11 @@
     document.documentElement.style.setProperty("--accent-soft", meta.soft || "#e8f6f0");
     $("#branchMark").textContent = meta.mark || code.slice(0, 2);
     $("#branchTitle").textContent = branch.name;
+    let posLink=$("#waterPosBranchLink");
+    if(!posLink){posLink=document.createElement("a");posLink.id="waterPosBranchLink";posLink.className="refresh";posLink.textContent="POS ร้านน้ำ";posLink.style.cssText="display:inline-flex;align-items:center;padding:8px 12px;font-size:14px;white-space:nowrap;width:auto";$("#branchUpdated").after(posLink);}
+    posLink.hidden=!["TAWANA","BIGC-SOUTH-PATTAYA","BIGC-CENTRAL-PATTAYA"].includes(code);
+    posLink.style.display=posLink.hidden?"none":"inline-flex";
+    posLink.href=`water-pos-admin.html?branch=${encodeURIComponent(code)}`;
     document.title = `Dashboard ${branch.name} | BOY Operation`;
   }
 

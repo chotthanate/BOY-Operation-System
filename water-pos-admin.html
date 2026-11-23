@@ -15,11 +15,12 @@
 
   <header class="topbar">
     <a class="back" href="index.html" aria-label="กลับหน้าหลัก">←</a>
-    <a class="topbar-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><img class="topbar-logo" id="topbarLogo" src="assets/icons/water-logo.png" alt="BOY ร้านน้ำ"><div><small>BOY OPERATION · POS v1.1.7</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div></a>
+    <a class="topbar-home-brand" href="index.html" aria-label="กลับหน้าหลัก"><img class="topbar-logo" id="topbarLogo" src="assets/icons/water-logo.png" alt="BOY ร้านน้ำ"><div><small>BOY OPERATION · POS v1.1.9</small><h1>ศูนย์จัดการ POS ร้านน้ำ</h1></div></a>
     <span class="sync-pill" id="syncPill"><i></i><b>กำลังเชื่อมต่อ</b></span>
   </header>
 
   <main>
+    <div class="page-head"><label>สาขา <select id="posBranchSelect" style="min-height:44px;max-width:100%"><option>กำลังโหลด…</option></select></label><a class="secondary" id="posDashboardLink" href="branch-dashboard.html?branch=BIGC-SOUTH-PATTAYA">Dashboard สาขา</a></div>
     <nav class="tabs" aria-label="หัวข้อ">
       <button class="active" data-tab="overview">ภาพรวม</button>
       <button data-tab="catalog">รายการขาย</button>
@@ -34,6 +35,7 @@
       <div class="page-head"><div><h2>สถานะวันนี้</h2><p>ข้อมูลจริงที่ Water POS ส่งเข้า BOY Central</p></div><button class="secondary" id="refreshAll">รีเฟรช</button></div>
       <div class="metrics" id="metrics"></div>
       <div class="two-col"><article class="card"><h3>ยอดตามช่องทาง</h3><div id="paymentBreakdown" class="rows"></div></article><article class="card"><h3>การซิงก์ล่าสุด</h3><div id="recentSync" class="rows"></div></article></div>
+      <h3>รายการขายล่าสุด 50 รายการ</h3><div id="orderHistory"></div>
     </section>
 
     <section class="panel" id="catalogPanel">
@@ -87,6 +89,6 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261123-auth2"></script>
-  <script src="assets/js/water-pos-admin.js?v=1.1.7"></script>
+  <script src="assets/js/water-pos-admin.js?v=20261123-branch"></script>
 </body>
 </html>

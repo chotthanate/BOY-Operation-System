@@ -1,0 +1,27 @@
+-- PENDING EXPLICIT OWNER APPROVAL. Not applied to production.
+-- Keep anon USAGE on boy_central revoked. Expose only token-validated water actions.
+create or replace function public.water_pos_request(action text,payload jsonb)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare d boy_central.pos_devices%rowtype; branch_code text;
+begin
+ if action='claim_pos_device' then
+   if coalesce(payload->>'target_device_code','') not like 'WATER-%' then raise exception 'water device required';end if;
+   return boy_central.claim_pos_device(payload->>'target_branch_code',payload->>'target_device_code',payload->>'pairing_code');
+ end if;
+ select * into d from boy_central_private.pos_device_for_token(payload->>'device_token');
+ if d.id is null or d.device_code not like 'WATER-%' then raise exception 'water device access denied';end if;
+ case action
+ when 'get_pos_device_bootstrap' then return boy_central.get_pos_device_bootstrap(payload->>'device_token');
+ when 'get_pos_access_status' then return jsonb_build_object('enabled',false);
+
+ when 'save_pos_device_config' then
+   select code into branch_code from boy_central.branches where id=d.branch_id;
+   if payload->'new_config'->'store'->>'branchCode' is distinct from branch_code then raise exception 'config branch mismatch';end if;
+   return boy_central.save_pos_device_config(payload->>'device_token',payload->'new_config');
+ when 'sync_water_pos_event' then return boy_central.sync_water_pos_event(payload->>'device_token',payload->'event');
+ else raise exception 'water action denied';
+ end case;
+end $$;
+revoke all on function public.water_pos_request(text,jsonb) from public;
+grant execute on function public.water_pos_request(text,jsonb) to anon,authenticated;
+notify pgrst,'reload schema';
