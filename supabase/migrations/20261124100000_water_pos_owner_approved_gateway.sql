@@ -1,4 +1,3 @@
--- PENDING EXPLICIT OWNER APPROVAL. Not applied to production.
 -- Keep anon USAGE on boy_central revoked. Expose only token-validated water actions.
 create or replace function public.water_pos_request(action text,payload jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
