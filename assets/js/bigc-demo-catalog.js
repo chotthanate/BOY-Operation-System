@@ -1,4 +1,4 @@
-// Display and receiving catalog snapshot: 2026-11-22. No live workflows or prices.
+// Display and receiving catalog snapshot: 2026-11-24. No live workflows or prices.
 globalThis.BOYBigCDemoCatalog = {
   "BIGC-CENTRAL-PATTAYA": [
     {
@@ -569,6 +569,10 @@ globalThis.BOYBigCDemoCatalog = {
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
         {
+          "id": "demo-brand-ITEM-0035",
+          "name": "บลูเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
           "id": "demo-brand-ITEM-0342",
           "name": "บลูเบอร์รี แช่แข็ง aro 1 กก."
         },
@@ -592,6 +596,10 @@ globalThis.BOYBigCDemoCatalog = {
       "displayName": "แครนเบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0037",
+          "name": "แครนเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
         {
           "id": "demo-brand-ITEM-0346",
           "name": "แครนเบอร์รี แช่แข็ง aro 1 กก."
@@ -643,7 +651,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 40,
       "displayName": "มิกซ์เบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0036",
+          "name": "มิกซ์เบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0344",
+          "name": "มิกซ์เบอร์รี แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0345",
+          "name": "มิกซ์เบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -658,7 +679,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 41,
       "displayName": "ราสเบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0038",
+          "name": "ราสเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0348",
+          "name": "ราสเบอร์รี แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0349",
+          "name": "ราสเบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -673,7 +707,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 42,
       "displayName": "ลำไย แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0033",
+          "name": "ลำไย แช่แข็ง Savepak  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0338",
+          "name": "ลำไย แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0339",
+          "name": "ลำไย แช่แข็ง Supersave  1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -690,8 +737,16 @@ globalThis.BOYBigCDemoCatalog = {
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
         {
+          "id": "demo-brand-ITEM-0032",
+          "name": "ลิ้นจี่ แช่แข็ง Savepak 1 กก."
+        },
+        {
           "id": "demo-brand-ITEM-0400",
           "name": "ลิ้นจี่ แช่แข็ง aro  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0337",
+          "name": "ลิ้นจี่ แช่แข็ง Supersave 1 กก."
         }
       ],
       "handlingType": "whole_fruit",
@@ -708,7 +763,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 44,
       "displayName": "สตรอว์เบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0034",
+          "name": "สตรอว์เบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0340",
+          "name": "สตรอว์เบอร์รี แช่แข็ง aro  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0341",
+          "name": "สตรอว์เบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -723,7 +791,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 45,
       "displayName": "อโวคาโด แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0041",
+          "name": "อโวคาโด แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0354",
+          "name": "อโวคาโด แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0355",
+          "name": "อโวคาโด แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -3059,6 +3140,10 @@ globalThis.BOYBigCDemoCatalog = {
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
         {
+          "id": "demo-brand-ITEM-0035",
+          "name": "บลูเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
           "id": "demo-brand-ITEM-0342",
           "name": "บลูเบอร์รี แช่แข็ง aro 1 กก."
         },
@@ -3082,6 +3167,10 @@ globalThis.BOYBigCDemoCatalog = {
       "displayName": "แครนเบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0037",
+          "name": "แครนเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
         {
           "id": "demo-brand-ITEM-0346",
           "name": "แครนเบอร์รี แช่แข็ง aro 1 กก."
@@ -3133,7 +3222,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 40,
       "displayName": "มิกซ์เบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0036",
+          "name": "มิกซ์เบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0344",
+          "name": "มิกซ์เบอร์รี แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0345",
+          "name": "มิกซ์เบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -3148,7 +3250,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 41,
       "displayName": "ราสเบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0038",
+          "name": "ราสเบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0348",
+          "name": "ราสเบอร์รี แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0349",
+          "name": "ราสเบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -3163,7 +3278,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 42,
       "displayName": "ลำไย แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0033",
+          "name": "ลำไย แช่แข็ง Savepak  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0338",
+          "name": "ลำไย แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0339",
+          "name": "ลำไย แช่แข็ง Supersave  1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -3180,8 +3308,16 @@ globalThis.BOYBigCDemoCatalog = {
       "costingBasis": "actual_raw_weight_kg",
       "demoVariants": [
         {
+          "id": "demo-brand-ITEM-0032",
+          "name": "ลิ้นจี่ แช่แข็ง Savepak 1 กก."
+        },
+        {
           "id": "demo-brand-ITEM-0400",
           "name": "ลิ้นจี่ แช่แข็ง aro  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0337",
+          "name": "ลิ้นจี่ แช่แข็ง Supersave 1 กก."
         }
       ],
       "handlingType": "whole_fruit",
@@ -3198,7 +3334,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 44,
       "displayName": "สตรอว์เบอร์รี่ แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0034",
+          "name": "สตรอว์เบอร์รี แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0340",
+          "name": "สตรอว์เบอร์รี แช่แข็ง aro  1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0341",
+          "name": "สตรอว์เบอร์รี แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },
@@ -3213,7 +3362,20 @@ globalThis.BOYBigCDemoCatalog = {
       "sortOrder": 45,
       "displayName": "อโวคาโด แช่แข็ง (ถุง)",
       "costingBasis": "actual_raw_weight_kg",
-      "demoVariants": [],
+      "demoVariants": [
+        {
+          "id": "demo-brand-ITEM-0041",
+          "name": "อโวคาโด แช่แข็ง Savepak 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0354",
+          "name": "อโวคาโด แช่แข็ง aro 1 กก."
+        },
+        {
+          "id": "demo-brand-ITEM-0355",
+          "name": "อโวคาโด แช่แข็ง Supersave 1 กก."
+        }
+      ],
       "handlingType": "whole_fruit",
       "defaultReturn": false
     },

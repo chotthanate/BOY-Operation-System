@@ -22,7 +22,7 @@ function app(search='?view=admin') {
   const source=fs.readFileSync(path.join(__dirname,'../assets/js/bigc-v2.js'),'utf8');
   vm.runInNewContext(source.replace(/\}\)\(\);\s*$/, `
     window.qa = {state, seedReceiveFromPrevious, seedReceiveFromRounds, hydrateSubmitted, submitWorkflow, linesFor, renderReceive,
-      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls, isStaffView, canEditProducts};
+      needsActualWeight, receiveHandlingType, receiveCostingBasis, receiveControls, isStaffView, canEditProducts, loadMasterItems, sharedStockOptions};
     renderReceive = () => {}; renderAll = () => {}; loadPage = async () => {};
     window.qa.mirrors = []; sheetApi = async (action,data) => {window.qa.mirrors.push(data.payload)};
     saveDraft = () => {window.qa.draftSaves=(window.qa.draftSaves||0)+1};
@@ -245,4 +245,27 @@ test('failure retains draft and receipt ID for retry',async()=>{
   assert.equal(qa.state.receive.a.receipt_key,key);
   assert.equal(qa.state.receive.a.checked,true);
   assert.equal(qa.linesFor('receive')[0].line_key,key);
+});
+
+test('branded order alias resolves to all brands and shared pool only for receipt/return',async()=>{
+ const {qa}=app();
+ const rows=[{id:'pool',code:'ROOT',name:'บลูเบอร์รีแช่แข็ง 1 กก.'},
+  {id:'savepak',code:'S',name:'Savepak',stock_target_item_id:'pool'},
+  {id:'aro',code:'A',name:'aro',stock_target_item_id:'pool'},
+  {id:'supersave',code:'U',name:'Supersave',stock_target_item_id:'pool'}];
+ qa.state.session={user:{id:'test-staff'}};
+ qa.state.client={schema:()=>({rpc:async()=>({data:{rows:[]}}),
+  from:()=>({select:()=>({eq:()=>({limit:async()=>({data:rows})})})})})};
+ await qa.loadMasterItems(true);
+ const item={key:'blue',name:'บลูเบอร์รี',displayName:'บลูเบอร์รี',category:'ผลไม้แช่แข็ง',unit:'ถุง',inputMode:'quantity',itemId:'savepak',masterItemId:'S'};
+ qa.state.menu=[item];qa.state.order={blue:1};
+ assert.equal(qa.sharedStockOptions(item,{}).length,3);
+ assert.equal(qa.sharedStockOptions(item,{})[0].name,'Savepak');
+ assert.equal(qa.linesFor('close_order')[0].item_id,'savepak');
+ qa.state.receive.blue={line_key:'blue',item_name:item.name,item_id:'savepak',quantity:1,checked:true,brand_allocations:[{item_id:'savepak',quantity:1}]};
+ const receipt=qa.linesFor('receive')[0];
+ assert.equal(receipt.item_id,'pool');assert.equal(receipt.master_item_id,'ROOT');
+ assert.equal(receipt.brand_allocations[0].item_id,'savepak');
+ qa.state.returns.blue={line_key:'blue',item_name:item.name,item_id:'savepak',quantity:1};
+ assert.equal(qa.linesFor('return')[0].item_id,'pool');
 });

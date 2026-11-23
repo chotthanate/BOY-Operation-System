@@ -33,7 +33,7 @@
     client: null, session: null, branch: null, context: null, contexts: {}, menu: [], selectedSettingsKeys: new Set(), selectingSettings: false, deletingSettings: false,
     order: {}, receive: {}, returns: {}, receiveHistory: [], receiveRounds: [], receiveExpanded: new Set(), receiveTopRoundId: "", orderHistory: [], activeTab: "close", pickerTarget: "receive", sortMode: "categories", sortCategory: "", settingsSection: "", editingKey: "",
     cloudTimer: 0, cloudDraftPromise: null, saving: false, started: false, authContext: null, access: null, sortSnapshot: null, mappingDirty: false, editingMasterCodes: [], settingsConflict: "",
-    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map()
+    fruitCostItems: [], fruitCostRules: [], fruitWeights: [], fruitYieldRows: [], masterItems: [], normalizedItemsByCode: new Map(), normalizedRowsByCode: new Map(), masterItemsByCode: new Map(), sharedStockVariants: new Map(), sharedStockTargets: new Map()
   };
 
   function keyFor(name, unit = "") {
@@ -530,7 +530,8 @@
     return `<div class="receive-measurements">${quantityControl}<label class="receive-measurement"><span>น้ำหนักจริง (กก.)</span><input data-actual-weight-key="${key}" inputmode="decimal" type="text" value="${weight === null ? "" : weight}" aria-label="น้ำหนักจริงกิโลกรัม"></label></div>`;
   }
   function sharedStockOptions(item, line) {
-    return state.sharedStockVariants.get(item.itemId || item.item_id || line.item_id) || [];
+    const id = item.itemId || item.item_id || line.item_id;
+    return state.sharedStockVariants.get(state.sharedStockTargets.get(id)?.id || id) || [];
   }
   function expectedBrandCount(item) {
     const codes = masterItemCodes(item);
@@ -544,7 +545,7 @@
       ? line.brand_allocations : [{ item_id: "", quantity: number(line.quantity) || 1 }];
     return `<div class="brand-allocations" data-brand-picker="${escapeHtml(key)}"><strong>ยี่ห้อที่ได้รับ</strong>${allocations.map((allocation, index) =>
       `<div class="brand-allocation-row"><select data-brand-choice="${escapeHtml(key)}" data-brand-index="${index}" aria-label="เลือกยี่ห้อที่รับ"><option value="">เลือกยี่ห้อ</option>${variants.map((variant) =>
-        `<option value="${escapeHtml(variant.id)}" ${allocation.item_id === variant.id ? "selected" : ""}>${escapeHtml(variant.name)}</option>`).join("")}</select><input data-brand-quantity="${escapeHtml(key)}" data-brand-index="${index}" type="number" inputmode="numeric" min="1" step="1" value="${number(allocation.quantity)}" aria-label="จำนวน${escapeHtml(item.unit || "หน่วย")}"><button data-brand-remove="${escapeHtml(key)}" data-brand-index="${index}" type="button" aria-label="ลบยี่ห้อ">×</button></div>`).join("")}<button class="brand-add" data-brand-add="${escapeHtml(key)}" type="button">+ อีกยี่ห้อ</button></div>`;
+        `<option value="${escapeHtml(variant.id)}" title="${escapeHtml(variant.name)}" ${allocation.item_id === variant.id ? "selected" : ""}>${escapeHtml(isFrozenFruit(item) ? variant.name.match(/\b(Savepak|aro|Supersave)\b/i)?.[0] || variant.name : variant.name)}</option>`).join("")}</select><input data-brand-quantity="${escapeHtml(key)}" data-brand-index="${index}" type="number" inputmode="numeric" min="1" step="1" value="${number(allocation.quantity)}" aria-label="จำนวน${escapeHtml(item.unit || "หน่วย")}"><button data-brand-remove="${escapeHtml(key)}" data-brand-index="${index}" type="button" aria-label="ลบยี่ห้อ">×</button></div>`).join("")}<button class="brand-add" data-brand-add="${escapeHtml(key)}" type="button">+ อีกยี่ห้อ</button></div>`;
   }
 
   function renderDateDisplays() {
@@ -822,8 +823,11 @@
     return Object.entries(source).filter(([, line]) => number(line.quantity) > 0 && (type !== "receive" || line.checked)).map(([key, line]) => {
       const item = findMenu(key, line); const handlingType = type === "receive"
         ? receiveHandlingType(item) : line.handling_type || receiveHandlingType(item);
+      const originalId = line.item_id || item.itemId || item.item_id || null;
+      const stockPool = state.sharedStockTargets.get(originalId);
       return {
-        ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: line.item_id || item.itemId || item.item_id || null,
+        ...line, line_key: type === "receive" ? (line.receipt_key ||= newReceiptKey()) : key, item_id: stockPool?.id || originalId,
+        master_item_id: stockPool?.code || line.master_item_id || item.masterItemId || null,
         unit_name: type === "receive" ? (needsActualWeight(item) && isWeightQuantity(item) ? "กก." : item.unit) : line.unit_name,
         input_mode: type === "receive" ? (isPieceEstimatedFruit(item) || isFrozenFruit(item) ? "quantity" : item.inputMode) : line.input_mode,
         actual_weight_kg: type === "receive" && !needsActualWeight(item) ? null : line.actual_weight_kg,
@@ -1033,7 +1037,10 @@
     state.normalizedRowsByCode = new Map((normalizedResult.data || []).map((row) => [String(row.code), row]));
     state.masterItemsByCode = new Map(state.masterItems.map((row) => [row.code, row]));
     state.sharedStockVariants = new Map();
+    state.sharedStockTargets = new Map();
+    const normalizedById = new Map((normalizedResult.data || []).map(row => [row.id, row]));
     (normalizedResult.data || []).filter((row) => row.stock_target_item_id).forEach((row) => {
+      state.sharedStockTargets.set(row.id, {id:row.stock_target_item_id, code:normalizedById.get(row.stock_target_item_id)?.code});
       const options = state.sharedStockVariants.get(row.stock_target_item_id) || [];
       options.push({ id: row.id, name: row.name, code: row.code });
       state.sharedStockVariants.set(row.stock_target_item_id, options);

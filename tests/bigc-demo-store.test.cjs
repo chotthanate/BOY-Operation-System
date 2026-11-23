@@ -117,3 +117,13 @@ test('south demo reset is isolated from central demo and every live key',()=>{
  assert.equal(values.get('boy-bigc-demo:keep'),'central-demo');
  assert.equal(values.get('boy-bigc-south-v2-settings-pending'),'south-live');
 });
+
+test('all nine frozen products include Savepak, aro and Supersave without duplicates',()=>{
+ const {store}=demo(),frozen=store.menu().filter(m=>m.category.includes('แช่แข็ง'));
+ assert.equal(frozen.length,9);
+ for(const m of frozen){
+  assert.equal(m.demoVariants.length,3,m.name);
+  assert.equal(new Set(m.demoVariants.map(v=>v.id)).size,3,m.name);
+  for(const brand of ['Savepak','aro','Supersave'])assert(m.demoVariants.some(v=>v.name.includes(brand)),m.name+' '+brand);
+ }
+});
