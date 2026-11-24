@@ -22,12 +22,17 @@ jobs:
       BOY_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo
     steps:
       - uses: actions/checkout@v4
+        if: ${{ env.GPOS_AUTH_STATE_B64 != '' && env.BOY_GPOS_INGEST_TOKEN != '' }}
       - uses: actions/setup-node@v4
+        if: ${{ env.GPOS_AUTH_STATE_B64 != '' && env.BOY_GPOS_INGEST_TOKEN != '' }}
         with:
           node-version: '24'
       - name: Install pinned browser client
+        if: ${{ env.GPOS_AUTH_STATE_B64 != '' && env.BOY_GPOS_INGEST_TOKEN != '' }}
         run: npm ci --prefix scripts/gpos-cloud --ignore-scripts
       - name: Install Chromium
+        if: ${{ env.GPOS_AUTH_STATE_B64 != '' && env.BOY_GPOS_INGEST_TOKEN != '' }}
         run: npm exec --prefix scripts/gpos-cloud -- playwright install --with-deps chromium
       - name: Read GPOS and update dashboard preview
+        if: ${{ env.GPOS_AUTH_STATE_B64 != '' && env.BOY_GPOS_INGEST_TOKEN != '' }}
         run: node scripts/gpos-cloud/run.cjs

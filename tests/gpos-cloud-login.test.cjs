@@ -1,6 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { restoreLogin } = require("../scripts/gpos-cloud/run.cjs");
+const { decodeAuthBundle, restoreLogin } = require("../scripts/gpos-cloud/run.cjs");
+const { gzipSync } = require("node:zlib");
+
+test("decodes a compressed browser session", () => {
+  const state = { storageState: { cookies: [], origins: [] }, sessionStorage: { entries: [["key", "value"]] } };
+  const encoded = gzipSync(Buffer.from(JSON.stringify(state))).toString("base64");
+  assert.deepEqual(decodeAuthBundle(encoded), state);
+});
 
 test("expired GPOS session never accepts service terms automatically", async () => {
   const actions = [];

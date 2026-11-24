@@ -1,10 +1,16 @@
 "use strict";
 
 const { chromium } = require("playwright");
+const { gunzipSync } = require("node:zlib");
 const { bangkokDate, parseDailyReport } = require("../gpos-report.cjs");
 
 const gposUrl = "https://gpos_web-1pq8t2.th.biot-apps.com/branch/reports_sales_by_day";
 const required = (key) => { const value = process.env[key]; if (!value) throw new Error(`Missing ${key}`); return value; };
+
+function decodeAuthBundle(value) {
+  const bytes = Buffer.from(value, "base64");
+  return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString("utf8"));
+}
 
 async function restoreLogin(page) {
   if (!new URL(page.url()).pathname.startsWith("/login")) return;
@@ -58,7 +64,7 @@ async function publishPreview(snapshot) {
 }
 
 async function main() {
-  const authBundle = JSON.parse(Buffer.from(required("GPOS_AUTH_STATE_B64"), "base64").toString("utf8"));
+  const authBundle = decodeAuthBundle(required("GPOS_AUTH_STATE_B64"));
   const authState = authBundle.storageState || authBundle;
   const browser = await chromium.launch({ headless: true });
   try {
@@ -76,4 +82,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
-module.exports = { restoreLogin, selectDate, readToday };
+module.exports = { decodeAuthBundle, restoreLogin, selectDate, readToday };
