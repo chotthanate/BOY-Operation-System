@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { decodeAuthBundle, restoreLogin } = require("../scripts/gpos-cloud/run.cjs");
+const { decodeAuthBundle, restoreLogin, selectToday } = require("../scripts/gpos-cloud/run.cjs");
 const { gzipSync } = require("node:zlib");
 
 test("decodes a compressed browser session", () => {
@@ -23,4 +23,24 @@ test("expired GPOS session never accepts service terms automatically", async () 
   assert.deepEqual(actions, []);
   delete process.env.GPOS_LOGIN_EMAIL;
   delete process.env.GPOS_LOGIN_PASSWORD;
+});
+
+test("today preset sets both ends of the GPOS date range", async () => {
+  const values = ["2026-11-24", "2026-11-24"];
+  const actions = [];
+  const buttons = {
+    nth: (index) => ({
+      waitFor: async () => {},
+      innerText: async () => values[index],
+      click: async () => actions.push(`open ${index}`),
+      filter: ({ hasText }) => ({ waitFor: async () => assert.equal(values[index], hasText) })
+    }),
+    count: async () => 2
+  };
+  const page = {
+    getByRole: () => buttons,
+    evaluate: async () => { values.fill("2026-11-25"); actions.push("today"); return true; }
+  };
+  await selectToday(page, "2026-11-25");
+  assert.deepEqual(actions, ["open 0", "today"]);
 });
