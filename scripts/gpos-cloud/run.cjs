@@ -26,15 +26,15 @@ async function restoreLogin(page) {
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
 }
 
-async function selectDate(page, index, date) {
+async function selectToday(page, date) {
   const buttons = page.getByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ });
   await buttons.nth(1).waitFor({ timeout: 30000 });
   if (await buttons.count() !== 2) throw new Error("GPOS report date controls changed");
-  if ((await buttons.nth(index).innerText()).trim() === date) return;
-  await buttons.nth(index).click();
-  // GPOS renders the picker beneath its report table in headless Chromium.
-  await page.locator(`td[title="${date}"]`).evaluate((cell) => cell.click());
-  await buttons.nth(index).filter({ hasText: date }).waitFor({ timeout: 30000 });
+  if ((await buttons.nth(0).innerText()).trim() === date && (await buttons.nth(1).innerText()).trim() === date) return;
+  await buttons.nth(0).click();
+  await page.getByRole("link", { name: "วันนี้" }).click();
+  await buttons.nth(0).filter({ hasText: date }).waitFor({ timeout: 30000 });
+  await buttons.nth(1).filter({ hasText: date }).waitFor({ timeout: 30000 });
 }
 
 async function readToday(page, date) {
@@ -42,8 +42,7 @@ async function readToday(page, date) {
   await page.waitForFunction(() => location.pathname === "/login" || [...document.querySelectorAll("th")].some((cell) => cell.textContent.includes("ยอดขายสุทธิ")), null, { timeout: 30000 });
   await restoreLogin(page);
   await page.getByRole("columnheader", { name: "ยอดขายสุทธิ (฿)" }).waitFor({ timeout: 30000 });
-  await selectDate(page, 0, date);
-  await selectDate(page, 1, date);
+  await selectToday(page, date);
   const [year, month, day] = date.split("-");
   await page.getByRole("cell", { name: `${day}/${month}/${year}`, exact: true }).waitFor({ timeout: 30000 });
   const report = await page.locator("table").filter({ has: page.getByRole("columnheader", { name: "ยอดขายสุทธิ (฿)" }) }).first().evaluate((table) => ({
@@ -82,4 +81,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
-module.exports = { decodeAuthBundle, restoreLogin, selectDate, readToday };
+module.exports = { decodeAuthBundle, restoreLogin, selectToday, readToday };
