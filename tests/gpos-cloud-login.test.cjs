@@ -38,9 +38,8 @@ test("today preset sets both ends of the GPOS date range", async () => {
     count: async () => 2
   };
   const page = {
-    getByRole: (role) => role === "button" ? buttons : {
-      click: async () => { values.fill("2026-11-25"); actions.push("today"); }
-    }
+    getByRole: () => buttons,
+    evaluate: async () => { values.fill("2026-11-25"); actions.push("today"); return true; }
   };
   await selectToday(page, "2026-11-25");
   assert.deepEqual(actions, ["open 0", "today"]);

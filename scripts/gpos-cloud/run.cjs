@@ -32,7 +32,13 @@ async function selectToday(page, date) {
   if (await buttons.count() !== 2) throw new Error("GPOS report date controls changed");
   if ((await buttons.nth(0).innerText()).trim() === date && (await buttons.nth(1).innerText()).trim() === date) return;
   await buttons.nth(0).click();
-  await page.getByRole("link", { name: "วันนี้" }).click();
+  // GPOS renders the date presets underneath its report table in headless Chromium.
+  const found = await page.evaluate(() => {
+    const today = [...document.querySelectorAll("a")].find((link) => link.textContent.trim() === "วันนี้");
+    today?.click();
+    return Boolean(today);
+  });
+  if (!found) throw new Error("GPOS today preset is unavailable");
   await buttons.nth(0).filter({ hasText: date }).waitFor({ timeout: 30000 });
   await buttons.nth(1).filter({ hasText: date }).waitFor({ timeout: 30000 });
 }
