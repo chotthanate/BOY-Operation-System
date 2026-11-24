@@ -1,0 +1,7 @@
+{
+  "name": "boy-gpos-dashboard-preview",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": { "test": "node --test ../../tests/gpos-report.test.cjs" },
+  "dependencies": { "playwright": "1.62.1" }
+}
