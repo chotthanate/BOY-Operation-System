@@ -83,7 +83,9 @@
     $("#storeGrid").innerHTML = rows.length ? rows.map((branch) => {
       const meta = branchMeta[branch.code] || {};
       const href = `branch-dashboard.html?branch=${encodeURIComponent(branch.code)}&from=${encodeURIComponent(data.date)}&to=${encodeURIComponent(data.date)}`;
-      return `<a class="store" href="${href}" style="--accent:${meta.color || "#0b876b"};--accent-soft:${meta.soft || "#e8f6f0"}"><span class="store-head"><span class="store-name">${escapeHtml(branch.name)}</span><span class="go">›</span></span><strong class="store-total">${money(branch.income)}</strong><span class="split"><span>เงินสด<strong>${money(branch.cash)}</strong></span><span>เงินโอน<strong>${money(branch.transfer)}</strong></span><span>ไทยช่วยไทย<strong>${money(branch.government)}</strong></span></span><span class="store-foot"><span>รายจ่าย <b>${money(branch.expense)}</b></span><span>สุทธิ <b>${money(branch.net)}</b></span></span></a>`;
+      const gpos = branch.code === "BIGC-CENTRAL-PATTAYA" && data.date === localDate(new Date())
+        ? '<span class="store-gpos" id="gposOverview" aria-live="polite"><span>GPOS ระหว่างวัน <small>ไม่ใช่รายรับจริง</small></span><strong>กำลังตรวจยอด...</strong></span>' : "";
+      return `<a class="store" href="${href}" style="--accent:${meta.color || "#0b876b"};--accent-soft:${meta.soft || "#e8f6f0"}"><span class="store-head"><span class="store-name">${escapeHtml(branch.name)}</span><span class="go">›</span></span><strong class="store-total">${money(branch.income)}</strong><span class="split"><span>เงินสด<strong>${money(branch.cash)}</strong></span><span>เงินโอน<strong>${money(branch.transfer)}</strong></span><span>ไทยช่วยไทย<strong>${money(branch.government)}</strong></span></span><span class="store-foot"><span>รายจ่าย <b>${money(branch.expense)}</b></span><span>สุทธิ <b>${money(branch.net)}</b></span></span>${gpos}</a>`;
     }).join("") : '<div class="empty">ยังไม่มีข้อมูลสาขา</div>';
   }
 
@@ -93,6 +95,7 @@
     try {
       const data = await cachedRpc("get_dashboard_daily", { target_date: date },60000,force);
       renderAllDaily(data);
+      void loadGposOverview(date);
     } catch (error) { showError(error.message); }
     finally { setLoading(false); }
   }
@@ -196,6 +199,27 @@
     $("#availability").textContent = (availability.from ? `มีข้อมูลตั้งแต่ ${thaiDate(availability.from)} ถึง ${thaiDate(availability.to)}` : "สาขานี้ยังไม่มีข้อมูลยอดขายหรือรายจ่ายใน Supabase") + (data.detailReconciled===false ? " · รายรับตามกะที่ยืนยันแล้ว; รายละเอียดสินค้าจากบิล POS" : "");
   }
 
+  async function fetchGposSnapshot(branch, date) {
+    if (!client) throw new Error("ยังไม่เชื่อมต่อ Supabase");
+    await client.auth.getSession();
+    const { data, error } = await client.schema("boy_central").from("gpos_dashboard_snapshots")
+      .select("net_sales,order_count,captured_at")
+      .eq("branch_code", branch).eq("business_date", date).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  async function loadGposOverview(date) {
+    const target = $("#gposOverview strong");
+    if (!target) return;
+    try {
+      const data = await fetchGposSnapshot("BIGC-CENTRAL-PATTAYA", date);
+      if (date !== $("#dateInput").value || !target.isConnected) return;
+      target.textContent = data ? `${money(data.net_sales)} บาท · ${count(data.order_count)} ออเดอร์` : "ยังไม่มียอดวันนี้";
+      if (data) target.title = `อัปเดต ${new Date(data.captured_at).toLocaleTimeString("th-TH", {hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})}`;
+    } catch (_) { if (target.isConnected) target.textContent = "ดึงยอดไม่ได้"; }
+  }
+
   async function loadGposPreview(branch, from, to) {
     const panel = $("#gposPreview");
     if (!panel) return;
@@ -206,11 +230,7 @@
     amount.textContent = "—"; orders.textContent = ""; status.textContent = "กำลังตรวจยอด...";
     status.classList.remove("stale");
     try {
-      if (!client) throw new Error("ยังไม่เชื่อมต่อ Supabase");
-      const { data, error } = await client.schema("boy_central").from("gpos_dashboard_snapshots")
-        .select("net_sales,order_count,captured_at")
-        .eq("branch_code", branch).eq("business_date", date).maybeSingle();
-      if (error) throw error;
+      const data = await fetchGposSnapshot(branch, date);
       if (panel.hidden || new URLSearchParams(location.search).get("branch") !== branch || $("#dateFrom").value !== date || $("#dateTo").value !== date) return;
       if (!data) { status.textContent = "ยังไม่มียอด GPOS วันนี้"; return; }
       amount.textContent = `${money(data.net_sales)} บาท`;
