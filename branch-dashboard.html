@@ -23,6 +23,10 @@
       </header>
       <div class="quick-range"><button class="preset" data-preset="today">วันนี้</button><button class="preset" data-preset="yesterday">เมื่อวาน</button><button class="preset" data-preset="7d">7 วัน</button><button class="preset" data-preset="30d">30 วัน</button></div>
       <div class="empty error" id="dashboardError" hidden></div>
+      <section class="gpos-preview" id="gposPreview" hidden aria-live="polite">
+        <div><span class="gpos-preview-label">ยอด GPOS ระหว่างวัน</span><strong id="gposPreviewAmount">—</strong></div>
+        <div class="gpos-preview-side"><span id="gposPreviewOrders"></span><small id="gposPreviewStatus">กำลังตรวจยอด...</small></div>
+      </section>
       <section class="kpis" id="metricGrid"></section>
       <section class="grid-main">
         <article class="panel"><div class="panel-title"><h2>แนวโน้มยอดขายรายวัน</h2><span>แตะแท่งเพื่อดูยอด</span></div><div class="chart" id="dailyTrend"></div></article>
@@ -47,6 +51,6 @@
   <nav id="branchBottomNav" class="branch-dashboard-nav" aria-label="เมนูสาขา"></nav>
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
   <script src="assets/js/expense-app.js?v=20261119-recovery1"></script>
-  <script src="assets/js/dashboard.js?v=20261123-water-pos&waterDaily=20261124"></script>
+  <script src="assets/js/dashboard.js?v=20261124-gpos-preview&waterDaily=20261124"></script>
 </body>
 </html>

@@ -196,6 +196,31 @@
     $("#availability").textContent = (availability.from ? `มีข้อมูลตั้งแต่ ${thaiDate(availability.from)} ถึง ${thaiDate(availability.to)}` : "สาขานี้ยังไม่มีข้อมูลยอดขายหรือรายจ่ายใน Supabase") + (data.detailReconciled===false ? " · รายรับตามกะที่ยืนยันแล้ว; รายละเอียดสินค้าจากบิล POS" : "");
   }
 
+  async function loadGposPreview(branch, from, to) {
+    const panel = $("#gposPreview");
+    if (!panel) return;
+    const date = localDate(new Date());
+    panel.hidden = branch !== "BIGC-CENTRAL-PATTAYA" || from !== date || to !== date;
+    if (panel.hidden) return;
+    const amount = $("#gposPreviewAmount"), orders = $("#gposPreviewOrders"), status = $("#gposPreviewStatus");
+    amount.textContent = "—"; orders.textContent = ""; status.textContent = "กำลังตรวจยอด...";
+    status.classList.remove("stale");
+    try {
+      if (!client) throw new Error("ยังไม่เชื่อมต่อ Supabase");
+      const { data, error } = await client.schema("boy_central").from("gpos_dashboard_snapshots")
+        .select("net_sales,order_count,captured_at")
+        .eq("branch_code", branch).eq("business_date", date).maybeSingle();
+      if (error) throw error;
+      if (panel.hidden || new URLSearchParams(location.search).get("branch") !== branch || $("#dateFrom").value !== date || $("#dateTo").value !== date) return;
+      if (!data) { status.textContent = "ยังไม่มียอด GPOS วันนี้"; return; }
+      amount.textContent = `${money(data.net_sales)} บาท`;
+      orders.textContent = `${count(data.order_count)} ออเดอร์`;
+      const age = Date.now() - new Date(data.captured_at).getTime();
+      status.classList.toggle("stale", age > 90 * 60 * 1000);
+      status.textContent = `${age > 90 * 60 * 1000 ? "ข้อมูลเก่า · " : ""}อัปเดต ${new Date(data.captured_at).toLocaleTimeString("th-TH", {hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})} · ดูเท่านั้น ไม่ใช่รายรับจริง`;
+    } catch (error) { status.textContent = `ดึงยอด GPOS ไม่สำเร็จ: ${error.message}`; }
+  }
+
   async function loadBranch(force=false) {
     clearError(); setLoading(true);
     const branch = new URLSearchParams(location.search).get("branch") || "BURGER";
@@ -205,6 +230,7 @@
     current.searchParams.set("to", $("#dateTo").value);
     current.searchParams.delete("preset");
     history.replaceState(null, "", current);
+    void loadGposPreview(branch, $("#dateFrom").value, $("#dateTo").value);
     try {
       const data = await cachedRpc("get_branch_dashboard", { target_branch_code: branch, date_from: $("#dateFrom").value, date_to: $("#dateTo").value },60000,force===true);
       renderBranch(data);
@@ -260,6 +286,11 @@
     if (waterBranch) void loadBranch(true); else void loadAllDaily(true);
   }
   setInterval(refreshWaterDailySales,10000);
+  setInterval(() => {
+    if (document.hidden || mode !== "branch") return;
+    const branch = new URLSearchParams(location.search).get("branch");
+    if (branch === "BIGC-CENTRAL-PATTAYA") void loadGposPreview(branch, $("#dateFrom").value, $("#dateTo").value);
+  }, 120000);
   window.addEventListener('focus',refreshWaterDailySales);
   window.addEventListener('online',refreshWaterDailySales);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshWaterDailySales();});

@@ -27,6 +27,8 @@ secrets.*.json
 
 # Dependencies and generated output
 node_modules/
+.gpos-browser-profile/
+.gpos-ingest-token
 dist/
 build/
 coverage/

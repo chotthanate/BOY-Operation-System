@@ -1,0 +1,33 @@
+name: GPOS dashboard preview
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+      timezone: Asia/Bangkok
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: gpos-dashboard-preview
+  cancel-in-progress: false
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GPOS_AUTH_STATE_B64: ${{ secrets.GPOS_AUTH_STATE_B64 }}
+      GPOS_LOGIN_EMAIL: ${{ secrets.GPOS_LOGIN_EMAIL }}
+      GPOS_LOGIN_PASSWORD: ${{ secrets.GPOS_LOGIN_PASSWORD }}
+      BOY_GPOS_INGEST_TOKEN: ${{ secrets.BOY_GPOS_INGEST_TOKEN }}
+      BOY_SUPABASE_URL: https://qfyszyzonvrchgbpowvs.supabase.co
+      BOY_SUPABASE_PUBLISHABLE_KEY: sb_publishable_GyAuWmc2Er200mTqfKgJGQ_WxtGvnTo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned browser client
+        run: npm ci --prefix scripts/gpos-cloud --ignore-scripts
+      - name: Install Chromium
+        run: npm exec --prefix scripts/gpos-cloud -- playwright install --with-deps chromium
+      - name: Read GPOS and update dashboard preview
+        run: node scripts/gpos-cloud/run.cjs
