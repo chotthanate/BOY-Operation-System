@@ -248,5 +248,21 @@
     loadBranch();
   }
 
+  // Daily Water POS revenue follows each synced sale, independent of shift close.
+  let waterLiveRefreshAt = 0;
+  function refreshWaterDailySales() {
+    if (document.hidden || navigator.onLine === false || document.querySelector('main')?.classList.contains('loading')) return;
+    const today=localDate(new Date());
+    const waterBranch=mode==='branch' && new URLSearchParams(location.search).get('branch')==='BIGC-SOUTH-PATTAYA';
+    const showingToday=waterBranch ? ($('#dateFrom')?.value<=today && $('#dateTo')?.value>=today) : mode==='all' && $('#dateInput')?.value===today;
+    if (!showingToday || Date.now()-waterLiveRefreshAt<5000) return;
+    waterLiveRefreshAt=Date.now();
+    if (waterBranch) void loadBranch(true); else void loadAllDaily(true);
+  }
+  setInterval(refreshWaterDailySales,10000);
+  window.addEventListener('focus',refreshWaterDailySales);
+  window.addEventListener('online',refreshWaterDailySales);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshWaterDailySales();});
+
   document.addEventListener("DOMContentLoaded", () => mode === "branch" ? initBranch() : initAll());
 })();
