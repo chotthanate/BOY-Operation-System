@@ -22,11 +22,13 @@ async function restoreLogin(page) {
 
 async function selectDate(page, index, date) {
   const buttons = page.getByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ });
+  await buttons.nth(1).waitFor({ timeout: 30000 });
   if (await buttons.count() !== 2) throw new Error("GPOS report date controls changed");
   if ((await buttons.nth(index).innerText()).trim() === date) return;
   await buttons.nth(index).click();
-  await page.locator(`td[title="${date}"]`).click();
-  await page.getByRole("button", { name: "ตกลง" }).click();
+  // GPOS renders the picker beneath its report table in headless Chromium.
+  await page.locator(`td[title="${date}"]`).evaluate((cell) => cell.click());
+  await buttons.nth(index).filter({ hasText: date }).waitFor({ timeout: 30000 });
 }
 
 async function readToday(page, date) {
@@ -56,10 +58,16 @@ async function publishPreview(snapshot) {
 }
 
 async function main() {
-  const authState = JSON.parse(Buffer.from(required("GPOS_AUTH_STATE_B64"), "base64").toString("utf8"));
+  const authBundle = JSON.parse(Buffer.from(required("GPOS_AUTH_STATE_B64"), "base64").toString("utf8"));
+  const authState = authBundle.storageState || authBundle;
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ storageState: authState, timezoneId: "Asia/Bangkok", locale: "th-TH" });
+    if (authBundle.sessionStorage?.entries?.length) {
+      await context.addInitScript(({ origin, entries }) => {
+        if (location.origin === origin) for (const [key, value] of entries) sessionStorage.setItem(key, value);
+      }, authBundle.sessionStorage);
+    }
     const page = await context.newPage();
     const snapshot = await readToday(page, bangkokDate());
     await publishPreview(snapshot);
