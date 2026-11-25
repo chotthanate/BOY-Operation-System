@@ -14,6 +14,7 @@
   const thaiDate = (value, options = {}) => new Date(`${value}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric", ...options });
   const paymentNames = { cash: "เงินสด", transfer: "เงินโอน", government: "ไทยช่วยไทย", other: "อื่น ๆ" };
   const channelNames = { store: "หน้าร้าน", walk_in: "หน้าร้าน", dine_in: "รับประทานที่ร้าน", delivery: "เดลิเวอรี", online: "ออนไลน์", takeaway: "ซื้อกลับ", other: "อื่น ๆ" };
+  const gposBranch = "BIGC-CENTRAL-PATTAYA";
   const branchMeta = {
     TAWANA: { slug: "tawana", mark: "TW", name: "ทาวน่า", color: "#0b876b", soft: "#e8f6f0" },
     "BIGC-CENTRAL-PATTAYA": { slug: "bigc", mark: "BC", name: "บิ๊กซีพัทยากลาง", color: "#b88812", soft: "#fff5d4" },
@@ -71,7 +72,7 @@
     } catch (_) { note.textContent = ""; }
   }
 
-  function renderAllDaily(data) {
+  function renderAllDaily(data, gpos) {
     const totals = data.totals || {};
     $("#totalIncome").textContent = money(totals.income);
     $("#totalExpense").textContent = money(totals.expense);
@@ -83,21 +84,24 @@
     $("#storeGrid").innerHTML = rows.length ? rows.map((branch) => {
       const meta = branchMeta[branch.code] || {};
       const href = `branch-dashboard.html?branch=${encodeURIComponent(branch.code)}&from=${encodeURIComponent(data.date)}&to=${encodeURIComponent(data.date)}`;
-      const gpos = branch.code === "BIGC-CENTRAL-PATTAYA" && data.date === localDate(new Date())
-        ? '<span class="store-gpos" id="gposOverview" aria-live="polite"><span>GPOS ระหว่างวัน <small>ไม่ใช่รายรับจริง</small></span><strong>กำลังตรวจยอด...</strong></span>' : "";
-      return `<a class="store" href="${href}" style="--accent:${meta.color || "#0b876b"};--accent-soft:${meta.soft || "#e8f6f0"}"><span class="store-head"><span class="store-name">${escapeHtml(branch.name)}</span><span class="go">›</span></span><strong class="store-total">${money(branch.income)}</strong><span class="split"><span>เงินสด<strong>${money(branch.cash)}</strong></span><span>เงินโอน<strong>${money(branch.transfer)}</strong></span><span>ไทยช่วยไทย<strong>${money(branch.government)}</strong></span></span><span class="store-foot"><span>รายจ่าย <b>${money(branch.expense)}</b></span><span>สุทธิ <b>${money(branch.net)}</b></span></span>${gpos}</a>`;
+      const preview = branch.code === gposBranch ? gpos : null;
+      const gposNote = preview ? `<small class="store-gpos${preview.stale ? " stale" : ""}">${preview.note}</small>` : "";
+      return `<a class="store" href="${href}" style="--accent:${meta.color || "#0b876b"};--accent-soft:${meta.soft || "#e8f6f0"}"><span class="store-head"><span class="store-name">${escapeHtml(branch.name)}</span><span class="go">›</span></span><strong class="store-total">${money(preview?.amount ?? branch.income)}</strong>${gposNote}<span class="split"><span>เงินสด<strong>${money(branch.cash)}</strong></span><span>เงินโอน<strong>${money(branch.transfer)}</strong></span><span>ไทยช่วยไทย<strong>${money(branch.government)}</strong></span></span><span class="store-foot"><span>รายจ่าย <b>${money(branch.expense)}</b></span><span>${preview?.amount != null ? "สุทธิบัญชี" : "สุทธิ"} <b>${money(branch.net)}</b></span></span></a>`;
     }).join("") : '<div class="empty">ยังไม่มีข้อมูลสาขา</div>';
   }
 
-  async function loadAllDaily(force = false) {
+  let dailyRequest = 0;
+  async function loadAllDaily(force = false, refreshGpos = false) {
+    const request = ++dailyRequest;
     clearError(); setLoading(true);
     const date = $("#dateInput").value;
     try {
       const data = await cachedRpc("get_dashboard_daily", { target_date: date },60000,force);
-      renderAllDaily(data);
-      void loadGposOverview(date);
-    } catch (error) { showError(error.message); }
-    finally { setLoading(false); }
+      const branch = data.branches?.find((row) => row.code === gposBranch);
+      const gpos = await getGposIncome(branch, date, date, branch?.income, refreshGpos);
+      if (request === dailyRequest) renderAllDaily(data, gpos);
+    } catch (error) { if (request === dailyRequest) showError(error.message); }
+    finally { if (request === dailyRequest) setLoading(false); }
   }
 
   async function loadAllMonthly(force=false) {
@@ -123,7 +127,7 @@
     $("#dateInput").addEventListener("change", () => loadAllDaily());
     $("#prevDate").addEventListener("click", () => moveOverviewDate(-1));
     $("#nextDate").addEventListener("click", () => moveOverviewDate(1));
-    $("#refreshBtn").addEventListener("click", () => {loadAllDaily(true);loadAllMonthly(true);});
+    $("#refreshBtn").addEventListener("click", () => {loadAllDaily(true, true);loadAllMonthly(true);});
     $("#monthSelect").addEventListener("change", loadAllMonthly);
     $("#yearInput").addEventListener("change", loadAllMonthly);
     loadAllDaily(); loadAllMonthly(); loadCapacity();
@@ -173,15 +177,15 @@
     target.innerHTML = rows.length ? rows.map((row, index) => `<div class="chart-col" title="${escapeHtml(thaiDate(row.date))}: ${money(row.revenue)}"><div class="chart-bar" style="height:${Math.max(2, (Number(row.revenue) || 0) / max * 100)}%"></div>${index % labelEvery === 0 ? `<small>${new Date(`${row.date}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "short" })}</small>` : ""}</div>`).join("") : '<div class="empty">ยังไม่มีข้อมูลในช่วงนี้</div>';
   }
 
-  function renderBranch(data) {
+  function renderBranch(data, gpos) {
     applyBranchTheme(data.branch.code, data.branch);
     const totals = data.totals || {};
     $("#branchUpdated").textContent = `${thaiDate(data.dateFrom)}${data.dateFrom === data.dateTo ? "" : ` – ${thaiDate(data.dateTo)}`} · อัปเดต ${new Date(data.generatedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })}`;
     $("#metricGrid").innerHTML = [
-      ["ยอดขายสุทธิ", money(totals.revenue), data.manualRevenue>0 ? "รวมยอดสรุปประจำวัน" : `${count(totals.orders)} ออเดอร์`, "accent"],
+      ["ยอดขายสุทธิ", money(gpos?.amount ?? totals.revenue), gpos?.note ?? (data.manualRevenue>0 ? "รวมยอดสรุปประจำวัน" : `${count(totals.orders)} ออเดอร์`), `accent${gpos?.stale ? " gpos-stale" : ""}`],
       ["รายจ่าย", money(totals.expenses), `${count(totals.expenseTransactions)} รายการ`, ""],
       ["เงินลงทุน", money(totals.investment), "แยกจากรายจ่ายดำเนินงาน", ""],
-      ["คงเหลือก่อนต้นทุน", money(totals.net), "ยอดขายหักรายจ่าย", ""],
+      ["คงเหลือก่อนต้นทุน", money(totals.net), gpos?.amount != null ? "เฉพาะยอดที่บันทึกแล้ว" : "ยอดขายหักรายจ่าย", ""],
       ["เฉลี่ยต่อบิล", money(totals.averageOrder), "ต่อออเดอร์", ""],
       ["ส่วนลด", money(totals.discount), "ส่วนลดรวม", ""],
       ["ยกเลิก", count(totals.voidOrders), "ออเดอร์", ""]
@@ -199,49 +203,37 @@
     $("#availability").textContent = (availability.from ? `มีข้อมูลตั้งแต่ ${thaiDate(availability.from)} ถึง ${thaiDate(availability.to)}` : "สาขานี้ยังไม่มีข้อมูลยอดขายหรือรายจ่ายใน Supabase") + (data.detailReconciled===false ? " · รายรับตามกะที่ยืนยันแล้ว; รายละเอียดสินค้าจากบิล POS" : "");
   }
 
-  async function fetchGposSnapshot(branch, date) {
-    if (!client) throw new Error("ยังไม่เชื่อมต่อ Supabase");
-    await client.auth.getSession();
-    const { data, error } = await client.schema("boy_central").from("gpos_dashboard_snapshots")
-      .select("net_sales,order_count,captured_at")
-      .eq("branch_code", branch).eq("business_date", date).maybeSingle();
-    if (error) throw error;
-    return data;
-  }
-
-  async function loadGposOverview(date) {
-    const target = $("#gposOverview strong");
-    if (!target) return;
+  let gposCache;
+  async function getGposIncome(branch, from, to, recorded, force) {
+    if (branch?.code !== gposBranch || !branch.id || from !== to || to !== localDate(new Date()) || Number(recorded)) return null;
     try {
-      const data = await fetchGposSnapshot("BIGC-CENTRAL-PATTAYA", date);
-      if (date !== $("#dateInput").value || !target.isConnected) return;
-      target.textContent = data ? `${money(data.net_sales)} บาท · ${count(data.order_count)} ออเดอร์` : "ยังไม่มียอดวันนี้";
-      if (data) target.title = `อัปเดต ${new Date(data.captured_at).toLocaleTimeString("th-TH", {hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})}`;
-    } catch (_) { if (target.isConnected) target.textContent = "ดึงยอดไม่ได้"; }
+      const key = `${branch.id}:${to}`;
+      if (force || gposCache?.key !== key || Date.now() - gposCache.at >= 60000) {
+        const db = client.schema("boy_central");
+        const [snapshot, close] = await Promise.all([
+          db.from("gpos_dashboard_snapshots").select("net_sales,order_count,captured_at")
+            .eq("branch_code", gposBranch).eq("business_date", to).maybeSingle(),
+          // A submitted zero is an official close, not a missing revenue figure.
+          db.from("bigc_workflows").select("id").eq("branch_id", branch.id).eq("business_date", to)
+            .eq("workflow_type", "return").eq("status", "submitted").limit(1)
+        ]);
+        if (close.error) throw close.error;
+        if (!close.data.length && snapshot.error) throw snapshot.error;
+        gposCache = { key, at: Date.now(), snapshot: snapshot.data, closed: close.data.length > 0 };
+      }
+      if (gposCache.closed) return null;
+      const snapshot = gposCache.snapshot;
+      if (!snapshot) return { note: "ยังไม่มียอด GPOS วันนี้" };
+      const captured = new Date(snapshot.captured_at);
+      const stale = Date.now() - captured.getTime() > 45 * 60 * 1000;
+      const time = captured.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Bangkok" });
+      return { amount: snapshot.net_sales, stale, note: `GPOS ชั่วคราว · ${count(snapshot.order_count)} ออเดอร์ · ${stale ? "ยอดค้างตั้งแต่" : "อัปเดต"} ${time} น.` };
+    } catch (_) { return { stale: true, note: "ตรวจยอด GPOS ไม่สำเร็จ" }; }
   }
 
-  async function loadGposPreview(branch, from, to) {
-    const panel = $("#gposPreview");
-    if (!panel) return;
-    const date = localDate(new Date());
-    panel.hidden = branch !== "BIGC-CENTRAL-PATTAYA" || from !== date || to !== date;
-    if (panel.hidden) return;
-    const amount = $("#gposPreviewAmount"), orders = $("#gposPreviewOrders"), status = $("#gposPreviewStatus");
-    amount.textContent = "—"; orders.textContent = ""; status.textContent = "กำลังตรวจยอด...";
-    status.classList.remove("stale");
-    try {
-      const data = await fetchGposSnapshot(branch, date);
-      if (panel.hidden || new URLSearchParams(location.search).get("branch") !== branch || $("#dateFrom").value !== date || $("#dateTo").value !== date) return;
-      if (!data) { status.textContent = "ยังไม่มียอด GPOS วันนี้"; return; }
-      amount.textContent = `${money(data.net_sales)} บาท`;
-      orders.textContent = `${count(data.order_count)} ออเดอร์`;
-      const age = Date.now() - new Date(data.captured_at).getTime();
-      status.classList.toggle("stale", age > 90 * 60 * 1000);
-      status.textContent = `${age > 90 * 60 * 1000 ? "ข้อมูลเก่า · " : ""}อัปเดต ${new Date(data.captured_at).toLocaleTimeString("th-TH", {hour:"2-digit",minute:"2-digit",timeZone:"Asia/Bangkok"})} · ดูเท่านั้น ไม่ใช่รายรับจริง`;
-    } catch (error) { status.textContent = `ดึงยอด GPOS ไม่สำเร็จ: ${error.message}`; }
-  }
-
-  async function loadBranch(force=false) {
+  let branchRequest = 0;
+  async function loadBranch(force=false, refreshGpos=false) {
+    const request = ++branchRequest;
     clearError(); setLoading(true);
     const branch = new URLSearchParams(location.search).get("branch") || "BURGER";
     const current = new URL(location.href);
@@ -250,12 +242,13 @@
     current.searchParams.set("to", $("#dateTo").value);
     current.searchParams.delete("preset");
     history.replaceState(null, "", current);
-    void loadGposPreview(branch, $("#dateFrom").value, $("#dateTo").value);
+    const from = $("#dateFrom").value, to = $("#dateTo").value;
     try {
-      const data = await cachedRpc("get_branch_dashboard", { target_branch_code: branch, date_from: $("#dateFrom").value, date_to: $("#dateTo").value },60000,force===true);
-      renderBranch(data);
-    } catch (error) { showError(error.message); }
-    finally { setLoading(false); }
+      const data = await cachedRpc("get_branch_dashboard", { target_branch_code: branch, date_from: from, date_to: to },60000,force===true);
+      const gpos = await getGposIncome(data.branch, from, to, data.totals?.revenue, refreshGpos);
+      if (request === branchRequest) renderBranch(data, gpos);
+    } catch (error) { if (request === branchRequest) showError(error.message); }
+    finally { if (request === branchRequest) setLoading(false); }
   }
 
   function initBranch() {
@@ -290,30 +283,27 @@
     }));
     $("#dateFrom").addEventListener("change", () => { setActivePreset(); loadBranch(); });
     $("#dateTo").addEventListener("change", () => { setActivePreset(); loadBranch(); });
-    $("#refreshBtn").addEventListener("click", () => loadBranch(true));
+    $("#refreshBtn").addEventListener("click", () => loadBranch(true, true));
     loadBranch();
   }
 
-  // Daily Water POS revenue follows each synced sale, independent of shift close.
-  let waterLiveRefreshAt = 0;
-  function refreshWaterDailySales() {
+  let dailyLiveRefreshAt = 0;
+  function refreshLiveDailySales() {
     if (document.hidden || navigator.onLine === false || document.querySelector('main')?.classList.contains('loading')) return;
     const today=localDate(new Date());
-    const waterBranch=mode==='branch' && new URLSearchParams(location.search).get('branch')==='BIGC-SOUTH-PATTAYA';
-    const showingToday=waterBranch ? ($('#dateFrom')?.value<=today && $('#dateTo')?.value>=today) : mode==='all' && $('#dateInput')?.value===today;
-    if (!showingToday || Date.now()-waterLiveRefreshAt<5000) return;
-    waterLiveRefreshAt=Date.now();
-    if (waterBranch) void loadBranch(true); else void loadAllDaily(true);
+    const branch=mode==='branch' && new URLSearchParams(location.search).get('branch');
+    const waterBranch=branch==='BIGC-SOUTH-PATTAYA';
+    const centralBranch=branch===gposBranch;
+    const showingToday=waterBranch ? ($('#dateFrom')?.value<=today && $('#dateTo')?.value>=today)
+      : centralBranch ? ($('#dateFrom')?.value===today && $('#dateTo')?.value===today) : mode==='all' && $('#dateInput')?.value===today;
+    if (!showingToday || Date.now()-dailyLiveRefreshAt<(centralBranch ? 60000 : 5000)) return;
+    dailyLiveRefreshAt=Date.now();
+    if (waterBranch || centralBranch) void loadBranch(true); else void loadAllDaily(true);
   }
-  setInterval(refreshWaterDailySales,10000);
-  setInterval(() => {
-    if (document.hidden || mode !== "branch") return;
-    const branch = new URLSearchParams(location.search).get("branch");
-    if (branch === "BIGC-CENTRAL-PATTAYA") void loadGposPreview(branch, $("#dateFrom").value, $("#dateTo").value);
-  }, 120000);
-  window.addEventListener('focus',refreshWaterDailySales);
-  window.addEventListener('online',refreshWaterDailySales);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshWaterDailySales();});
+  setInterval(refreshLiveDailySales,10000);
+  window.addEventListener('focus',refreshLiveDailySales);
+  window.addEventListener('online',refreshLiveDailySales);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshLiveDailySales();});
 
   document.addEventListener("DOMContentLoaded", () => mode === "branch" ? initBranch() : initAll());
 })();
