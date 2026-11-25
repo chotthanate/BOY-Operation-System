@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f3f8f5">
   <title>Dashboard รวม | BOY Operation</title>
-  <link rel="stylesheet" href="assets/css/dashboard.css?v=20261124-gpos-overview">
+  <link rel="stylesheet" href="assets/css/dashboard.css?v=20261125-gpos-income">
   <style id="boyAuthPendingStyle">html{visibility:hidden}</style>
 
 </head>
@@ -21,7 +21,7 @@
         <div class="date-tools"><button class="icon" id="prevDate" aria-label="วันก่อน">‹</button><label class="date-field">วันที่<input class="date" id="dateInput" type="date"></label><button class="icon" id="nextDate" aria-label="วันถัดไป">›</button><button class="refresh" id="refreshBtn" aria-label="รีเฟรช">↻</button></div>
       </header>
       <div class="empty error" id="dashboardError" hidden></div>
-      <section class="kpis"><article class="kpi accent"><span>รายรับรวม</span><strong id="totalIncome">—</strong><small>ทุกสาขา</small></article><article class="kpi"><span>รายจ่ายรวม</span><strong id="totalExpense">—</strong><small>รายการยืนยันแล้ว</small></article><article class="kpi"><span>คงเหลือสุทธิ</span><strong id="totalNet">—</strong><small>รายรับหักรายจ่าย</small></article><a class="kpi pending" href="reimbursements.html"><span>รอเบิกค่าใช้จ่าย</span><strong id="pendingTotal">—</strong><small>แตะเพื่อดูรายการ</small></a></section>
+      <section class="kpis"><article class="kpi accent"><span>รายรับรวม</span><strong id="totalIncome">—</strong><small>เฉพาะยอดที่บันทึกแล้ว</small></article><article class="kpi"><span>รายจ่ายรวม</span><strong id="totalExpense">—</strong><small>รายการยืนยันแล้ว</small></article><article class="kpi"><span>คงเหลือสุทธิ</span><strong id="totalNet">—</strong><small>รายรับหักรายจ่าย</small></article><a class="kpi pending" href="reimbursements.html"><span>รอเบิกค่าใช้จ่าย</span><strong id="pendingTotal">—</strong><small>แตะเพื่อดูรายการ</small></a></section>
       <div class="section-head"><h2>รายรับแยกตามสาขา</h2><span>แตะการ์ดเพื่อเปิด Dashboard สาขา</span></div>
       <section class="stores" id="storeGrid"><div class="empty">กำลังโหลดยอด...</div></section>
       <section class="panel month-panel">
@@ -36,6 +36,6 @@
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261123-auth2"></script>
   <script src="assets/js/boy-branches.js?v=20261105-2"></script>
-  <script src="assets/js/dashboard.js?v=20261124-gpos-overview&waterDaily=20261124"></script>
+  <script src="assets/js/dashboard.js?v=20261125-gpos-income"></script>
 </body>
 </html>
