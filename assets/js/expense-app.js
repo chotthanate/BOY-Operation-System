@@ -82,9 +82,12 @@
   }
   const investmentCategories={construction:'ก่อสร้าง / ตกแต่ง',utilities:'ระบบไฟ / น้ำ',equipment:'อุปกรณ์ร้าน',furniture:'เฟอร์นิเจอร์',other:'อื่น ๆ'};
   const escape=value=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  function investmentFields(line={}){
+  function investmentFields(line={}, { direct = false } = {}){
     const selected=line?.is_investment||line?.expense_class==='capital'||(!Object.keys(line||{}).length&&new URLSearchParams(location.search).get('investment')==='1');
-    return `<details class="investment-fields" ${selected?'open':''}><summary>รายการพิเศษ${selected?' · เงินลงทุน':''}</summary><label class="investment-toggle"><input type="checkbox" class="is-investment" data-field="is_investment" ${selected?'checked':''} onchange="this.closest('.investment-fields').querySelector('.investment-details').hidden=!this.checked;window.doSync?.()"><span>เงินลงทุน / ก่อสร้าง</span></label><div class="investment-details" ${selected?'':'hidden'}><label>โครงการ<input class="investment-project" data-field="project_name" maxlength="160" value="${escape(line?.project_name)}" placeholder="ชื่อโครงการ" onchange="window.doSync?.()"></label><label>หมวดลงทุน<select class="investment-category" data-field="investment_category" onchange="window.doSync?.()"><option value="">เลือกหมวดลงทุน</option>${Object.entries(investmentCategories).map(([key,label])=>`<option value="${key}" ${line?.investment_category===key?'selected':''}>${label}</option>`).join('')}</select></label></div></details>`;
+    const sync = direct ? '' : 'onchange="window.doSync?.()"';
+    const toggle = direct ? '' : 'onchange="this.closest(\'.investment-fields\').querySelector(\'.investment-details\').hidden=!this.checked;window.doSync?.()"';
+    const fields = `<label class="investment-toggle"><input type="checkbox" class="is-investment" data-field="is_investment" ${selected?'checked':''} ${toggle}><span>เงินลงทุน / ก่อสร้าง</span></label><div class="investment-details" ${selected?'':'hidden'}><label>โครงการ<input class="investment-project" data-field="project_name" maxlength="160" value="${escape(line?.project_name)}" placeholder="ชื่อโครงการ" ${sync}></label><label>หมวดลงทุน<select class="investment-category" data-field="investment_category" ${sync}><option value="">เลือกหมวดลงทุน</option>${Object.entries(investmentCategories).map(([key,label])=>`<option value="${key}" ${line?.investment_category===key?'selected':''}>${label}</option>`).join('')}</select></label></div>`;
+    return direct ? fields : `<details class="investment-fields" ${selected?'open':''}><summary>รายการพิเศษ${selected?' · เงินลงทุน':''}</summary>${fields}</details>`;
   }
   let categoryAdapter=null;
   const addCategoryOption=kind=>`<option value="__add_category__">＋ เพิ่มประเภท${kind==='main'?'หลัก':'ย่อย'}…</option>`;

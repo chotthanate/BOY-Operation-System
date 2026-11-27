@@ -14,3 +14,9 @@ html[data-finance-ready="true"] .entry-shell{visibility:visible}
 .entry-header .entry-task-name{flex:none;margin-right:auto;white-space:nowrap}
 .entry-header .entry-branch-picker{max-width:75%;min-height:44px;padding:6px 12px;border:1px solid var(--line);border-radius:12px;background:var(--soft);color:var(--green);font:inherit;cursor:pointer}
 .entry-header .entry-branch-picker strong{font-size:inherit}
+.entry-investment{margin-bottom:12px}
+.entry-investment .investment-toggle{width:fit-content;font-size:13px;color:var(--ink);cursor:pointer}
+.entry-investment .investment-toggle input{accent-color:var(--green)}
+.entry-investment .investment-details{margin:0 0 12px}
+.entry-investment .investment-details :is(input,select),.entry-line-body>[data-field="description"],.entry-line-body>label>input[data-field="description"]{min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:white;color:var(--ink)}
+.entry-line-body>label:has(input[data-field="description"]){display:grid;gap:5px;margin-bottom:12px;color:var(--muted);font-size:13px}

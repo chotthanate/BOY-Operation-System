@@ -165,10 +165,23 @@
   state.lines.forEach((row,index)=>{
    const card=node('article',{class:'expense-card','data-line-id':row.id});
    const toggle=button('','entry-line-toggle',()=>{row.expanded=!row.expanded;render();});
-   toggle.append(node('span',{text:(index+1)+'. '+(row.description||'ยังไม่ระบุรายการ')}),node('b',{text:money(row.line_total)}));
+   toggle.append(node('span',{text:(index+1)+'. '+(row.is_investment?'เงินลงทุน · ':'')+(row.description||'ยังไม่ระบุรายการ')}),node('b',{text:money(row.line_total)}));
    const remove=button('×','entry-line-remove',()=>{if(!confirm('ลบรายการนี้ออกจากร่างหรือไม่?'))return;state.lines=state.lines.filter(x=>x!==row);if(!state.lines.length)state.lines=[line()];changed();render();});remove.setAttribute('aria-label','ลบรายการ '+(index+1));
    card.append(node('div',{class:'entry-line-heading'},[toggle]));
    const body=node('div',{class:'entry-line-body',hidden:!row.expanded});
+   const investment=node('div',{class:'entry-investment'});investment.innerHTML=window.BOY_EXPENSE_APP.investmentFields(row,{direct:true});
+   const updateInvestment=event=>{
+    const toggleChanged=event.target.matches('.is-investment');
+    if(toggleChanged&&event.type!=='change')return;
+    const selected=investment.querySelector('.is-investment').checked;
+    Object.assign(row,window.BOY_EXPENSE_APP.readInvestment(investment));row.is_investment=selected;row.expense_class=selected?'capital':'operating';changed();
+    if(toggleChanged){render();if(document.activeElement===document.body)document.querySelector(`[data-line-id="${CSS.escape(row.id)}"] .is-investment`)?.focus({preventScroll:true});}
+   };
+   investment.addEventListener('input',updateInvestment);investment.addEventListener('change',updateInvestment);body.append(investment);
+   const req=requirements(row),source=req.product;
+   if(row.is_investment){
+    body.append(field('รายการเงินลงทุน','input',row.description,{'data-field':'description',placeholder:'เช่น ค่าเดินสายไฟ'},v=>{row.description=v;row.item_id=null;row.expense_item_id=null;row.custom_expense=false;row.category_id='';row.subcategory_id='';changed();}));
+   }else{
    const picker=node('div',{class:'entry-product-picker'});
    const product=field('รายการสินค้า / ค่าใช้จ่าย','input',row.description,{autocomplete:'off','data-product':'true',placeholder:'พิมพ์ค้นหาหรือกดเลือกสินค้า','aria-autocomplete':'list'},value=>{
     row.description=value;row.item_id=null;row.expense_item_id=null;row.custom_expense=false;row.category_id='';row.subcategory_id='';changed();renderProductChoices(picker,row,value);
@@ -185,15 +198,17 @@
    input.onfocus=()=>renderProductChoices(picker,row,input.value);
    input.onchange=e=>{if(!picker.choosing&&!row.item_id&&!row.expense_item_id&&!row.custom_expense)selectProduct(row,e.target.value);};
    input.onkeydown=e=>{if(e.key==='Escape')choices.hidden=true;};
-   const req=requirements(row),source=req.product;
-   const status=row.is_investment?'เงินลงทุน · ไม่เพิ่มสต็อก':source?(source.stock_target_name?'เข้าสต็อก: '+source.stock_target_name:req.physical?'ผูกสินค้าแล้ว':'รายการค่าใช้จ่าย'):row.custom_expense?'รายจ่ายทั่วไป · ไม่เพิ่มสต็อก':row.description?'เลือกรายการจากรายการแนะนำ':'';
+   const status=source?(source.stock_target_name?'เข้าสต็อก: '+source.stock_target_name:req.physical?'ผูกสินค้าแล้ว':'รายการค่าใช้จ่าย'):row.custom_expense?'รายจ่ายทั่วไป · ไม่เพิ่มสต็อก':row.description?'เลือกรายการจากรายการแนะนำ':'';
    picker.append(product,choices,node('small',{class:'entry-product-status',text:status}));body.append(picker);
+   }
    const grid=node('div',{class:'entry-fields'});
+   if(!row.is_investment){
    const mains=c.categories.filter(x=>!x.parent_id),subs=c.categories.filter(x=>x.parent_id===row.category_id);
    const main=selectField('ประเภทหลัก',row.category_id,mains,{'data-field':'category_id'},value=>{if(value==='__add_category__')return;row.category_id=value;row.subcategory_id='';changed();render();});
    main.querySelector('select').insertAdjacentHTML('beforeend',window.BOY_EXPENSE_APP.addCategoryOption('main'));
    const sub=selectField('ประเภทย่อย',row.subcategory_id,subs,{'data-field':'subcategory_id'},value=>{if(value==='__add_category__')return;row.subcategory_id=value;changed();},'ไม่ระบุ');
    sub.querySelector('select').insertAdjacentHTML('beforeend',window.BOY_EXPENSE_APP.addCategoryOption('sub'));grid.append(main,sub);
+   }
    grid.append(field('ยอดเงิน','input',row.line_total,{type:'number',min:'0',step:'0.01',inputmode:'decimal','data-field':'line_total'},v=>{row.line_total=v;changed();updateTotal();}));
    if(req.quantity){
     grid.append(field(source?'จำนวน':'จำนวน (ถ้ามี)','input',row.quantity,{type:'number',min:'0',step:'any',inputmode:'decimal','data-field':'quantity'},v=>{row.quantity=v;changed();}));
@@ -207,9 +222,7 @@
    grid.append(selectField('ชำระด้วย',row.payment_method,[{id:'cash',name:'เงินสด'},{id:'transfer',name:'เงินโอน'},{id:'credit_card',name:'บัตรเครดิต'},{id:'reimbursement_pending',name:'รอเบิกค่าใช้จ่าย'}],{'data-field':'payment_method'},v=>{row.payment_method=v;changed();}));
    grid.append(field('ผู้ขาย / Supplier','input',row.supplier_name,{list:'entrySupplierOptions','data-field':'supplier_name'},v=>{row.supplier_name=v;changed();}));
    grid.append(field('หมายเหตุ','input',row.note,{'data-field':'note'},v=>{row.note=v;changed();}));
-   const investment=node('div',{class:'entry-wide'});investment.innerHTML=window.BOY_EXPENSE_APP.investmentFields(row);
-   const updateInvestment=event=>{const selected=investment.querySelector('.is-investment').checked;Object.assign(row,window.BOY_EXPENSE_APP.readInvestment(investment));row.is_investment=selected;row.expense_class=selected?'capital':'operating';changed();if(event.type==='change'&&event.target.matches('.is-investment'))render();};
-   investment.addEventListener('input',updateInvestment);investment.addEventListener('change',updateInvestment);grid.append(investment);body.append(grid);
+   body.append(grid);
    remove.textContent='ลบรายการนี้';remove.className='entry-secondary entry-line-delete';
    body.append(node('div',{class:'entry-actions'},[remove,button('✓ เสร็จสิ้น','entry-secondary entry-line-done',()=>{row.expanded=false;changed();render();clearTimeout(state.timer);saveDraft().catch(showError);})]));card.append(body);list.append(card);
   });
@@ -229,7 +242,7 @@
    if(x.is_investment&&(!x.project_name?.trim()||!x.investment_category))throw invalidLine(x,'ระบุโครงการและหมวดลงทุน: '+x.description,'project_name');
    const suppliers=state.catalog.suppliers.filter(s=>s.name.trim().toLocaleLowerCase('th')===(x.supplier_name||'').trim().toLocaleLowerCase('th'));
    return {...x,expense_class:x.is_investment?'capital':'operating',item_id:x.is_investment?null:x.item_id,expense_item_id:x.is_investment?null:x.expense_item_id,
-    subcategory_id:x.is_investment?null:x.subcategory_id,supplier_id:suppliers.length===1?suppliers[0].id:null,quantity:x.is_investment?0:Number(x.quantity||0),line_total:Number(x.line_total),unit_id:x.is_investment?null:x.unit_id||null};
+    category_id:x.is_investment?null:x.category_id,subcategory_id:x.is_investment?null:x.subcategory_id,receiving_mode:x.is_investment?'immediate':x.receiving_mode,supplier_id:suppliers.length===1?suppliers[0].id:null,quantity:x.is_investment?0:Number(x.quantity||0),line_total:Number(x.line_total),unit_id:x.is_investment?null:x.unit_id||null};
   });
  }
  async function saveExpenses(){
