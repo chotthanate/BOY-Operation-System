@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="assets/css/boy-pin-login.css?v=20260915-1">
   <link rel="stylesheet" href="assets/css/store-chrome.css?v=20261008-2">
   <link rel="stylesheet" href="assets/css/expense-app.css?v=20261121-expense1">
+  <link rel="stylesheet" href="assets/css/boy-work-nav.css?v=20261127-work1">
+  <style>body[data-work="stock"] #storeButton,body[data-work="stock"] .burger-bottom-nav{display:none!important}body[data-work="stock"] .branch-shell-header{grid-template-columns:minmax(0,1fr) auto}body[data-work="stock"] .branch-home-button{font-size:1.5rem;text-decoration:none}</style>
 </head>
 <body>
   <div class="app-shell">
@@ -23,6 +25,7 @@
     </header>
 
     <main>
+      <div class="empty-state" id="stockWorkStatus" role="alert" hidden>เปิดหน้านี้ไม่สำเร็จ ตรวจการเชื่อมต่อแล้วลองใหม่ <button class="secondary-button" id="stockWorkRetry" type="button">ลองใหม่</button></div>
       <section class="auth-card" id="authCard" hidden>
         <div class="section-heading"><div><small>BOY OPERATION</small><h1>ใส่รหัสเข้าใช้งาน</h1></div></div>
         <form id="loginForm" class="form-stack pin-login-form">
@@ -117,6 +120,7 @@
     <a id="employeeNavLink" href="master-data.html?entity=employees&store=burger"><span>♙</span><strong>พนักงาน</strong></a>
     <button type="button" data-target="settings"><span>•••</span><strong>เพิ่มเติม</strong></button>
   </nav>
+  <nav id="workNav" hidden></nav>
 
   <dialog id="storeDialog" class="sheet-dialog">
     <div class="dialog-handle"></div><h2>เลือกร้าน</h2>
@@ -250,6 +254,7 @@
   <script src="assets/js/boy-session-storage.js?v=20261123-auth3"></script>
   <script src="assets/js/boy-pin-auth.js?v=20261102-4"></script>
   <script src="assets/js/expense-app.js?v=20261122-entry1"></script>
-  <script src="assets/js/burger.js?v=20261122-entry1"></script>
+  <script src="assets/js/boy-work-nav.js?v=20261127-work1"></script>
+  <script src="assets/js/burger.js?v=20261127-work1"></script>
 </body>
 </html>

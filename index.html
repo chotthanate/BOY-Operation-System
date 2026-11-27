@@ -30,7 +30,7 @@
     <nav class="home-nav" aria-label="เมนูหลัก">
       <a href="index.html" aria-current="page"><svg class="home-icon" aria-hidden="true"><use href="#icon-home"/></svg><span>หน้าแรก</span></a>
       <a id="home-expense-link" href="expenses.html"><svg class="home-icon" aria-hidden="true"><use href="#icon-expense"/></svg><span>รายจ่าย</span></a>
-      <button type="button" popovertarget="home-stock-menu"><svg class="home-icon" aria-hidden="true"><use href="#icon-stock"/></svg><span>สต็อก</span></button>
+      <a href="stock.html"><svg class="home-icon" aria-hidden="true"><use href="#icon-stock"/></svg><span>สต็อก</span></a>
       <a href="dashboard.html"><svg class="home-icon" aria-hidden="true"><use href="#icon-dashboard"/></svg><span>Dashboard</span></a>
       <button type="button" popovertarget="home-more-menu"><svg class="home-icon" aria-hidden="true"><use href="#icon-more"/></svg><span>เพิ่มเติม</span></button>
     </nav>
@@ -69,21 +69,6 @@
     </main>
   </div>
 
-  <section popover id="home-stock-menu" class="home-popover" role="dialog" aria-labelledby="home-stock-heading">
-    <header class="home-menu-header">
-      <h2 id="home-stock-heading">สต็อกตามสาขา</h2>
-      <button class="home-icon-button" type="button" popovertarget="home-stock-menu" popovertargetaction="hide" aria-label="ปิดเมนูสต็อก">×</button>
-    </header>
-    <nav class="home-menu-list" id="home-stock-links" aria-label="เลือกสาขา">
-      <a href="tawana.html?view=stock" data-home-branch="TAWANA">ทาวน่า</a>
-      <a href="burger.html?branch=BIGC-CENTRAL-PATTAYA&amp;page=stock" data-home-branch="BIGC-CENTRAL-PATTAYA">BigC พัทยากลาง</a>
-      <a href="burger.html?branch=BIGC-SOUTH-PATTAYA&amp;page=stock" data-home-branch="BIGC-SOUTH-PATTAYA">BigC พัทยาใต้</a>
-      <a href="burger.html?branch=BURGER&amp;page=stock" data-home-branch="BURGER">ร้านเบอร์เกอร์</a>
-      <a href="burger.html?branch=GRILL&amp;page=stock" data-home-branch="GRILL">ร้านเนื้อย่าง</a>
-      <p class="home-empty" id="home-stock-empty" hidden>ไม่มีสาขาที่เข้าถึงได้</p>
-    </nav>
-  </section>
-
   <section popover id="home-more-menu" class="home-popover" role="dialog" aria-labelledby="home-more-heading">
     <header class="home-menu-header">
       <h2 id="home-more-heading">เพิ่มเติม</h2>
@@ -96,10 +81,11 @@
         <a href="investments.html">เงินลงทุนและโครงการ</a>
       </section>
       <section aria-labelledby="home-branch-menu">
-        <h3 id="home-branch-menu">งานสาขา</h3>
+        <h3 id="home-branch-menu">งานเฉพาะสาขา</h3>
         <a href="bigc-v2.html?view=admin&amp;online=1" target="_blank" rel="noopener">สั่งและรับของ BigC พัทยากลาง <span aria-hidden="true">↗</span></a>
         <a href="bigc-south-order.html?view=admin&amp;online=1" target="_blank" rel="noopener">สั่งและรับของ BigC พัทยาใต้ <span aria-hidden="true">↗</span></a>
         <a href="water-pos-admin.html">จัดการ POS ร้านน้ำ</a>
+        <a href="tawana.html?view=employee">ลงเวลาและเงินเดือนทาวน่า</a>
       </section>
       <section aria-labelledby="home-settings-menu">
         <h3 id="home-settings-menu">ตั้งค่าระบบ</h3>
@@ -116,7 +102,7 @@
   <script src="assets/js/boy-session-storage.js?v=20261123-auth3"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-branches.js?v=20261122-entry1"></script>
-  <script src="assets/js/boy-home.js?v=20261124-home1"></script>
+  <script src="assets/js/boy-home.js?v=20261127-work1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261123-auth2"></script>
   <script>
     const logoutButton = document.querySelector('#logoutButton');

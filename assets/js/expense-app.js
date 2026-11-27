@@ -43,20 +43,21 @@
       .filter(row => row && row.active !== false && row['เปิดใช้งาน'] !== false)
       .map(row => row.name || row['ชื่อผู้ขาย']));
   }
-  function init(branchCode) {
+  function init(branchCode, { branchOnly = false, onNavigate } = {}) {
     if (document.getElementById("expenseNavigation")) return;
     document.body.classList.add("expense-app");
     const dialog = document.createElement("dialog");
     dialog.id = "expenseNavigation";
     dialog.className = "expense-navigation";
     dialog.setAttribute("aria-labelledby", "expenseNavigationTitle");
-    dialog.innerHTML = `<div class="expense-nav-heading"><div><small>BOY OPERATION</small><h2 id="expenseNavigationTitle">เลือกสาขา</h2></div><button type="button" data-expense-nav-close aria-label="ปิดเมนู">×</button></div><nav aria-label="เลือกสาขา"><div class="expense-nav-label">สาขา</div>${branches.map(branch => `<a href="${branch.path}" ${branch.code === branchCode ? 'aria-current="page"' : ""}><span>${branch.mark}</span><strong>${branch.name}</strong>${branch.code === branchCode ? '<b aria-hidden="true">✓</b>' : ""}</a>`).join("")}<div class="expense-nav-label">เมนูอื่น</div><a href="investments.html?branch=${encodeURIComponent(branchCode)}"><span>▤</span><strong>เงินลงทุนและโครงการ</strong></a><a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong></a><a href="dashboard.html"><span>▥</span><strong>Dashboard รวม</strong></a><a href="master-data.html?entity=items"><span>▦</span><strong>ข้อมูลกลาง</strong></a></nav>`;
+    dialog.innerHTML = `<div class="expense-nav-heading"><div><small>BOY OPERATION</small><h2 id="expenseNavigationTitle">เลือกสาขา${branchOnly ? 'สำหรับรายจ่าย' : ''}</h2></div><button type="button" data-expense-nav-close aria-label="ปิดเมนู">×</button></div><nav aria-label="เลือกสาขา"><div class="expense-nav-label">สาขา</div>${branches.map(branch => `<a href="${branch.path}" ${branch.code === branchCode ? 'aria-current="page"' : ""}><span>${branch.mark}</span><strong>${branch.name}</strong>${branch.code === branchCode ? '<b aria-hidden="true">✓</b>' : ""}</a>`).join("")}</nav>`;
     document.body.appendChild(dialog);
-    dialog.querySelector('nav').insertAdjacentHTML('beforeend','<a href="reimbursements.html"><span>฿</span><strong>รอเบิกค่าใช้จ่าย</strong></a>');
+    if (!branchOnly) dialog.querySelector('nav').insertAdjacentHTML('beforeend',`<div class="expense-nav-label">เมนูอื่น</div><a href="investments.html?branch=${encodeURIComponent(branchCode)}"><span>▤</span><strong>เงินลงทุนและโครงการ</strong></a><a href="index.html"><span>⌂</span><strong>หน้าหลัก</strong></a><a href="dashboard.html"><span>▥</span><strong>Dashboard รวม</strong></a><a href="master-data.html?entity=items"><span>▦</span><strong>ข้อมูลกลาง</strong></a><a href="reimbursements.html"><span>฿</span><strong>รอเบิกค่าใช้จ่าย</strong></a>`);
     dialog.querySelector("[data-expense-nav-close]").addEventListener("click", () => dialog.close());
     dialog.addEventListener("click", event => { if (event.target === dialog && event.clientX >= dialog.getBoundingClientRect().right) dialog.close(); });
     dialog.addEventListener("close", () => document.querySelector("[data-expense-menu]")?.setAttribute("aria-expanded", "false"));
     dialog.querySelectorAll("a").forEach(link => link.addEventListener("click", async event => {
+      if (onNavigate) { if (!onNavigate()) event.preventDefault(); return; }
       // Flush the current field to the existing branch draft before navigating.
       document.activeElement?.blur();
       window.dispatchEvent(new Event("expense-before-navigate"));

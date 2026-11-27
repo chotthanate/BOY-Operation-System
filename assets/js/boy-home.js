@@ -25,7 +25,7 @@
   const expenseUrl = code => `expenses.html?branch=${encodeURIComponent(code)}`;
   const reportUrl = (code, date) => `branch-dashboard.html?${new URLSearchParams({ branch: code, from: date, to: date })}`;
   const historyUrl = (code, date) => `${expenseUrl(code)}&view=history&date=${encodeURIComponent(date)}`;
-  const receivingUrl = code => window.BOY_BRANCHES.dataPath(code, 'receipts');
+  const receivingUrl = code => window.BOY_BRANCHES.dataPath(code, 'receipts') + '&work=stock';
   const loginUrl = 'burger.html?online=1&next=index.html';
   const saleStatus = { awaiting_shift: 'รอปิดกะ', awaiting_manual: 'รอบันทึกยอด', no_sales: 'ยังไม่มียอด' };
   const checkoutLabels = { expense: 'บันทึกรายจ่าย', income: 'บันทึกรายรับ', shift: 'ปิดกะ', receipt: 'รับสินค้า' };
@@ -128,12 +128,6 @@
   }
 
   function renderNavigation(visible) {
-    const access = visible ? new Set(visible.map(branch => branch.code)) : null;
-    $('home-stock-links')?.querySelectorAll('[data-home-branch]').forEach(link => {
-      link.hidden = access !== null && !access.has(link.dataset.homeBranch);
-    });
-    const stockEmpty = $('home-stock-empty');
-    if (stockEmpty) stockEmpty.hidden = !access || access.size > 0;
     const expense = $('home-expense-link');
     const editable = visible?.filter(branch => branch.can_enter_expenses);
     if (expense) expense.href = editable?.length
@@ -246,8 +240,17 @@
   const ready = context => {
     authContext = context;
     activeUser = context?.user?.id;
+    openMore();
     void refresh(true);
   };
+  const more = $('home-more-menu');
+  function openMore() {
+    if (authContext && location.hash === '#more' && typeof more?.showPopover === 'function' && !more.matches(':popover-open')) more.showPopover();
+  }
+  more?.addEventListener('toggle', event => {
+    if (event.newState === 'closed' && location.hash === '#more') history.replaceState(history.state, '', location.pathname + location.search);
+  });
+  window.addEventListener('hashchange', openMore);
   dateLabel(today());
   $('home-refresh').addEventListener('click', () => void refresh(true));
   if (window.BOY_AUTH_CONTEXT) ready(window.BOY_AUTH_CONTEXT);

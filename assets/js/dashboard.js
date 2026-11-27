@@ -16,12 +16,28 @@
   const channelNames = { store: "หน้าร้าน", walk_in: "หน้าร้าน", dine_in: "รับประทานที่ร้าน", delivery: "เดลิเวอรี", online: "ออนไลน์", takeaway: "ซื้อกลับ", other: "อื่น ๆ" };
   const gposBranch = "BIGC-CENTRAL-PATTAYA";
   const branchMeta = {
-    TAWANA: { slug: "tawana", mark: "TW", name: "ทาวน่า", color: "#0b876b", soft: "#e8f6f0" },
-    "BIGC-CENTRAL-PATTAYA": { slug: "bigc", mark: "BC", name: "บิ๊กซีพัทยากลาง", color: "#b88812", soft: "#fff5d4" },
-    "BIGC-SOUTH-PATTAYA": { slug: "bigc-south", mark: "BS", name: "BigC พัทยาใต้", color: "#0b8068", soft: "#e8f5ef" },
-    BURGER: { slug: "burger", mark: "BG", name: "ร้านเบอร์เกอร์", color: "#ef6c4d", soft: "#fff0e9" },
-    GRILL: { slug: "grill", mark: "GR", name: "ร้านเนื้อย่าง", color: "#7d3f31", soft: "#f5e8e3" }
+    TAWANA: { name: "ทาวน่า", color: "#0b876b", soft: "#e8f6f0" },
+    "BIGC-CENTRAL-PATTAYA": { name: "BigC พัทยากลาง", color: "#b88812", soft: "#fff5d4" },
+    "BIGC-SOUTH-PATTAYA": { name: "BigC พัทยาใต้", color: "#0b8068", soft: "#e8f5ef" },
+    BURGER: { name: "ร้านเบอร์เกอร์", color: "#ef6c4d", soft: "#fff0e9" },
+    GRILL: { name: "ร้านเนื้อย่าง", color: "#7d3f31", soft: "#f5e8e3" }
   };
+  const dashboardOverview = date => `dashboard.html?${new URLSearchParams({ date })}`;
+  const dashboardDetail = (branch, from, to, date) => `branch-dashboard.html?${new URLSearchParams({ branch, from, to, date })}`;
+  const validDate = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return false;
+    const date = new Date(`${value}T12:00:00+07:00`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  const dateOr = (value, fallback) => validDate(value) ? value : fallback;
+  const mountWorkNav = (branch, date) => window.BOY_WORK_NAV?.mount($("#workNav"), { active: "dashboard", branch, dashboardHref: dashboardOverview(date) });
+  function setOverviewDate(date) {
+    const url = new URL(location.href);
+    if (url.searchParams.get("date") === date) return;
+    url.searchParams.set("date", date);
+    history.replaceState(null, "", url);
+    $("#workNav [data-work-section=dashboard]")?.setAttribute("href", dashboardOverview(date));
+  }
 
   async function rpc(name, args) {
     if (!client) throw new Error("Supabase ยังไม่พร้อม");
@@ -83,7 +99,7 @@
     const rows = Object.entries(branchMeta).map(([code, meta]) => returned.get(code) || { code, name: meta.name, income: 0, cash: 0, transfer: 0, government: 0, expense: 0, net: 0 });
     $("#storeGrid").innerHTML = rows.length ? rows.map((branch) => {
       const meta = branchMeta[branch.code] || {};
-      const href = `branch-dashboard.html?branch=${encodeURIComponent(branch.code)}&from=${encodeURIComponent(data.date)}&to=${encodeURIComponent(data.date)}`;
+      const href = dashboardDetail(branch.code, data.date, data.date, data.date);
       const preview = branch.code === gposBranch ? gpos : null;
       const gposNote = preview ? `<small class="store-gpos${preview.stale ? " stale" : ""}">${preview.note}</small>` : "";
       return `<a class="store" href="${href}" style="--accent:${meta.color || "#0b876b"};--accent-soft:${meta.soft || "#e8f6f0"}"><span class="store-head"><span class="store-name">${escapeHtml(branch.name)}</span><span class="go">›</span></span><strong class="store-total">${money(preview?.amount ?? branch.income)}</strong>${gposNote}<span class="split"><span>เงินสด<strong>${money(branch.cash)}</strong></span><span>เงินโอน<strong>${money(branch.transfer)}</strong></span><span>ไทยช่วยไทย<strong>${money(branch.government)}</strong></span></span><span class="store-foot"><span>รายจ่าย <b>${money(branch.expense)}</b></span><span>${preview?.amount != null ? "สุทธิบัญชี" : "สุทธิ"} <b>${money(branch.net)}</b></span></span></a>`;
@@ -92,9 +108,11 @@
 
   let dailyRequest = 0;
   async function loadAllDaily(force = false, refreshGpos = false) {
-    const request = ++dailyRequest;
-    clearError(); setLoading(true);
     const date = $("#dateInput").value;
+    if (!date) return;
+    const request = ++dailyRequest;
+    setOverviewDate(date);
+    clearError(); setLoading(true);
     try {
       const data = await cachedRpc("get_dashboard_daily", { target_date: date },60000,force);
       const branch = data.branches?.find((row) => row.code === gposBranch);
@@ -119,7 +137,9 @@
 
   function initAll() {
     const today = new Date();
-    $("#dateInput").value = localDate(today);
+    const date = dateOr(new URLSearchParams(location.search).get("date"), localDate(today));
+    $("#dateInput").value = date;
+    mountWorkNav(null, date);
     const monthNames = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
     monthNames.forEach((name, index) => $("#monthSelect").add(new Option(name, index + 1)));
     $("#monthSelect").value = today.getMonth() + 1;
@@ -134,6 +154,7 @@
   }
 
   function moveOverviewDate(delta) {
+    if (!$("#dateInput").value) $("#dateInput").value = localDate(new Date());
     const date = new Date(`${$("#dateInput").value}T12:00:00+07:00`);
     date.setDate(date.getDate() + delta);
     $("#dateInput").value = localDate(date);
@@ -155,13 +176,7 @@
     document.documentElement.style.setProperty("--accent", meta.color || "#0b876b");
     document.documentElement.style.setProperty("--accent-strong", meta.color || "#086d57");
     document.documentElement.style.setProperty("--accent-soft", meta.soft || "#e8f6f0");
-    $("#branchMark").textContent = meta.mark || code.slice(0, 2);
-    $("#branchTitle").textContent = branch.name;
-    let posLink=$("#waterPosBranchLink");
-    if(!posLink){posLink=document.createElement("a");posLink.id="waterPosBranchLink";posLink.className="refresh";posLink.textContent="POS ร้านน้ำ";posLink.style.cssText="display:inline-flex;align-items:center;padding:8px 12px;font-size:14px;white-space:nowrap;width:auto";$("#branchUpdated").after(posLink);}
-    posLink.hidden=!["TAWANA","BIGC-SOUTH-PATTAYA","BIGC-CENTRAL-PATTAYA"].includes(code);
-    posLink.style.display=posLink.hidden?"none":"inline-flex";
-    posLink.href=`water-pos-admin.html?branch=${encodeURIComponent(code)}`;
+    $("#branchTitle").textContent = `Dashboard ${branch.name}`;
     document.title = `Dashboard ${branch.name} | BOY Operation`;
   }
 
@@ -233,16 +248,17 @@
 
   let branchRequest = 0;
   async function loadBranch(force=false, refreshGpos=false) {
+    const from = $("#dateFrom").value, to = $("#dateTo").value;
+    if (!from || !to) return;
     const request = ++branchRequest;
     clearError(); setLoading(true);
-    const branch = new URLSearchParams(location.search).get("branch") || "BURGER";
+    const branch = $("#dashboardBranch").value || "BURGER";
     const current = new URL(location.href);
     current.searchParams.set("branch", branch);
-    current.searchParams.set("from", $("#dateFrom").value);
-    current.searchParams.set("to", $("#dateTo").value);
+    current.searchParams.set("from", from);
+    current.searchParams.set("to", to);
     current.searchParams.delete("preset");
     history.replaceState(null, "", current);
-    const from = $("#dateFrom").value, to = $("#dateTo").value;
     try {
       const data = await cachedRpc("get_branch_dashboard", { target_branch_code: branch, date_from: from, date_to: to },60000,force===true);
       const gpos = await getGposIncome(data.branch, from, to, data.totals?.revenue, refreshGpos);
@@ -253,21 +269,24 @@
 
   function initBranch() {
     const params = new URLSearchParams(location.search);
-    const code=params.get('branch')||'BURGER';
-    const branch=window.BOY_BRANCHES.get(code)||window.BOY_BRANCHES.get('BURGER');
-    const dataPage=page=>window.BOY_BRANCHES.dataPath(branch.code,page);
-    const links=branch.code==='TAWANA' ? [
-      ['＋','บันทึก','tawana.html'],['▥','Dashboard','#'],['◷','ประวัติ','tawana.html?view=history'],['▦','สต็อก','tawana.html?view=stock'],['♙','พนักงาน','tawana.html?view=employee'],['⌂','หน้าหลัก','index.html']
-    ] : [
-      ['＋','บันทึก',branch.expensePath],['▥','Dashboard','#'],['▦','สต็อก',dataPage('stock')],['▣','รอรับ',dataPage('receipts')],
-      [branch.orderPath?'⇄':'•••',branch.orderPath?'สั่งของ':'เพิ่มเติม',branch.orderPath||dataPage('settings')],['⌂','หน้าหลัก','index.html']
-    ];
-    $('#branchBottomNav').innerHTML=links.map(([icon,label,href])=>`<a href="${escapeHtml(href)}"${label==='Dashboard'?' aria-current="page"':''}><span>${icon}</span><strong>${label}</strong></a>`).join('');
-    document.body.classList.add('has-branch-nav');
+    const requestedCode = params.get("branch");
+    const code = Object.hasOwn(branchMeta, requestedCode) ? requestedCode : "BURGER";
+    const branch = branchMeta[code];
     const preset = params.get("preset") || "today";
     const [defaultFrom, defaultTo] = rangeForPreset(preset);
-    $("#dateFrom").value = params.get("from") || defaultFrom;
-    $("#dateTo").value = params.get("to") || defaultTo;
+    const from = dateOr(params.get("from"), defaultFrom), to = dateOr(params.get("to"), defaultTo);
+    const overviewDate = dateOr(params.get("date"), to);
+    $("#dateFrom").value = from;
+    $("#dateTo").value = to;
+    $("#dashboardBack").href = dashboardOverview(overviewDate);
+    mountWorkNav(code, overviewDate);
+    applyBranchTheme(code, branch);
+    const switcher = $("#dashboardBranch");
+    Object.entries(branchMeta).forEach(([id, meta]) => switcher.add(new Option(meta.name, id)));
+    switcher.value = code;
+    switcher.addEventListener("change", () => {
+      if (switcher.value !== code) location.assign(dashboardDetail(switcher.value, $("#dateFrom").value || from, $("#dateTo").value || to, overviewDate));
+    });
     const setActivePreset = (activeButton = null) => {
       $$('[data-preset]').forEach((item) => {
         const [from, to] = rangeForPreset(item.dataset.preset);

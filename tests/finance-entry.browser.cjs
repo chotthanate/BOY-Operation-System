@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium,webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright'),root=path.resolve(__dirname,'..');
 const catalog={version:'fixture',items:[{id:'fruit',code:'ITEM-1',name:'แตงโม',category_id:'cat',subcategory_id:'sub',base_unit_id:'kg'},{id:'shipping',expense_item_id:'shipping',code:'EXP-1',name:'ค่าขนส่ง',category_id:'cat',subcategory_id:'sub'}],units:[{id:'kg',name:'กก.'}],categories:[{id:'cat',name:'วัตถุดิบ',parent_id:null,category_type:'item'},{id:'sub',name:'ผลไม้',parent_id:'cat',category_type:'item'}],item_units:[{item_id:'fruit',unit_id:'kg',purchase:true,conversion:1}],suppliers:[{id:'supplier',name:'ผู้ขายเดียว'}],item_suppliers:[{item_id:'fruit',supplier_id:'supplier'}]};
-async function setup(browser,branch,width,seed={},authorized=true,search='',now=null,sharedBackend=null){
+async function setup(browser,branch,width,seed={},authorized=true,search='',now=null,sharedBackend=null,holdWorkspace=false){
  const purchase=JSON.parse(JSON.stringify(catalog));
  purchase.categories.unshift({id:'pack-cat',name:'บรรจุภัณฑ์',parent_id:null,category_type:'item'},{id:'pack-sub',name:'แก้ว',parent_id:'pack-cat',category_type:'item'});
  purchase.items.push({id:'orange',code:'ITEM-ORANGE',name:'ส้ม',category_id:'pack-cat',subcategory_id:'sub',main:'บรรจุภัณฑ์',sub:'ชื่อเก่า',is_physical:true,base_unit_id:'kg'},
@@ -14,16 +14,16 @@ async function setup(browser,branch,width,seed={},authorized=true,search='',now=
  const page=await browser.newPage({viewport:{width,height:900},isMobile:width===390,hasTouch:width===390}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  if(sharedBackend)await page.exposeFunction('__sharedRpc',sharedBackend);
  if(now)await page.clock.install({time:new Date(now)});
- await page.addInitScript(({cat,branch,seed})=>{
+ await page.addInitScript(({cat,branch,seed,holdWorkspace})=>{
   window.__calls=[];window.__saved=[];window.__rev=0;window.__income=null;window.__draft={};window.__fail=false;
-  window.confirm=()=>true;for(const [k,v] of Object.entries(seed))localStorage.setItem(k,JSON.stringify(v));
+  window.confirm=()=>true;if(!sessionStorage.getItem('__fixtureSeeded')){for(const [k,v] of Object.entries(seed))localStorage.setItem(k,JSON.stringify(v));sessionStorage.setItem('__fixtureSeeded','1');}
   const manual=['TAWANA','BIGC-CENTRAL-PATTAYA'].includes(branch);
   window.supabase={createClient:()=>({auth:{getSession:async()=>({data:{session:{user:{id:'owner'}}}})},schema:()=>({rpc:async(name,args)=>{
    window.__calls.push({name,args});const p=args.payload;
    if(window.__sharedRpc&&['get_finance_entry_workspace','get_finance_entry_sync_version','save_finance_entry_draft'].includes(name))return window.__sharedRpc(name,args);
    if(name==='get_daily_catalog')return{data:args.known_version===cat.version?{version:cat.version,not_modified:true}:cat};
    if(name==='create_expense_category'){const created={id:'created-sub',name:p.name,parent_id:p.parent_id,category_type:'item'};cat.categories.push(created);return{data:{...created,categories:cat.categories}};}
-   if(name==='get_finance_entry_workspace')return{data:{branch_id:'branch',revision:window.__rev,data:window.__draft,revenue_mode:manual?'manual':'pos_shift'}};
+   if(name==='get_finance_entry_workspace')return holdWorkspace?new Promise(()=>{}):{data:{branch_id:'branch',revision:window.__rev,data:window.__draft,revenue_mode:manual?'manual':'pos_shift'}};
    if(name==='get_finance_entry_sync_version')return{data:{revision:window.__rev}};
    if(name==='save_finance_entry_draft'){if(p.expected_revision!==window.__rev)return{error:{code:'P0001',message:'ร่างถูกแก้จากอีกเครื่อง'}};window.__draft=p.data;return{data:{revision:++window.__rev}};}
    if(name==='record_finance_expenses'){if(window.__fail){window.__fail=false;return{error:{message:'Network request failed'}};}window.__saved.push(p);window.__draft={};return{data:{status:'Success',draft_revision:++window.__rev,transaction_ids:['fixture']}};}
@@ -31,9 +31,10 @@ async function setup(browser,branch,width,seed={},authorized=true,search='',now=
    if(name==='get_branch_finance_day')return{data:{income:window.__income,revenue_mode:manual?'manual':'pos_shift',pos_income:100,expenses:window.__saved.filter(p=>p.date===args.target_date).map((p,i)=>({id:String(i),status:'confirmed',total_amount:p.lines.reduce((n,x)=>n+x.line_total,0),receiving_status:p.lines[0].receiving_mode==='delivery'?'pending':'received',lines:p.lines.map(x=>({description:x.description,amount:x.line_total,quantity:x.quantity,unit:'กก.',supplier:x.supplier_name}))}))}};
    throw Error('unmocked rpc '+name);
   }})})};
- },{cat:purchase,branch,seed});
+ },{cat:purchase,branch,seed,holdWorkspace});
  await page.route('**/*',r=>{
   const u=new URL(r.request().url());if(u.origin!=='https://entry.fixture')return r.fulfill({body:'',contentType:'text/javascript'});
+  if(u.pathname==='/stock.html')return r.fulfill({body:'<!doctype html><title>Stock fixture</title>',contentType:'text/html'});
   if(u.pathname.startsWith('/assets/vendor/supabase-'))return r.fulfill({body:'',contentType:'text/javascript'}); // SDK integration is tested separately with the real bundle.
   if(u.pathname.endsWith('boy-auth-guard.js')&&!authorized)return r.fulfill({body:'',contentType:'text/javascript'});
   if(u.pathname.endsWith('boy-auth-guard.js'))return r.fulfill({body:"window.BOY_AUTH_CONTEXT={user:{id:'owner'}};window.BOY_AUTH_SCREEN?.ready();document.querySelector('#boyAuthPendingStyle')?.remove();document.querySelector('#boyAuthFallback')?.remove();",contentType:'text/javascript'});
@@ -41,7 +42,7 @@ async function setup(browser,branch,width,seed={},authorized=true,search='',now=
   const file=path.join(root,u.pathname);if(!file.startsWith(root)||!fs.existsSync(file))return r.fulfill({status:404,body:''});
   return r.fulfill({body:fs.readFileSync(file),contentType:file.endsWith('.html')?'text/html':file.endsWith('.css')?'text/css':'text/javascript'});
  });
- await page.goto('https://entry.fixture/expenses.html?branch='+branch+search);if(authorized)await page.waitForFunction(()=>window.BOY_FINANCE_ENTRY?.state.catalog&&document.querySelector('.expense-card'),null,{timeout:5000}).catch(async e=>{console.error(errors,await page.locator('#entryNotice').textContent(),await page.evaluate(()=>window.__calls));throw e;});
+ await page.goto('https://entry.fixture/expenses.html?branch='+branch+search);if(authorized&&!holdWorkspace)await page.waitForFunction(()=>window.BOY_FINANCE_ENTRY?.state.catalog&&document.querySelector('.expense-card'),null,{timeout:5000}).catch(async e=>{console.error(errors,await page.locator('#entryNotice').textContent(),await page.evaluate(()=>window.__calls));throw e;});
  return{page,errors};
 }
 async function fill(page){
@@ -87,6 +88,18 @@ async function fill(page){
   await page.locator('#branchMenu').click();assert.equal(await page.locator('#expenseNavigation a[href^="expenses.html?branch="]').count(),5);
   assert.deepEqual(errors,[]);await page.close();console.log(branch+' '+width+': separate saves, posting date, delivery, history and layout passed');
  }
+ const draftKey='BOY_ENTRY_V1:TAWANA:owner:draft',pendingKey='BOY_ENTRY_V1:TAWANA:owner:pending';
+ const seedDraft={revision:4,dirty:true,data:{date:'2026-11-23',lines:[{description:'ร่างที่ยังไม่ได้โหลด',line_total:72}]}};
+ const seedPending={date:'2026-11-23',id:'original',lines:[{description:'รายการรอยืนยัน',line_total:32}]};
+ const slow=await setup(browser,'TAWANA',390,{[draftKey]:seedDraft,[pendingKey]:seedPending},true,'',null,null,true);
+ await slow.page.locator('#workNav a[href="stock.html"]').waitFor();
+ assert.equal(await slow.page.evaluate(()=>BOY_FINANCE_ENTRY.state.draftLoaded),false);
+ await slow.page.evaluate(()=>dispatchEvent(new Event('pagehide')));
+ await slow.page.locator('#workNav a[href="stock.html"]').click();await slow.page.waitForURL('**/stock.html');
+ assert.equal(await slow.page.evaluate(k=>localStorage.getItem(k),draftKey),JSON.stringify(seedDraft));
+ assert.equal(await slow.page.evaluate(k=>localStorage.getItem(k),pendingKey),JSON.stringify(seedPending));
+ assert.deepEqual(slow.errors,[]);await slow.page.close();
+ console.log('task navigation: local draft and exact pending save untouched during delayed startup');
  let{page}=await setup(browser,'GRILL',390);await fill(page);await page.evaluate(()=>window.__fail=true);
  await page.locator('#saveExpenses').click();await page.locator('#confirmEntrySave').click();await page.waitForFunction(()=>document.querySelector('#saveExpenses').textContent.includes('ลองส่ง'));
  assert.equal(await page.locator('#entryLines').getAttribute('inert'),'');const first=await page.evaluate(()=>__calls.find(x=>x.name==='record_finance_expenses').args.payload);

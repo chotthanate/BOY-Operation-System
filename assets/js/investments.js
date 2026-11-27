@@ -16,7 +16,7 @@
    const [year,month]=$('#month').value.split('-').map(Number),end=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);
    const {data,error}=await db.schema('boy_central').rpc('get_investment_report',{target_branch_code:$('#branch').value,date_from:$('#month').value+'-01',date_to:end});if(error)throw error;
    rows=data.rows||[];$('#summary').textContent=`เงินลงทุน ฿${money(data.total)} · ${data.count} รายการ`;render();
-   const b=window.BOY_BRANCHES.all.find(b=>b.code===$('#branch').value);$('#add').href=(b?.expensePath||'expenses.html')+((b?.expensePath||'').includes('?')?'&':'?')+'investment=1';
+   $('#add').href='expenses.html?'+new URLSearchParams({branch:$('#branch').value,investment:'1'});
   }catch(e){$('#error').textContent=e.message;rows=[];render();$('#summary').textContent='โหลดไม่สำเร็จ';}finally{button.disabled=false;}
  }
  $('#filters').onsubmit=e=>{e.preventDefault();load();};$('#search').oninput=render;load();

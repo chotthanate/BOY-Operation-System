@@ -4,7 +4,11 @@
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const config = window.BOY_CENTRAL_CONFIG || {};
-  const forceOnlineLogin = new URLSearchParams(location.search).get("online") === "1";
+  const route = new URLSearchParams(location.search);
+  const forceOnlineLogin = route.get("online") === "1";
+  const requestedPage = route.get("page");
+  const stockWorkPage = route.get("work") === "stock" && ["stock", "receipts"].includes(requestedPage) ? requestedPage : null;
+  const validNext = /^(index|expenses|stock|investments|reimbursements|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/;
   const branchApp = { branchCode: "BURGER", slug: "burger", name: "ร้านเบอร์เกอร์", mark: "BG", sourceSystem: "boy_burger_web", accent: "#ef6c4d", accentSoft: "#fff0e9", ...(window.BOY_BRANCH_CONFIG || {}) };
   const configured = Boolean(config.url && config.publishableKey && window.supabase);
   const client = configured ? window.supabase.createClient(config.url, config.publishableKey, {
@@ -45,6 +49,20 @@
     const dashboardLink = document.getElementById("dashboardNavLink");
     if (dashboardLink) dashboardLink.href = `branch-dashboard.html?branch=${encodeURIComponent(branchApp.branchCode)}`;
     if (branchApp.branchCode === "GRILL") document.body.classList.add("grill-branch");
+    if (stockWorkPage) {
+      document.body.dataset.work = 'stock';
+      const title = stockWorkPage === 'receipts' ? 'สต็อก · รอรับสินค้า' : 'สต็อก · ปรับยอด';
+      $('#branchName').textContent = title;
+      $('#branchMark').textContent = branchApp.name;
+      $('#branchMark').hidden = false;
+      $('#stockWorkRetry').onclick = () => location.reload();
+      document.title = `${title} · ${branchApp.name} | BOY Operations`;
+      const back = $('.branch-home-button');
+      back.href = `stock.html?branch=${encodeURIComponent(branchApp.branchCode)}`;
+      back.setAttribute('aria-label', 'กลับสต็อกสาขา');
+      back.textContent = '‹';
+      $$('.page').forEach(section => section.classList.remove('active'));
+    }
   }
 
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
@@ -305,6 +323,12 @@
     if (page === "dashboard" && state.session) loadDashboard();
     if (page === "settings" && state.session) renderMasterList();
     if (page === "account" && state.session) { renderSyncCenter(); loadCapacityStatus(); }
+  }
+
+  function openStockWork() {
+    window.BOY_WORK_NAV?.mount('#workNav', { active: 'stock', branch: branchApp.branchCode });
+    setPage(stockWorkPage);
+    updateSyncStatus();
   }
 
   const draftKeyForDate = (date) => `boy-${branchApp.slug}-draft:${state.session?.user?.id || "guest"}:${date || today()}`;
@@ -1689,7 +1713,7 @@
       location.replace(next && /^bigc-v2\.html(?:[?#].*)?$/.test(next) ? next : "bigc-v2.html?online=1");
       return;
     }
-    if (next && /^(index|expenses|investments|reimbursements|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) {
+    if (next && validNext.test(next)) {
       location.replace(next);
       return;
     }
@@ -1697,6 +1721,7 @@
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
     $("#accountName").textContent = profile.display_name || "ผู้ใช้งาน BOY";
+    if (stockWorkPage) window.BOY_WORK_NAV?.mount('#workNav', { active: 'stock', branch: branchApp.branchCode });
     updateSyncStatus();
     try {
       if (navigator.onLine) {
@@ -1709,13 +1734,18 @@
         }
       }
       else if (!loadMasterCache()) throw new Error("ยังไม่มีข้อมูลร้านที่เก็บไว้ในเครื่อง กรุณาเชื่อมต่ออินเทอร์เน็ตก่อน");
+      if (stockWorkPage) { openStockWork(); return; }
       const sent = await flushOutbox();
       if (sent.master) await loadMaster();
       await loadDraftForDate();
       await loadExpenseHistory();
       await loadPendingReceipts({ quiet: true });
       updateSyncStatus();
-    } catch (error) { setConnection("เชื่อมต่อไม่สำเร็จ", "error"); toast(error.message); }
+    } catch (error) {
+      setConnection("เชื่อมต่อไม่สำเร็จ", "error");
+      if (stockWorkPage) $('#stockWorkStatus').hidden = false;
+      else toast(error.message);
+    }
   }
 
   async function enterLocalApp() {
@@ -1726,7 +1756,7 @@
     state.profile = readCache(profileCacheKey()) || { display_name: "Chotthanate", company_role: "admin" };
     document.body.classList.remove("auth-mode");
     const next = new URLSearchParams(location.search).get("next");
-    if (next && /^(index|expenses|investments|reimbursements|tawana|bigc|bigc-v2|bigc-order|burger|dashboard|branch-dashboard|water-pos-admin|master-data)\.html(?:[?#].*)?$/.test(next)) { location.replace(next); return true; }
+    if (next && validNext.test(next)) { location.replace(next); return true; }
     $("#authCard").hidden = true;
     $$(".page,.bottom-nav").forEach((element) => element.hidden = false);
     $("#accountEmail").textContent = session.user.email || "—";
@@ -1735,6 +1765,7 @@
     if (!hadCache) toast("ยังไม่ได้เชื่อมบัญชีออนไลน์ และเครื่องนี้ยังไม่มีข้อมูลสำรอง");
     else if (navigator.onLine) toast("กำลังใช้ข้อมูลสำรอง · แตะสถานะด้านบนเพื่อเชื่อมออนไลน์");
     else toast("ออฟไลน์ · กำลังใช้ข้อมูลที่เก็บไว้ในเครื่อง");
+    if (stockWorkPage) { openStockWork(); return true; }
     if (state.branch) { await flushOutbox(); await loadDraftForDate(); await loadExpenseHistory(); }
     updateSyncStatus();
     return true;
@@ -1759,13 +1790,12 @@
     if (data.session) await enterApp(data.session);
     else if (!forceOnlineLogin && window.BOY_LOCAL_ACCESS?.hasAccess()) await enterLocalApp();
     else { document.body.classList.add("auth-mode"); $("#authCard").hidden = false; $$(".page,.bottom-nav").forEach((element) => element.hidden = true); setConnection("กรุณาเข้าสู่ระบบ"); }
-    const page=new URLSearchParams(location.search).get('page');
-    if (state.session && ['expense','stock','receipts','settings','account'].includes(page)) setPage(page);
+    if (!stockWorkPage && state.session && ['expense','stock','receipts','settings','account'].includes(requestedPage)) setPage(requestedPage);
   }
 
   $$(".bottom-nav button").forEach((button) => button.addEventListener("click", () => setPage(button.dataset.target)));
   $("#storeButton").addEventListener("click", () => window.BOY_EXPENSE_APP.toggleMenu());
-  window.addEventListener("expense-before-navigate", () => { clearTimeout(state.draftTimer); void saveDraftNow(); });
+  if (!stockWorkPage) window.addEventListener("expense-before-navigate", () => { clearTimeout(state.draftTimer); void saveDraftNow(); });
   $$('[data-close-dialog]').forEach((button) => button.addEventListener("click", () => $(`#${button.dataset.closeDialog}`).close()));
   $("#addExpenseButton").addEventListener("click", () => { state.lines.forEach((line) => line.expanded = false); state.lines.push(newLine()); renderLines(); scheduleDraftSave(); });
   $("#expenseLines").addEventListener("click", (event) => {
@@ -1927,6 +1957,7 @@
   });
   window.addEventListener("offline", updateSyncStatus);
   window.addEventListener("online", async () => {
+    if (stockWorkPage) { if (state.session) openStockWork(); return; }
     const sent = await flushOutbox({ notify: true });
     if (sent.master) await loadMaster();
     if (sent.expense || sent.expense_legacy) await loadExpenseHistory();
@@ -1934,10 +1965,10 @@
     await loadCapacityStatus();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && state.session) loadPendingReceipts({ quiet: true });
+    if (document.visibilityState === "visible" && state.session && (!stockWorkPage || stockWorkPage === 'receipts')) loadPendingReceipts({ quiet: true });
   });
   window.setInterval(() => {
-    if (document.visibilityState === "visible" && state.session) loadPendingReceipts({ quiet: true });
+    if (document.visibilityState === "visible" && state.session && (!stockWorkPage || stockWorkPage === 'receipts')) loadPendingReceipts({ quiet: true });
   }, 5 * 60 * 1000);
   init();
 })();

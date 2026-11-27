@@ -38,7 +38,7 @@ const data = {
   ],
 };
 
-async function setup(browser, { width = 390, response = data, role = 'admin', holdAuth = false, signedIn = true, localOnly = false, fail = false } = {}) {
+async function setup(browser, { width = 390, response = data, role = 'admin', holdAuth = false, signedIn = true, localOnly = false, fail = false, hash = '' } = {}) {
   const context = await browser.newContext({ viewport: { width, height: 855 }, isMobile: width <= 390, hasTouch: width <= 390 });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -95,14 +95,14 @@ async function setup(browser, { width = 390, response = data, role = 'admin', ho
       return route.fulfill({ body: "window.BOY_CENTRAL_CONFIG={url:'https://fixture.invalid',publishableKey:'public-fixture'}", contentType: 'text/javascript' });
     }
     // Navigation target is inert: verify Home doesn't edit drafts on departure.
-    if (/^\/(?:expenses|burger|branch-dashboard|dashboard|reimbursements|tawana)\.html$/.test(url.pathname)) {
+    if (/^\/(?:expenses|stock|burger|branch-dashboard|dashboard|reimbursements|tawana)\.html$/.test(url.pathname)) {
       return route.fulfill({ body: '<!doctype html><title>Route fixture</title>', contentType: 'text/html' });
     }
     const file = path.join(root, url.pathname);
     if (!file.startsWith(root + path.sep) || !fs.existsSync(file)) return route.fulfill({ status: 404, body: '' });
     return route.fulfill({ path: file });
   });
-  await page.goto(`${origin}/index.html`);
+  await page.goto(`${origin}/index.html${hash}`);
   return { page, context, errors };
 }
 
@@ -158,10 +158,8 @@ async function assertNoOverflow(page) {
         await more.getByRole('link', { name: 'รอเบิกค่าใช้จ่าย', exact: true }).waitFor();
         await more.getByRole('link', { name: 'ข้อมูลกลาง BOY', exact: true }).waitFor();
         await more.getByRole('button', { name: 'ปิดเมนูเพิ่มเติม', exact: true }).click();
-        await nav.getByRole('button', { name: 'สต็อก', exact: true }).click();
-        const stock = page.getByRole('dialog', { name: 'สต็อกตามสาขา', exact: true });
-        assert.equal(await stock.getByRole('link').count(), 5);
-        await stock.getByRole('button', { name: 'ปิดเมนูสต็อก', exact: true }).click();
+        assert.equal(await nav.getByRole('link', { name: 'สต็อก', exact: true }).getAttribute('href'), 'stock.html');
+        assert.equal(await page.locator('#home-stock-menu').count(), 0);
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
         const unobscured = await page.evaluate(() => document.querySelector('#home-recent').getBoundingClientRect().bottom <=
           document.querySelector('.home-nav').getBoundingClientRect().top);
@@ -172,6 +170,13 @@ async function assertNoOverflow(page) {
       assert.deepEqual(errors, []);
       await context.close();
     }
+
+    const moreFromWork = await setup(browser, { hash: '#more' });
+    const more = moreFromWork.page.getByRole('dialog', { name: 'เพิ่มเติม', exact: true });
+    await more.getByRole('link', { name: 'รอเบิกค่าใช้จ่าย' }).waitFor();
+    await more.getByRole('button', { name: 'ปิดเมนูเพิ่มเติม' }).click();
+    await moreFromWork.page.waitForURL('**/index.html');
+    await moreFromWork.context.close();
 
     const full = await setup(browser);
     await full.page.locator('#home-branches').getByText('ทาวน่า', { exact: true }).waitFor();
@@ -202,7 +207,7 @@ async function assertNoOverflow(page) {
     assert.doesNotMatch(await text(restricted.page, 'recent'), /ทาวน่า|BigC|เบอร์เกอร์/);
     assert.doesNotMatch(await text(restricted.page, 'sales-total'), /\d/, 'no numeric total if no branch has confirmed sales');
     assert.equal(await restricted.page.locator('#home-tasks a[href*="expenses.html"]').count(), 0);
-    assert.equal(await restricted.page.locator('#home-stock-links [data-home-branch]:not([hidden])').count(), 1);
+    assert.equal(await restricted.page.getByRole('link', {name:'สต็อก',exact:true}).getAttribute('href'), 'stock.html', 'branch access is checked by the stock workspace');
     assert.deepEqual(await getDrafts(restricted.page), snapshot);
     assert.deepEqual(restricted.errors, []);
     await restricted.context.close();

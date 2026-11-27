@@ -1,0 +1,85 @@
+.boy-work-nav-active {
+  scroll-padding-bottom: calc(78px + env(safe-area-inset-bottom));
+}
+
+body.boy-work-nav-mounted {
+  padding-bottom: calc(82px + env(safe-area-inset-bottom));
+}
+
+.boy-work-nav {
+  --work-nav-bg: #fff;
+  --work-nav-text: #19362d;
+  --work-nav-line: #dbe7e0;
+  --work-nav-active: #087259;
+  --work-nav-soft: #e5f3eb;
+  position: fixed;
+  inset: auto 0 0;
+  z-index: 40;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  width: min(100%, 760px);
+  margin-inline: auto;
+  padding: 6px max(5px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+  border: 1px solid var(--work-nav-line);
+  border-bottom: 0;
+  border-radius: 13px 13px 0 0;
+  background: var(--work-nav-bg);
+  font: 400 .75rem/1.25 system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+}
+
+.boy-work-nav > a {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 50px;
+  padding: 4px 1px;
+  border-radius: 9px;
+  color: var(--work-nav-text);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.boy-work-nav > a[aria-current="page"] {
+  color: var(--work-nav-active);
+  background: var(--work-nav-soft);
+  font-weight: 700;
+}
+
+.boy-work-nav > a:focus-visible {
+  outline: 2px solid var(--work-nav-active);
+  outline-offset: -2px;
+}
+
+.boy-work-nav[aria-busy="true"] > a { cursor: progress; }
+
+.boy-work-nav-icon {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (hover: hover) {
+  .boy-work-nav > a:hover { color: var(--work-nav-active); background: var(--work-nav-soft); }
+}
+
+@media (max-width: 760px) {
+  .boy-work-nav { border-inline: 0; border-radius: 0; }
+}
+
+@media (max-width: 375px) {
+  .boy-work-nav { font-size: .7rem; }
+}

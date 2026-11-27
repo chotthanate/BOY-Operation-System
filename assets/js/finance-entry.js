@@ -9,14 +9,21 @@
   try{if(window.BOY_SESSION_STORAGE?.saveLocal)return window.BOY_SESSION_STORAGE.saveLocal(k,JSON.stringify(v),optional);localStorage.setItem(k,JSON.stringify(v));return true;}
   catch(error){if(optional)return false;throw Error('พื้นที่เก็บร่างในเบราว์เซอร์ไม่พร้อม ยังไม่ได้ส่งรายการ กรุณาลองใหม่');}
  };
- const state={client:null,session:null,catalog:null,branchId:null,revision:0,lines:[],dirty:false,busy:false,conflict:false,save:Promise.resolve(),timer:0,started:false,observedDay:today(),income:null,incomeRevision:0,incomeConflict:false,dayCache:new Map()};
+ const state={client:null,session:null,catalog:null,branchId:null,revision:0,lines:[],draftLoaded:false,dirty:false,busy:false,conflict:false,save:Promise.resolve(),timer:0,started:false,observedDay:today(),income:null,incomeRevision:0,incomeConflict:false,dayCache:new Map()};
  const key=s=>'BOY_ENTRY_V1:'+branch.code+':'+state.session.user.id+':'+s;
  const line=()=>({id:crypto.randomUUID(),description:'',item_id:null,expense_item_id:null,category_id:'',subcategory_id:'',quantity:'',unit_id:'',line_total:'',supplier_name:'',note:'',payment_method:'cash',receiving_mode:'immediate',expanded:true,is_investment:query.get('investment')==='1'});
  const node=(tag,attrs={},children=[])=>{const n=document.createElement(tag);Object.entries(attrs).forEach(([k,v])=>{if(k==='text')n.textContent=v;else if(k==='class')n.className=v;else if(k==='hidden')n.hidden=v;else n.setAttribute(k,v);});children.filter(Boolean).forEach(c=>n.append(c));return n;};
  const button=(text,cls,action)=>{const b=node('button',{type:'button',class:cls,text});b.onclick=action;return b;};
  const notice=text=>{for(const id of ['entryNotice','entrySaveNotice','entryReviewError']){const n=$('#'+id);n.textContent=text;n.hidden=!text;}};
  const snapshot=()=>({date:$('#entryDate').value,lines:state.lines});
- function localSave(){if(!state.session)return;write(key('draft'),{revision:state.revision,data:snapshot(),dirty:state.dirty});}
+ function localSave(){if(!state.session||!state.draftLoaded)return;write(key('draft'),{revision:state.revision,data:snapshot(),dirty:state.dirty});}
+ function beforeNavigate(){
+  if(state.busy){notice('กำลังบันทึก กรุณารอสักครู่ก่อนเปลี่ยนหน้า');return false;}
+  if(!state.draftLoaded)return true;
+  try{document.activeElement?.blur();localSave();}catch(error){showError(error);return false;}
+  if(state.dirty&&!state.conflict)void saveDraft().catch(showError);
+  return true;
+ }
  function backups(){
   const saved=read(key('backups'),[]);$('#backupPanel').hidden=!saved.length;$('#backupList').replaceChildren();
   saved.forEach((b,i)=>$('#backupList').append(button(new Date(b.at).toLocaleString('th-TH')+' · '+(b.data.lines||[]).length+' รายการ','entry-secondary',()=>{
@@ -54,7 +61,7 @@
   const data=await rpc('get_daily_catalog',{target_branch_code:branch.code,known_version:cached?.schema===2?cached.data.version:null});
   const result=data.not_modified?cached.data:data;write(key('catalog'),{schema:2,data:result,at:Date.now()},true);return result;
  }
- function changed(){if(!state.session||state.busy)return;state.dirty=true;localSave();$('#draftState').textContent='เก็บในเครื่องแล้ว';clearTimeout(state.timer);state.timer=setTimeout(()=>saveDraft().catch(showError),8000);}
+ function changed(){if(!state.draftLoaded||state.busy)return;state.dirty=true;localSave();$('#draftState').textContent='เก็บในเครื่องแล้ว';clearTimeout(state.timer);state.timer=setTimeout(()=>saveDraft().catch(showError),8000);}
  async function saveDraft(){
   state.save=state.save.catch(()=>{}).then(async()=>{
    if(state.conflict)throw Error('ร่างถูกแก้จากอีกเครื่อง กรุณาตรวจเทียบก่อนส่ง');
@@ -314,12 +321,16 @@
   try{
    const c=window.BOY_CENTRAL_CONFIG;state.client=window.BOY_AUTH_CLIENT||window.supabase.createClient(c.url,c.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,lockAcquireTimeout:5000,...(window.BOY_SESSION_STORAGE?{storage:window.BOY_SESSION_STORAGE.storage}:{})}});
    const session=await state.client.auth.getSession();state.session=session.data.session;if(!state.session)throw Error('เข้าสู่ระบบออนไลน์ก่อนบันทึก');
-   $('#branchTitle').textContent=branch.name;document.title=branch.name+' | BOY Operations';$('#entryDate').value=$('#incomeDate').value=$('#historyDate').value=today();
-   window.BOY_EXPENSE_APP.init(branch.code);$('#branchMenu').onclick=()=>window.BOY_EXPENSE_APP.toggleMenu();
+   $('#branchTitle').textContent=branch.name;document.title='รายจ่าย · '+branch.name+' | BOY Operations';$('#entryDate').value=$('#incomeDate').value=$('#historyDate').value=today();
+   window.BOY_WORK_NAV?.mount('#workNav',{active:'expenses',branch:branch.code,onNavigate:beforeNavigate});
+   window.BOY_EXPENSE_APP.init(branch.code,{branchOnly:true,onNavigate:beforeNavigate});$('#branchMenu').onclick=()=>window.BOY_EXPENSE_APP.toggleMenu();
    const legacy=branch.code==='TAWANA'?'tawana.html':branch.code==='BIGC-CENTRAL-PATTAYA'?'bigc.html':'burger.html?branch='+branch.code;
    const url=new URL(legacy,location.href);url.searchParams.set('legacy','1');$('#legacyLink').href=url.href;
-   if(!$('#legacyNavigation'))$('#expenseNavigation nav').append(node('a',{id:'legacyNavigation',href:url.href},[node('span',{text:'↶'}),node('strong',{text:'กู้ร่าง / ข้อมูลเก่า'})]));
-   const tools=branch.code==='TAWANA'?new URL(url):new URL('burger.html?branch='+branch.code+'&legacy=1',location.href);if(branch.code==='TAWANA')tools.searchParams.set('view','employee');else tools.searchParams.set('page','stock');$('#branchTools').href=tools.href;
+   if(!$('#legacyNavigation')){
+    const link=node('a',{id:'legacyNavigation',href:url.href},[node('span',{text:'↶'}),node('strong',{text:'กู้ร่าง / ข้อมูลเก่า'})]);
+    link.addEventListener('click',event=>{if(!beforeNavigate())event.preventDefault();});$('#expenseNavigation nav').append(link);
+   }
+   $('#legacyLink').onclick=event=>{if(!beforeNavigate())event.preventDefault();};
    if(Object.keys(localStorage).some(k=>k.startsWith(branch.code==='TAWANA'?'BOY_TAWANA_DRAFT_':branch.code==='BIGC-CENTRAL-PATTAYA'?'BOY_BIGC_EXPENSE_DRAFT_':'boy-'+branch.slug+'-draft:')||k.startsWith('boy-'+branch.slug+'-outbox:')||k.startsWith('BOY_CENTRAL_DAILY:'+branch.code+':request:')))$('#legacyRecovery').hidden=false;
    const [workspace,cat]=await Promise.all([rpc('get_finance_entry_workspace',{branch_code:branch.code}),catalog()]);state.branchId=workspace.branch_id;state.revision=workspace.revision;state.catalog=cat;
    // Explicitly reveal this subtree only after the branch-authorized response;
@@ -332,7 +343,7 @@
    const local=read(key('draft')),pending=read(key('pending'));let data=workspace.data;
    if(local?.dirty&&JSON.stringify(local.data)!==JSON.stringify(workspace.data)){data=local.data;if(local.revision!==workspace.revision){state.conflict=true;$('#recoveryPanel').hidden=false;}state.dirty=true;}
    if(pending){data={date:pending.date,lines:pending.lines};notice('มีรายการรอส่ง กดส่งซ้ำเพื่อยืนยัน โดยไม่สร้างบิลซ้ำ');}
-   useDraft(data,!!pending||state.conflict);state.observedDay=today();localSave();render();backups();$('#draftState').textContent=state.conflict?'รอตรวจเทียบ':state.dirty?'ร่างในเครื่อง':'พร้อมบันทึก';
+   useDraft(data,!!pending||state.conflict);state.draftLoaded=true;state.observedDay=today();localSave();render();backups();$('#draftState').textContent=state.conflict?'รอตรวจเทียบ':state.dirty?'ร่างในเครื่อง':'พร้อมบันทึก';
    $('#saveExpenses').disabled=false;
    $('#incomeCard').hidden=workspace.revenue_mode!=='manual'||workspace.can_record_income===false;$('#governmentField').hidden=branch.code==='TAWANA';
    if(query.get('view')==='history'){
@@ -356,7 +367,6 @@
  $('#useCloudDraft').onclick=async()=>{try{if(state.busy||read(key('pending')))throw Error('ยืนยันรายการที่รอส่งก่อนเปิดร่างฐานกลาง');const remote=await rpc('get_finance_entry_workspace',{branch_code:branch.code});backup(snapshot());acceptWorkspace(remote);notice('เปิดร่างฐานกลางแล้ว สำเนาร่างก่อนหน้ายังอยู่ด้านล่าง');}catch(e){showError(e);}};
  $('#refreshDraft').onclick=()=>refreshDraft(true);
  window.doSync=changed;window.addEventListener('pagehide',localSave);
- window.addEventListener('expense-before-navigate',()=>{localSave();saveDraft().catch(showError);});
  window.addEventListener('online',()=>{if(state.session&&state.dirty&&!read(key('pending')))saveDraft().catch(showError);});
  window.addEventListener('pageshow',resumeDraft);window.addEventListener('focus',resumeDraft);
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)resumeDraft();else clearTimeout(state.refreshTimer);});
