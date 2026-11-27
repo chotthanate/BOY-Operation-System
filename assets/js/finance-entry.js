@@ -239,7 +239,7 @@
    if(!x.is_investment&&!state.catalog.categories.some(c=>c.id===x.category_id&&!c.parent_id))throw invalidLine(x,'เลือกประเภทหลัก: '+x.description,'category_id');
    if(!x.is_investment&&x.subcategory_id&&!state.catalog.categories.some(c=>c.id===x.subcategory_id&&c.parent_id===x.category_id))throw invalidLine(x,'เลือกประเภทย่อยให้ตรงกับประเภทหลัก: '+x.description,'subcategory_id');
    if(!x.is_investment&&((source&&req.quantity)&&!(Number(x.quantity)>0)||(source&&req.unit)&&!x.unit_id))throw invalidLine(x,'กรอกจำนวนและหน่วยซื้อ: '+x.description,'quantity');
-   if(x.is_investment&&(!x.project_name?.trim()||!x.investment_category))throw invalidLine(x,'ระบุโครงการและหมวดลงทุน: '+x.description,'project_name');
+   if(x.is_investment&&!Object.hasOwn(window.BOY_EXPENSE_APP.investmentCategories,x.investment_category))throw invalidLine(x,'เลือกหมวดลงทุน: '+x.description,'investment_category');
    const suppliers=state.catalog.suppliers.filter(s=>s.name.trim().toLocaleLowerCase('th')===(x.supplier_name||'').trim().toLocaleLowerCase('th'));
    return {...x,expense_class:x.is_investment?'capital':'operating',item_id:x.is_investment?null:x.item_id,expense_item_id:x.is_investment?null:x.expense_item_id,
     category_id:x.is_investment?null:x.category_id,subcategory_id:x.is_investment?null:x.subcategory_id,receiving_mode:x.is_investment?'immediate':x.receiving_mode,supplier_id:suppliers.length===1?suppliers[0].id:null,quantity:x.is_investment?0:Number(x.quantity||0),line_total:Number(x.line_total),unit_id:x.is_investment?null:x.unit_id||null};
