@@ -23,6 +23,8 @@
   let editingPosUserId = null;
   let editingPosRoleId = null;
   let toastTimer;
+  let canSetStock = false;
+  let stockEdit = null;
   const permissionLabels = {
     sell: "ขายและรับชำระเงิน", view_orders: "ดูประวัติขาย", void_orders: "ยกเลิกออร์เดอร์", refund: "คืนเงิน",
     view_summary: "ดูสรุปยอด", manage_catalog: "จัดการสินค้าและตัวเลือก", manage_promotions: "จัดการโปรโมชั่น",
@@ -58,6 +60,9 @@
       $("#posBranchSelect").value=requestedBranch;
       if (branchResult.error) throw branchResult.error;
       branch = branchResult.data;
+      const profile = await db.from("profiles").select("company_id,company_role,active").eq("user_id", auth.session.user.id).maybeSingle();
+      canSetStock = branch.code === "BIGC-SOUTH-PATTAYA" && profile.data?.active === true &&
+        profile.data.company_id === branch.company_id && profile.data.company_role === "admin";
       await loadConfig();
       await Promise.all([loadOverview(), loadStock(), loadDevices(), loadAccess().catch((error) => { console.warn("Access management is not ready", error); $("#posUserList").innerHTML = '<article class="card">ระบบบัญชีกำลังรออัปเดตฐานข้อมูล</article>'; })]);
       try{localStorage.setItem(branchKey,branch.code);}catch{}
@@ -194,13 +199,56 @@
   }
 
   async function loadStock() {
-    const itemsResult = await db.from("branch_items").select("item_id,minimum_stock,target_stock").eq("branch_id", branch.id).eq("active", true);
+    const itemsResult = await db.from("branch_items").select("item_id,minimum_stock,default_location_id").eq("branch_id", branch.id).eq("active", true);
     if (itemsResult.error) throw itemsResult.error; const ids = (itemsResult.data || []).map((x) => x.item_id);
     if (!ids.length) { $("#stockList").innerHTML = `<article class="card">ยังไม่มีรายการสต็อกของสาขานี้</article>`; return; }
-    const [master, balances] = await Promise.all([db.from("items").select("id,code,name,base_unit:units!items_base_unit_id_fkey(name)").in("id", ids), db.from("inventory_balances").select("item_id,quantity_on_hand").eq("branch_id", branch.id).in("item_id", ids)]);
+    const [master, balances] = await Promise.all([db.from("items").select("id,code,name,active,track_stock,stock_target_item_id,base_unit:units!items_base_unit_id_fkey(name)").in("id", ids), db.from("inventory_balances").select("item_id,location_id,quantity_on_hand").eq("branch_id", branch.id).in("item_id", ids)]);
     if (master.error) throw master.error; if (balances.error) throw balances.error;
-    $("#stockList").innerHTML = (master.data || []).map((item) => { const branchItem = itemsResult.data.find((x) => x.item_id === item.id); const qty = Number(balances.data.find((x) => x.item_id === item.id)?.quantity_on_hand || 0); const unit = item.base_unit?.name || "หน่วย"; return `<article class="stock-card"><div><h3>${esc(item.name)}</h3><p>${esc(item.code)} · เตือนเมื่อ ≤ ${Number(branchItem.minimum_stock || 0).toLocaleString("th-TH")} ${esc(unit)}</p></div><strong>${qty.toLocaleString("th-TH")} ${esc(unit)}</strong></article>`; }).join("");
+    const cards = (master.data || []).map((item) => {
+      const link = itemsResult.data.find((x) => x.item_id === item.id);
+      const rows = balances.data.filter((x) => x.item_id === item.id);
+      const qty = rows.reduce((sum,x) => sum + Number(x.quantity_on_hand), 0);
+      const point = rows.find(x => x.location_id === link.default_location_id)?.quantity_on_hand ?? 0;
+      const unit = item.base_unit?.name || "หน่วย";
+      return {...item,qty,unit,point,location:link.default_location_id,minimum:link.minimum_stock};
+    });
+    $("#stockList").replaceChildren(...cards.map(item => {
+      const card = document.createElement("article"); card.className = "stock-card";
+      card.innerHTML = `<div><h3>${esc(item.name)}</h3><p>${esc(item.code)} · เตือนเมื่อ ≤ ${Number(item.minimum || 0).toLocaleString("th-TH")} ${esc(item.unit)}</p></div><strong>${item.qty.toLocaleString("th-TH")} ${esc(item.unit)}</strong>`;
+      if (canSetStock && item.active && item.track_stock && !item.stock_target_item_id && item.location) {
+        const button = document.createElement("button"); button.type = "button"; button.textContent = "ปรับยอด";
+        button.setAttribute("aria-label", "ปรับยอด " + item.name); button.onclick = () => openStockEditor(item); card.append(button);
+      }
+      return card;
+    }));
   }
+
+  function openStockEditor(item) {
+    stockEdit = {item, request: null, busy:false};
+    $("#stockAdjustTitle").textContent = "ปรับยอด " + item.name;
+    $("#stockAdjustPoint").textContent = `จุดเก็บของ POS: ${item.point} ${item.unit}`;
+    $("#stockAdjustQuantity").value = item.point; $("#stockAdjustReason").value = "";
+    $("#stockAdjustError").textContent = "";
+    $("#stockAdjustDialog").showModal();
+  }
+  $("#stockAdjustForm").addEventListener("submit", async event => {
+    event.preventDefault();
+    const edit=stockEdit; if(!edit || edit.busy || !canSetStock) return;
+    const quantity=$("#stockAdjustQuantity").valueAsNumber,reason=$("#stockAdjustReason").value.trim();
+    if (!Number.isFinite(quantity) || !reason) return;
+    const key=JSON.stringify([quantity,reason]);
+    if(edit.request?.key!==key) edit.request={key,id:crypto.randomUUID()};
+    edit.busy=true; $("#stockAdjustFields").disabled=true; $("#stockAdjustError").textContent="";
+    try {
+      const {error}=await db.rpc("admin_set_water_stock",{payload:{branch_id:branch.id,item_id:edit.item.id,location_id:edit.item.location,expected_quantity:edit.item.point,quantity,reason,request_id:edit.request.id}});
+      if (error) throw error;
+      $("#stockAdjustDialog").close(); toast("บันทึกยอดลงฐานกลางแล้ว");
+      await loadStock().catch(()=>toast("บันทึกแล้ว · กดโหลดสต็อกใหม่เพื่อดูยอด"));
+    } catch(error) { $("#stockAdjustError").textContent=error.message||"ยังยืนยันผลไม่ได้ กรุณาลองส่งอีกครั้ง"; }
+    finally { edit.busy=false; $("#stockAdjustFields").disabled=false; }
+  });
+  $("#stockAdjustCancel").onclick=()=>{if(!stockEdit?.busy)$("#stockAdjustDialog").close();};
+  $("#stockAdjustDialog").addEventListener("cancel",event=>{if(stockEdit?.busy)event.preventDefault();});
 
   async function loadDevices() {
     const result = await db.from("pos_devices").select("id,device_code,device_name,status,last_seen_at,last_sync_at,app_version").eq("branch_id", branch.id).order("created_at", { ascending: false });

@@ -89,6 +89,16 @@
   <script src="assets/js/boy-central-config.js"></script>
   <script src="assets/js/boy-local-access.js?v=20260922-1"></script>
   <script src="assets/js/boy-auth-guard.js?v=20261123-auth2"></script>
-  <script src="assets/js/water-pos-admin.js?v=20261124-canonical"></script>
+  <dialog id="stockAdjustDialog" aria-labelledby="stockAdjustTitle" style="width:min(460px,calc(100% - 24px));border:1px solid #dce5e0;border-radius:16px">
+    <form id="stockAdjustForm"><h2 id="stockAdjustTitle">ปรับยอดสต็อก</h2><p id="stockAdjustPoint"></p>
+      <fieldset id="stockAdjustFields" style="display:grid;gap:12px;border:0;padding:0">
+        <label>ยอดคงเหลือใหม่ <input id="stockAdjustQuantity" type="number" inputmode="decimal" step="0.000001" min="-1000000000" max="1000000000" required></label>
+        <label>เหตุผล <input id="stockAdjustReason" maxlength="500" required></label>
+        <div><button type="button" id="stockAdjustCancel">ยกเลิก</button> <button type="submit">บันทึกยอด</button></div>
+      </fieldset>
+      <p id="stockAdjustError" role="alert"></p>
+    </form>
+  </dialog>
+  <script src="assets/js/water-pos-admin.js?v=20261128-stock1"></script>
 </body>
 </html>
